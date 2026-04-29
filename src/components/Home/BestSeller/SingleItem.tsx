@@ -85,8 +85,8 @@ const SingleItem = ({ item }: { item: Product }) => {
           </h3>
 
           <span className="flex items-center justify-center gap-2 font-medium text-lg">
-            <span className="text-dark">${item.discountedPrice}</span>
-            <span className="text-dark-4 line-through">${item.price}</span>
+            <span className="text-dark">₹{item.discountedPrice}</span>
+            <span className="text-dark-4 line-through">₹{item.price}</span>
           </span>
         </div>
 
@@ -94,7 +94,7 @@ const SingleItem = ({ item }: { item: Product }) => {
           <Image src={item.imgs.previews[0]} alt="" width={280} height={280} />
         </div>
 
-        <div className="absolute right-0 bottom-0 translate-x-full u-w-full flex flex-col gap-2 p-5.5 ease-linear duration-300 group-hover:translate-x-0">
+        <div className="absolute right-0 bottom-0 translate-x-full w-full flex flex-col gap-2 p-5.5 ease-linear duration-300 group-hover:translate-x-0">
           <button
             onClick={() => {
               handleQuickViewUpdate();

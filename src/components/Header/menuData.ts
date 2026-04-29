@@ -80,6 +80,12 @@ export const menuData: Menu[] = [
         path: "/contact",
       },
       {
+        id: 75,
+        title: "Seller Dashboard",
+        newTab: false,
+        path: "/seller",
+      },
+      {
         id: 62,
         title: "Error",
         newTab: false,

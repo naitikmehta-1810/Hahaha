@@ -38,7 +38,7 @@ const Checkout = () => {
                       name="notes"
                       id="notes"
                       rows={5}
-                      placeholder="Notes about your order, e.g. speacial notes for delivery."
+                      placeholder="Notes about your order, e.g. special notes for delivery."
                       className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full p-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"
                     ></textarea>
                   </div>
@@ -74,7 +74,7 @@ const Checkout = () => {
                         <p className="text-dark">iPhone 14 Plus , 6/128GB</p>
                       </div>
                       <div>
-                        <p className="text-dark text-right">$899.00</p>
+                        <p className="text-dark text-right">₹899.00</p>
                       </div>
                     </div>
 
@@ -84,7 +84,7 @@ const Checkout = () => {
                         <p className="text-dark">Asus RT Dual Band Router</p>
                       </div>
                       <div>
-                        <p className="text-dark text-right">$129.00</p>
+                        <p className="text-dark text-right">₹129.00</p>
                       </div>
                     </div>
 
@@ -94,7 +94,7 @@ const Checkout = () => {
                         <p className="text-dark">Havit HV-G69 USB Gamepad</p>
                       </div>
                       <div>
-                        <p className="text-dark text-right">$29.00</p>
+                        <p className="text-dark text-right">₹29.00</p>
                       </div>
                     </div>
 
@@ -104,7 +104,7 @@ const Checkout = () => {
                         <p className="text-dark">Shipping Fee</p>
                       </div>
                       <div>
-                        <p className="text-dark text-right">$15.00</p>
+                        <p className="text-dark text-right">₹15.00</p>
                       </div>
                     </div>
 
@@ -115,7 +115,7 @@ const Checkout = () => {
                       </div>
                       <div>
                         <p className="font-medium text-lg text-dark text-right">
-                          $1072.00
+                          ₹1072.00
                         </p>
                       </div>
                     </div>
