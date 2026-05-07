@@ -12,8 +12,18 @@ const createSlug = (value, fallbackId) => {
     return `${base || "shop"}-${fallbackId.slice(0, 8)}`;
 };
 
+const cleanText = (value) => value?.trim() || null;
+const cleanSlug = (value) => {
+    const slug = value
+        ?.toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    return slug || null;
+};
+
 export async function POST(request) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a;
     const user = await getCurrentUserFromRequest(request);
     if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,12 +37,8 @@ export async function POST(request) {
         return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
     }
 
-    const storeName = (_a = body.storeName) === null || _a === void 0 ? void 0 : _a.trim();
-    const category = (_b = body.category) === null || _b === void 0 ? void 0 : _b.trim();
-    const phone = (_c = body.phone) === null || _c === void 0 ? void 0 : _c.trim();
-    const city = (_d = body.city) === null || _d === void 0 ? void 0 : _d.trim();
-    const state = (_e = body.state) === null || _e === void 0 ? void 0 : _e.trim();
-    const description = (_f = body.description) === null || _f === void 0 ? void 0 : _f.trim();
+    const storeName = cleanText(body.storeName);
+    const storeSlug = cleanSlug(body.storeSlug);
 
     if (!storeName) {
         return NextResponse.json({ error: "Store name is required." }, { status: 400 });
@@ -67,14 +73,22 @@ export async function POST(request) {
         .insert({
         user_id: user.id,
         store_name: storeName,
-        store_slug: createSlug(storeName, user.id),
-        category: category || null,
-        owner_name: user.full_name,
-        email: user.email,
-        phone: phone || null,
-        city: city || null,
-        state: state || null,
-        description: description || null,
+        store_slug: storeSlug || createSlug(storeName, user.id),
+        category: cleanText(body.category),
+        owner_name: cleanText(body.ownerName) || user.full_name,
+        email: cleanText(body.email) || user.email,
+        phone: cleanText(body.phone),
+        address_line1: cleanText(body.addressLine1),
+        address_line2: cleanText(body.addressLine2),
+        city: cleanText(body.city),
+        state: cleanText(body.state),
+        pincode: cleanText(body.pincode),
+        country: cleanText(body.country) || "India",
+        pickup_same_as_store: (_a = body.pickupSameAsStore) !== null && _a !== void 0 ? _a : true,
+        razorpay_account_id: cleanText(body.razorpayAccountId),
+        logo_url: cleanText(body.logoUrl),
+        banner_url: cleanText(body.bannerUrl),
+        description: cleanText(body.description),
         verification_status: "pending",
         is_active: true,
     })
@@ -82,6 +96,9 @@ export async function POST(request) {
         .single();
 
     if (sellerError) {
+        if (sellerError.code === "23505") {
+            return NextResponse.json({ error: "That store slug is already taken. Please choose another one." }, { status: 409 });
+        }
         return NextResponse.json({ error: sellerError.message }, { status: 500 });
     }
 
