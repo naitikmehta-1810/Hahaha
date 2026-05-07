@@ -29,6 +29,7 @@ const Header = () => {
     const [navigationOpen, setNavigationOpen] = useState(false);
     const [stickyMenu, setStickyMenu] = useState(false);
     const [signedInUserName, setSignedInUserName] = useState(() => getCachedUserDisplayName());
+    const [isSeller, setIsSeller] = useState(false);
     const [accountMenuOpen, setAccountMenuOpen] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const { openCartModal } = useCartModalContext();
@@ -38,11 +39,32 @@ const Header = () => {
     const handleOpenCartModal = () => {
         openCartModal();
     };
-    const handleAccountClick = () => {
+    const loadCurrentUser = async () => {
+        var _a, _b;
+        try {
+            const response = await fetch("/api/me");
+            if (!response.ok) {
+                clearCachedUserDisplayName();
+                setSignedInUserName("");
+                setIsSeller(false);
+                return;
+            }
+            const data = (await response.json());
+            const fullName = (_b = (_a = data.user) === null || _a === void 0 ? void 0 : _a.fullName) !== null && _b !== void 0 ? _b : "";
+            setSignedInUserName(fullName);
+            setIsSeller(Boolean(data.user?.isSeller));
+            setCachedUserDisplayName(fullName);
+        }
+        catch (_c) {
+            setSignedInUserName(getCachedUserDisplayName());
+        }
+    };
+    const handleAccountClick = async () => {
         if (!signedInUserName) {
             router.push("/signin");
             return;
         }
+        await loadCurrentUser();
         setAccountMenuOpen((open) => !open);
     };
     const handleLogout = async () => {
@@ -53,6 +75,7 @@ const Header = () => {
         finally {
             clearCachedUserDisplayName();
             setSignedInUserName("");
+            setIsSeller(false);
             setAccountMenuOpen(false);
             setIsLoggingOut(false);
             router.push("/signin");
@@ -74,24 +97,6 @@ const Header = () => {
         return () => window.removeEventListener("scroll", handleStickyMenu);
     }, []);
     useEffect(() => {
-        const loadCurrentUser = async () => {
-            var _a, _b;
-            try {
-                const response = await fetch("/api/me");
-                if (!response.ok) {
-                    clearCachedUserDisplayName();
-                    setSignedInUserName("");
-                    return;
-                }
-                const data = (await response.json());
-                const fullName = (_b = (_a = data.user) === null || _a === void 0 ? void 0 : _a.fullName) !== null && _b !== void 0 ? _b : "";
-                setSignedInUserName(fullName);
-                setCachedUserDisplayName(fullName);
-            }
-            catch (_c) {
-                setSignedInUserName(getCachedUserDisplayName());
-            }
-        };
         void loadCurrentUser();
     }, []);
     useEffect(() => {
@@ -182,8 +187,8 @@ const Header = () => {
                     <Link href="/my-account" onClick={() => setAccountMenuOpen(false)} className="block px-4 py-2 text-custom-sm font-medium text-dark hover:bg-gray-1 hover:text-blue">
                       My Account
                     </Link>
-                    <Link href="/seller" onClick={() => setAccountMenuOpen(false)} className="block px-4 py-2 text-custom-sm font-medium text-dark hover:bg-gray-1 hover:text-blue">
-                      Seller Page
+                    <Link href={isSeller ? "/seller" : "/seller/create-shop"} onClick={() => setAccountMenuOpen(false)} className="block px-4 py-2 text-custom-sm font-medium text-dark hover:bg-gray-1 hover:text-blue">
+                      {isSeller ? "Seller Page" : "Make Your Own Shop"}
                     </Link>
                     <button type="button" onClick={handleLogout} disabled={isLoggingOut} className="block w-full px-4 py-2 text-left text-custom-sm font-medium text-dark hover:bg-gray-1 hover:text-blue disabled:cursor-not-allowed disabled:opacity-70">
                       {isLoggingOut ? "Logging out..." : "Logout"}

@@ -10,6 +10,7 @@ export async function GET(request) {
             id: user.id,
             fullName: user.full_name,
             email: user.email,
+            isSeller: Boolean(user.is_seller),
         },
     }, { status: 200 });
 }

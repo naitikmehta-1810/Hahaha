@@ -15,7 +15,7 @@ export const getCurrentUserFromRequest = async (request) => {
     const supabase = getSupabaseAdminClient();
     const { data: user, error } = await supabase
         .from("users")
-        .select("id, full_name, email, password_hash")
+        .select("id, full_name, email, password_hash, is_seller")
         .eq("id", payload.userId)
         .maybeSingle();
     if (error || !user) {
