@@ -162,6 +162,9 @@ const Header = () => {
                     <Link href="/my-account" onClick={() => setAccountMenuOpen(false)} className="block px-4 py-2 text-custom-sm font-medium text-dark hover:bg-gray-1 hover:text-blue">
                       My Account
                     </Link>
+                    <Link href="/seller" onClick={() => setAccountMenuOpen(false)} className="block px-4 py-2 text-custom-sm font-medium text-dark hover:bg-gray-1 hover:text-blue">
+                      Seller Page
+                    </Link>
                     <button type="button" onClick={handleLogout} disabled={isLoggingOut} className="block w-full px-4 py-2 text-left text-custom-sm font-medium text-dark hover:bg-gray-1 hover:text-blue disabled:cursor-not-allowed disabled:opacity-70">
                       {isLoggingOut ? "Logging out..." : "Logout"}
                     </button>
