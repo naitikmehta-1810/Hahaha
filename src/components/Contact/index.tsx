@@ -33,7 +33,7 @@ const Contact = () => {
                         fill="#3C50E0"
                       />
                     </svg>
-                    Name: James Septimus
+                    Name: Naitik Mehta
                   </p>
 
                   <p className="flex items-center gap-4">
@@ -61,7 +61,7 @@ const Contact = () => {
                         fill="#3C50E0"
                       />
                     </svg>
-                    Phone: 1234 567890
+                    Phone: +91 8866345505
                   </p>
 
                   <p className="flex gap-4">
@@ -80,7 +80,7 @@ const Contact = () => {
                         fill="#3C50E0"
                       />
                     </svg>
-                    Address: 7398 Smoke Ranch RoadLas Vegas, Nevada 89128
+                    Address: Niharika Park, Khanpur, Ahmedabad, Gujarat, India
                   </p>
                 </div>
               </div>
