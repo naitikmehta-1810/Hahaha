@@ -1,24 +1,49 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import SellerLayout from "./SellerLayout";
 import { createSellerProduct } from "./sellerStorage";
 import { useRouter } from "next/navigation";
+const uploadProductImage = async (imageFile) => {
+    var _a;
+    const formData = new FormData();
+    formData.append("image", imageFile);
+    const response = await fetch("/api/cloudinary/upload", {
+        method: "POST",
+        body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error((_a = data.error) !== null && _a !== void 0 ? _a : "Failed to upload product image.");
+    }
+    if (!data.secureUrl) {
+        throw new Error("Cloudinary did not return an image URL.");
+    }
+    return data.secureUrl;
+};
 const AddProduct = () => {
     const router = useRouter();
     const [name, setName] = useState("");
     const [category, setCategory] = useState("");
     const [price, setPrice] = useState("");
     const [stock, setStock] = useState("");
-    const [imageDataUrl, setImageDataUrl] = useState("");
+    const [imageFile, setImageFile] = useState(null);
+    const [imagePreviewUrl, setImagePreviewUrl] = useState("");
     const [description, setDescription] = useState("");
     const [status, setStatus] = useState("active");
     const [errorMessage, setErrorMessage] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isReadingImage, setIsReadingImage] = useState(false);
+    useEffect(() => {
+        return () => {
+            if (imagePreviewUrl) {
+                URL.revokeObjectURL(imagePreviewUrl);
+            }
+        };
+    }, [imagePreviewUrl]);
     const handleImageChange = (event) => {
         const selectedFile = event.target.files === null || event.target.files === void 0 ? void 0 : event.target.files[0];
         if (!selectedFile) {
-            setImageDataUrl("");
+            setImageFile(null);
+            setImagePreviewUrl("");
             return;
         }
         if (!selectedFile.type.startsWith("image/")) {
@@ -26,39 +51,32 @@ const AddProduct = () => {
             event.target.value = "";
             return;
         }
-        setErrorMessage("");
-        setIsReadingImage(true);
-        const reader = new FileReader();
-        reader.onload = () => {
-            if (typeof reader.result === "string") {
-                setImageDataUrl(reader.result);
-                setIsReadingImage(false);
-                return;
-            }
-            setIsReadingImage(false);
-            setErrorMessage("Failed to process image file.");
-        };
-        reader.onerror = () => {
-            setIsReadingImage(false);
-            setErrorMessage("Failed to process image file.");
-        };
-        reader.readAsDataURL(selectedFile);
-    };
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (isReadingImage) {
-            setErrorMessage("Please wait until the selected image finishes uploading.");
+        if (selectedFile.size > 5 * 1024 * 1024) {
+            setErrorMessage("Image must be 5MB or smaller.");
+            event.target.value = "";
             return;
         }
         setErrorMessage("");
+        if (imagePreviewUrl) {
+            URL.revokeObjectURL(imagePreviewUrl);
+        }
+        setImageFile(selectedFile);
+        setImagePreviewUrl(URL.createObjectURL(selectedFile));
+    };
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setErrorMessage("");
         setIsSubmitting(true);
         try {
+            const imageUrl = imageFile
+                ? await uploadProductImage(imageFile)
+                : "/images/products/product-1-bg-1.png";
             await createSellerProduct({
                 name: name.trim(),
                 category: category.trim(),
                 price: Number(price),
                 stock: Number(stock),
-                image: imageDataUrl || "/images/products/product-1-bg-1.png",
+                image: imageUrl,
                 description: description.trim(),
                 status,
             });
@@ -123,8 +141,8 @@ const AddProduct = () => {
             Product Image (optional)
           </label>
           <input id="image" type="file" accept="image/*" onChange={handleImageChange} className="w-full rounded-md border border-gray-3 bg-gray-1 px-4 py-2.5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
-          {isReadingImage && <p className="mt-2 text-custom-xs text-dark-4">Processing selected image...</p>}
-          {imageDataUrl && (<img src={imageDataUrl} alt="Selected product preview" className="mt-3 h-28 w-28 rounded-md border border-gray-3 object-cover"/>)}
+          <p className="mt-2 text-custom-xs text-dark-4">Images are uploaded to Cloudinary when you save the product.</p>
+          {imagePreviewUrl && (<img src={imagePreviewUrl} alt="Selected product preview" className="mt-3 h-28 w-28 rounded-md border border-gray-3 object-cover"/>)}
         </div>
 
         <div className="sm:col-span-2">
@@ -136,8 +154,8 @@ const AddProduct = () => {
 
         <div className="sm:col-span-2">
           {errorMessage && <p className="mb-3 text-red">{errorMessage}</p>}
-          <button type="submit" disabled={isSubmitting || isReadingImage} className="inline-flex rounded-md bg-blue px-6 py-3 text-white hover:bg-blue-dark ease-out duration-200 disabled:opacity-70 disabled:cursor-not-allowed">
-            {isSubmitting ? "Saving..." : "Save Product"}
+          <button type="submit" disabled={isSubmitting} className="inline-flex rounded-md bg-blue px-6 py-3 text-white hover:bg-blue-dark ease-out duration-200 disabled:opacity-70 disabled:cursor-not-allowed">
+            {isSubmitting ? "Uploading and saving..." : "Save Product"}
           </button>
         </div>
       </form>
