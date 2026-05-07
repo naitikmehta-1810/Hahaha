@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://your-domain.com/sitemap.xml
-# Replace https://your-domain.com with your actual domain
+Sitemap: https://stuffsy.app/sitemap.xml
+# Sitemap points to the production domain

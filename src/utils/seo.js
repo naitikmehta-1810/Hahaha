@@ -1,7 +1,7 @@
 export const defaultMeta = {
   title: "Stuffsy — Modern Storefront",
   description: "Stuffsy — lightweight storefront template. Discover products, manage wishlist, and enjoy smooth shopping.",
-  url: "https://your-domain.com",
+  url: "https://stuffsy.app",
   image: "/images/logo/Stuffsy_logo.png",
 };
 
