@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/utils/supabase/admin";
 import { getCurrentUserFromRequest } from "@/utils/auth/current-user";
 const isSellerStatus = (value) => value === "active" || value === "draft" || value === "out-of-stock";
+const forbiddenForNonSeller = () => NextResponse.json({ error: "Create your shop before using seller tools." }, { status: 403 });
 export async function GET(request) {
     const user = await getCurrentUserFromRequest(request);
     if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!user.is_seller) {
+        return forbiddenForNonSeller();
     }
 
     const supabase = getSupabaseAdminClient();
@@ -23,6 +27,9 @@ export async function POST(request) {
     const user = await getCurrentUserFromRequest(request);
     if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!user.is_seller) {
+        return forbiddenForNonSeller();
     }
 
     var _a, _b, _c, _d, _e;
@@ -76,6 +83,9 @@ export async function DELETE(request) {
     const user = await getCurrentUserFromRequest(request);
     if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!user.is_seller) {
+        return forbiddenForNonSeller();
     }
 
     const { searchParams } = new URL(request.url);
