@@ -2,7 +2,7 @@
 
 import React, { FormEvent, useState } from "react";
 import SellerLayout from "./SellerLayout";
-import { loadSellerProducts, saveSellerProducts } from "./sellerStorage";
+import { createSellerProduct } from "./sellerStorage";
 import { SellerProductStatus } from "@/types/sellerProduct";
 import { useRouter } from "next/navigation";
 
@@ -15,27 +15,33 @@ const AddProduct = () => {
   const [image, setImage] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<SellerProductStatus>("active");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setErrorMessage("");
+    setIsSubmitting(true);
 
-    const newProduct = {
-      id: Date.now(),
-      name: name.trim(),
-      category: category.trim(),
-      price: Number(price),
-      stock: Number(stock),
-      image: image.trim() || "/images/products/product-1-bg-1.png",
-      description: description.trim(),
-      status,
-      createdAt: new Date().toISOString(),
-    };
-
-    const existingProducts = loadSellerProducts();
-    const updatedProducts = [newProduct, ...existingProducts];
-    saveSellerProducts(updatedProducts);
-
-    router.push("/seller/products");
+    try {
+      await createSellerProduct({
+        name: name.trim(),
+        category: category.trim(),
+        price: Number(price),
+        stock: Number(stock),
+        image: image.trim() || "/images/products/product-1-bg-1.png",
+        description: description.trim(),
+        status,
+      });
+      router.push("/seller/products");
+      router.refresh();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to create product.";
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -65,11 +71,17 @@ const AddProduct = () => {
           <input
             id="category"
             type="text"
+            list="seller-category-options"
             required
             value={category}
             onChange={(e) => setCategory(e.target.value)}
+            placeholder="e.g., Crochet or Jewellery"
             className="w-full rounded-md border border-gray-3 bg-gray-1 px-4 py-2.5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"
           />
+          <datalist id="seller-category-options">
+            <option value="Crochet" />
+            <option value="Jewellery" />
+          </datalist>
         </div>
 
         <div>
@@ -151,11 +163,13 @@ const AddProduct = () => {
         </div>
 
         <div className="sm:col-span-2">
+          {errorMessage && <p className="mb-3 text-red">{errorMessage}</p>}
           <button
             type="submit"
+            disabled={isSubmitting}
             className="inline-flex rounded-md bg-blue px-6 py-3 text-white hover:bg-blue-dark ease-out duration-200"
           >
-            Save Product
+            {isSubmitting ? "Saving..." : "Save Product"}
           </button>
         </div>
       </form>

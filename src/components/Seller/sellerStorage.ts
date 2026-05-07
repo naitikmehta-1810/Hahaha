@@ -1,64 +1,69 @@
-import { SellerProduct } from "@/types/sellerProduct";
+import { SellerProduct, SellerProductStatus } from "@/types/sellerProduct";
+import { DbProduct } from "@/types/dbProduct";
 
-const STORAGE_KEY = "seller-products";
+const mapDbProductToSellerProduct = (item: DbProduct): SellerProduct => ({
+  id: item.id,
+  name: item.name,
+  category: item.category,
+  price: Number(item.price),
+  stock: item.stock,
+  image: item.image_url,
+  description: item.description,
+  status: item.status,
+  createdAt: item.created_at,
+});
 
-export const defaultSellerProducts: SellerProduct[] = [
-  {
-    id: 101,
-    name: "Wireless Headphones Pro",
-    category: "Electronics",
-    price: 129.99,
-    stock: 42,
-    image: "/images/products/product-2-bg-1.png",
-    description: "Noise-cancelling over-ear headphones with long battery life.",
-    status: "active",
-    createdAt: "2026-04-20T09:30:00.000Z",
-  },
-  {
-    id: 102,
-    name: "Ergonomic Office Chair",
-    category: "Furniture",
-    price: 249,
-    stock: 8,
-    image: "/images/products/product-3-bg-1.png",
-    description: "Lumbar support chair built for long working sessions.",
-    status: "active",
-    createdAt: "2026-04-18T07:15:00.000Z",
-  },
-  {
-    id: 103,
-    name: "Travel Backpack 35L",
-    category: "Accessories",
-    price: 89.5,
-    stock: 0,
-    image: "/images/products/product-6-bg-1.png",
-    description: "Lightweight water-resistant backpack with laptop compartment.",
-    status: "out-of-stock",
-    createdAt: "2026-04-15T11:10:00.000Z",
-  },
-];
+export const loadSellerProducts = async (): Promise<SellerProduct[]> => {
+  const response = await fetch("/api/seller-products");
+  const data = (await response.json()) as { products?: DbProduct[]; error?: string };
 
-export const loadSellerProducts = (): SellerProduct[] => {
-  if (typeof window === "undefined") {
-    return defaultSellerProducts;
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to load products.");
   }
 
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return defaultSellerProducts;
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : defaultSellerProducts;
-  } catch (error) {
-    console.error("Failed to parse seller products from localStorage", error);
-    return defaultSellerProducts;
-  }
+  return (data.products ?? []).map(mapDbProductToSellerProduct);
 };
 
-export const saveSellerProducts = (products: SellerProduct[]) => {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+type CreateSellerProductInput = {
+  name: string;
+  category: string;
+  price: number;
+  stock: number;
+  image: string;
+  description: string;
+  status: SellerProductStatus;
 };
 
+export const createSellerProduct = async (payload: CreateSellerProductInput) => {
+  const response = await fetch("/api/seller-products", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = (await response.json()) as {
+    product?: DbProduct;
+    error?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to create product.");
+  }
+
+  if (!data.product) {
+    throw new Error("Product was not returned by the server.");
+  }
+
+  return mapDbProductToSellerProduct(data.product);
+};
+
+export const deleteSellerProduct = async (id: string) => {
+  const response = await fetch(`/api/seller-products?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+
+  const data = (await response.json()) as { error?: string };
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to delete product.");
+  }
+};

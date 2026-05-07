@@ -1,7 +1,7 @@
 export type SellerProductStatus = "active" | "draft" | "out-of-stock";
 
 export type SellerProduct = {
-  id: number;
+  id: string;
   name: string;
   category: string;
   price: number;

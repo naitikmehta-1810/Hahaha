@@ -6,7 +6,7 @@ type InitialState = {
 };
 
 type CartItem = {
-  id: number;
+  id: string | number;
   title: string;
   price: number;
   discountedPrice: number;
@@ -43,13 +43,13 @@ export const cart = createSlice({
         });
       }
     },
-    removeItemFromCart: (state, action: PayloadAction<number>) => {
+    removeItemFromCart: (state, action: PayloadAction<string | number>) => {
       const itemId = action.payload;
       state.items = state.items.filter((item) => item.id !== itemId);
     },
     updateCartItemQuantity: (
       state,
-      action: PayloadAction<{ id: number; quantity: number }>
+      action: PayloadAction<{ id: string | number; quantity: number }>
     ) => {
       const { id, quantity } = action.payload;
       const existingItem = state.items.find((item) => item.id === id);

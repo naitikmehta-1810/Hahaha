@@ -1,8 +1,14 @@
+"use client";
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { Product } from "@/types/product";
+import { useProducts } from "@/hooks/useProducts";
 
-const LatestProducts = ({ products }) => {
+const LatestProducts = ({ products = [] }: { products?: Product[] }) => {
+  const { products: sellerProducts } = useProducts();
+  const resolvedProducts = sellerProducts.length > 0 ? sellerProducts : products;
+
   return (
     <div className="shadow-1 bg-white rounded-xl mt-7.5">
       <div className="px-4 sm:px-6 py-4.5 border-b border-gray-3">
@@ -12,10 +18,15 @@ const LatestProducts = ({ products }) => {
       <div className="p-4 sm:p-6">
         <div className="flex flex-col gap-6">
           {/* <!-- product item --> */}
-          {products.slice(0, 3).map((product, key) => (
+          {resolvedProducts.slice(0, 3).map((product, key) => (
             <div className="flex items-center gap-6" key={key}>
               <div className="flex items-center justify-center rounded-[10px] bg-gray-3 max-w-[90px] w-full h-22.5">
-                <Image src={product.imgs?.thumbnails?.[0]} alt="product" width={74} height={74} />
+                <Image
+                  src={product.imgs?.thumbnails?.[0] ?? "/images/products/product-1-sm-1.png"}
+                  alt="product"
+                  width={74}
+                  height={74}
+                />
               </div>
 
               <div>

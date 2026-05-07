@@ -2,18 +2,28 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import SellerLayout from "./SellerLayout";
-import { loadSellerProducts, saveSellerProducts } from "./sellerStorage";
+import { deleteSellerProduct, loadSellerProducts } from "./sellerStorage";
 import { SellerProduct } from "@/types/sellerProduct";
 import Link from "next/link";
 
 const AllProducts = () => {
   const [products, setProducts] = useState<SellerProduct[]>([]);
   const [search, setSearch] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    const localProducts = loadSellerProducts();
-    setProducts(localProducts);
-    saveSellerProducts(localProducts);
+    const hydrateProducts = async () => {
+      try {
+        const allProducts = await loadSellerProducts();
+        setProducts(allProducts);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to load products.";
+        setErrorMessage(message);
+      }
+    };
+
+    void hydrateProducts();
   }, []);
 
   const filteredProducts = useMemo(() => {
@@ -27,10 +37,16 @@ const AllProducts = () => {
     );
   }, [products, search]);
 
-  const handleDelete = (id: number) => {
-    const updated = products.filter((product) => product.id !== id);
-    setProducts(updated);
-    saveSellerProducts(updated);
+  const handleDelete = async (id: string) => {
+    setErrorMessage("");
+    try {
+      await deleteSellerProduct(id);
+      setProducts((prev) => prev.filter((product) => product.id !== id));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to delete product.";
+      setErrorMessage(message);
+    }
   };
 
   return (
@@ -53,6 +69,7 @@ const AllProducts = () => {
           Add Product
         </Link>
       </div>
+      {errorMessage && <p className="mb-4 text-red">{errorMessage}</p>}
 
       <div className="w-full overflow-x-auto rounded-lg border border-gray-3">
         <div className="min-w-[840px]">

@@ -2,16 +2,26 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import SellerLayout from "./SellerLayout";
-import { loadSellerProducts, saveSellerProducts } from "./sellerStorage";
+import { loadSellerProducts } from "./sellerStorage";
 import { SellerProduct } from "@/types/sellerProduct";
 
 const Analytics = () => {
   const [products, setProducts] = useState<SellerProduct[]>([]);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    const localProducts = loadSellerProducts();
-    setProducts(localProducts);
-    saveSellerProducts(localProducts);
+    const hydrateProducts = async () => {
+      try {
+        const allProducts = await loadSellerProducts();
+        setProducts(allProducts);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to load analytics.";
+        setErrorMessage(message);
+      }
+    };
+
+    void hydrateProducts();
   }, []);
 
   const metrics = useMemo(() => {
@@ -76,6 +86,7 @@ const Analytics = () => {
           </h3>
         </div>
       </div>
+      {errorMessage && <p className="mb-4 text-red">{errorMessage}</p>}
 
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="rounded-lg border border-gray-3">
