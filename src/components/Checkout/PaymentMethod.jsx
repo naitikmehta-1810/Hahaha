@@ -17,7 +17,7 @@ const PaymentMethod = () => {
             : "border border-gray-4"}`}></div>
             </div>
 
-            <div className={`rounded-md border-[0.5px] py-3.5 px-5 ease-out duration-200 hover:bg-gray-2 hover:border-transparent hover:shadow-none ${payment === "bank"
+            <div className={`w-full rounded-md border-[0.5px] py-3.5 px-5 ease-out duration-200 hover:bg-gray-2 hover:border-transparent hover:shadow-none ${payment === "bank"
             ? "border-transparent bg-gray-2"
             : " border-gray-4 shadow-1"}`}>
               <div className="flex items-center">
@@ -40,7 +40,7 @@ const PaymentMethod = () => {
             : "border border-gray-4"}`}></div>
             </div>
 
-            <div className={`rounded-md border-[0.5px] py-3.5 px-5 ease-out duration-200 hover:bg-gray-2 hover:border-transparent hover:shadow-none min-w-[240px] ${payment === "cash"
+            <div className={`w-full rounded-md border-[0.5px] py-3.5 px-5 ease-out duration-200 hover:bg-gray-2 hover:border-transparent hover:shadow-none ${payment === "cash"
             ? "border-transparent bg-gray-2"
             : " border-gray-4 shadow-1"}`}>
               <div className="flex items-center">
@@ -62,7 +62,7 @@ const PaymentMethod = () => {
             ? "border-4 border-blue"
             : "border border-gray-4"}`}></div>
             </div>
-            <div className={`rounded-md border-[0.5px] py-3.5 px-5 ease-out duration-200 hover:bg-gray-2 hover:border-transparent hover:shadow-none min-w-[240px] ${payment === "paypal"
+            <div className={`w-full rounded-md border-[0.5px] py-3.5 px-5 ease-out duration-200 hover:bg-gray-2 hover:border-transparent hover:shadow-none ${payment === "paypal"
             ? "border-transparent bg-gray-2"
             : " border-gray-4 shadow-1"}`}>
               <div className="flex items-center">

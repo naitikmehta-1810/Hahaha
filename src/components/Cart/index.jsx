@@ -21,7 +21,11 @@ const Cart = () => {
               <button className="text-blue">Clear Shopping Cart</button>
             </div>
 
-            <div className="bg-white rounded-[10px] shadow-1">
+            <div className="space-y-4 md:hidden">
+              {cartItems.map((item, key) => (<SingleItem item={item} key={key} mobile/>))}
+            </div>
+
+            <div className="hidden md:block bg-white rounded-[10px] shadow-1">
               <div className="w-full overflow-x-auto">
                 <div className="min-w-[1170px]">
                   {/* <!-- table header --> */}

@@ -47,7 +47,26 @@ const AllProducts = () => {
       </div>
       {errorMessage && <p className="mb-4 text-red">{errorMessage}</p>}
 
-      <div className="w-full overflow-x-auto rounded-lg border border-gray-3">
+      <div className="space-y-3 md:hidden">
+        {filteredProducts.length === 0 ? (<p className="rounded-lg border border-gray-3 bg-white px-5 py-6 text-custom-sm">No products match your search.</p>) : (filteredProducts.map((product) => (<div key={product.id} className="rounded-lg border border-gray-3 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium text-dark">{product.name}</p>
+                  <p className="mt-1 text-custom-xs capitalize">{product.status}</p>
+                </div>
+                <button onClick={() => handleDelete(product.id)} className="rounded-md bg-red px-3 py-1.5 text-custom-xs text-white ease-out duration-200 hover:bg-red-dark">
+                  Delete
+                </button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-custom-sm">
+                <p><span className="text-dark-4">Category:</span> {product.category}</p>
+                <p><span className="text-dark-4">Stock:</span> {product.stock}</p>
+                <p className="col-span-2"><span className="text-dark-4">Price:</span> ₹{product.price.toFixed(2)}</p>
+              </div>
+            </div>)))}
+      </div>
+
+      <div className="hidden md:block w-full overflow-x-auto rounded-lg border border-gray-3">
         <div className="min-w-[840px]">
           <div className="grid grid-cols-12 gap-4 px-5 py-4 bg-gray-1 border-b border-gray-3 font-medium text-dark">
             <p className="col-span-4">Product</p>
