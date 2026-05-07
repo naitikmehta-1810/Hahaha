@@ -3,6 +3,7 @@ import Breadcrumb from "@/components/Common/Breadcrumb";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { setCachedUserDisplayName } from "@/utils/auth/user-cache";
 const Signin = () => {
     const router = useRouter();
     const [email, setEmail] = useState("");
@@ -30,6 +31,7 @@ const Signin = () => {
                 setErrorMessage((_a = data.error) !== null && _a !== void 0 ? _a : "Unable to sign in.");
                 return;
             }
+            setCachedUserDisplayName(data.fullName);
             router.push("/");
             router.refresh();
         }

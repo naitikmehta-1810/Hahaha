@@ -9,13 +9,24 @@ import { useAppSelector } from "@/redux/store";
 import { useSelector } from "react-redux";
 import { selectTotalPrice } from "@/redux/features/cart-slice";
 import { useCartModalContext } from "@/app/context/CartSidebarModalContext";
+import { clearCachedUserDisplayName, getCachedUserDisplayName, setCachedUserDisplayName, } from "@/utils/auth/user-cache";
+const searchOptions = [
+    { label: "All Categories", value: "0" },
+    { label: "Desktop", value: "1" },
+    { label: "Laptop", value: "2" },
+    { label: "Monitor", value: "3" },
+    { label: "Phone", value: "4" },
+    { label: "Watch", value: "5" },
+    { label: "Mouse", value: "6" },
+    { label: "Tablet", value: "7" },
+];
 const Header = () => {
     var _a;
     const router = useRouter();
     const [searchQuery, setSearchQuery] = useState("");
     const [navigationOpen, setNavigationOpen] = useState(false);
     const [stickyMenu, setStickyMenu] = useState(false);
-    const [signedInUserName, setSignedInUserName] = useState("");
+    const [signedInUserName, setSignedInUserName] = useState(() => getCachedUserDisplayName());
     const [accountMenuOpen, setAccountMenuOpen] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const { openCartModal } = useCartModalContext();
@@ -38,6 +49,7 @@ const Header = () => {
             await fetch("/api/logout", { method: "POST" });
         }
         finally {
+            clearCachedUserDisplayName();
             setSignedInUserName("");
             setAccountMenuOpen(false);
             setIsLoggingOut(false);
@@ -55,7 +67,8 @@ const Header = () => {
         }
     };
     useEffect(() => {
-        window.addEventListener("scroll", handleStickyMenu);
+        handleStickyMenu();
+        window.addEventListener("scroll", handleStickyMenu, { passive: true });
         return () => window.removeEventListener("scroll", handleStickyMenu);
     }, []);
     useEffect(() => {
@@ -64,28 +77,21 @@ const Header = () => {
             try {
                 const response = await fetch("/api/me");
                 if (!response.ok) {
+                    clearCachedUserDisplayName();
                     setSignedInUserName("");
                     return;
                 }
                 const data = (await response.json());
-                setSignedInUserName((_b = (_a = data.user) === null || _a === void 0 ? void 0 : _a.fullName) !== null && _b !== void 0 ? _b : "");
+                const fullName = (_b = (_a = data.user) === null || _a === void 0 ? void 0 : _a.fullName) !== null && _b !== void 0 ? _b : "";
+                setSignedInUserName(fullName);
+                setCachedUserDisplayName(fullName);
             }
             catch (_c) {
-                setSignedInUserName("");
+                setSignedInUserName(getCachedUserDisplayName());
             }
         };
         void loadCurrentUser();
     }, []);
-    const options = [
-        { label: "All Categories", value: "0" },
-        { label: "Desktop", value: "1" },
-        { label: "Laptop", value: "2" },
-        { label: "Monitor", value: "3" },
-        { label: "Phone", value: "4" },
-        { label: "Watch", value: "5" },
-        { label: "Mouse", value: "6" },
-        { label: "Tablet", value: "7" },
-    ];
     return (<header className={`fixed left-0 top-0 w-full z-9999 bg-white transition-all ease-in-out duration-300 ${stickyMenu && "shadow"}`}>
       <div className="max-w-[1170px] mx-auto px-4 sm:px-7.5 xl:px-0">
         {/* <!-- header top start --> */}
@@ -98,10 +104,10 @@ const Header = () => {
 
             <div className="max-w-[475px] w-full">
               <form>
-                <div className="flex items-center">
-                  <CustomSelect options={options}/>
+                <div className="flex min-w-0 items-center">
+                  <CustomSelect options={searchOptions}/>
 
-                  <div className="relative max-w-[333px] sm:min-w-[333px] w-full">
+                  <div className="relative min-w-0 max-w-[333px] sm:min-w-[333px] w-full">
                     {/* <!-- divider --> */}
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 inline-block w-px h-5.5 bg-gray-4"></span>
                     <input onChange={(e) => setSearchQuery(e.target.value)} value={searchQuery} type="search" name="search" id="search" placeholder="I am shopping for..." autoComplete="off" className="custom-search w-full rounded-r-[5px] bg-gray-1 !border-l-0 border border-gray-3 py-2.5 pl-4 pr-10 outline-none ease-in duration-200"/>
