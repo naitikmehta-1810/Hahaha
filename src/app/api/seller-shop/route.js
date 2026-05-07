@@ -40,8 +40,26 @@ export async function POST(request) {
     const storeName = cleanText(body.storeName);
     const storeSlug = cleanSlug(body.storeSlug);
 
-    if (!storeName) {
-        return NextResponse.json({ error: "Store name is required." }, { status: 400 });
+    const requiredFields = [
+        [storeName, "Store name"],
+        [storeSlug, "Store slug"],
+        [cleanText(body.category), "Category"],
+        [cleanText(body.ownerName), "Owner name"],
+        [cleanText(body.email), "Email"],
+        [cleanText(body.phone), "Phone"],
+        [cleanText(body.addressLine1), "Address line 1"],
+        [cleanText(body.city), "City"],
+        [cleanText(body.state), "State"],
+        [cleanText(body.pincode), "Pincode"],
+        [cleanText(body.country), "Country"],
+        [cleanText(body.razorpayAccountId), "Razorpay account ID"],
+        [cleanText(body.logoUrl), "Logo URL"],
+        [cleanText(body.bannerUrl), "Banner URL"],
+        [cleanText(body.description), "Description"],
+    ];
+    const missingField = requiredFields.find(([value]) => !value);
+    if (missingField) {
+        return NextResponse.json({ error: `${missingField[1]} is required.` }, { status: 400 });
     }
 
     const supabase = getSupabaseAdminClient();

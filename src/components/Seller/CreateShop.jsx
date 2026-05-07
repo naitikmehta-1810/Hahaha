@@ -85,18 +85,24 @@ const CreateShop = () => {
                   </div>
 
                   <div>
-                    <label htmlFor="store-slug" className="block mb-2.5">Store Slug</label>
-                    <input id="store-slug" type="text" value={form.storeSlug} onChange={(event) => updateField("storeSlug", event.target.value)} placeholder="my-shop-name" className={fieldClass}/>
+                    <label htmlFor="store-slug" className="block mb-2.5">
+                      Store Slug <span className="text-red">*</span>
+                    </label>
+                    <input id="store-slug" type="text" required value={form.storeSlug} onChange={(event) => updateField("storeSlug", event.target.value)} placeholder="my-shop-name" className={fieldClass}/>
                   </div>
 
                   <div>
-                    <label htmlFor="shop-category" className="block mb-2.5">Category</label>
-                    <input id="shop-category" type="text" value={form.category} onChange={(event) => updateField("category", event.target.value)} placeholder="e.g., Jewellery, Crochet" className={fieldClass}/>
+                    <label htmlFor="shop-category" className="block mb-2.5">
+                      Category <span className="text-red">*</span>
+                    </label>
+                    <input id="shop-category" type="text" required value={form.category} onChange={(event) => updateField("category", event.target.value)} placeholder="e.g., Jewellery, Crochet" className={fieldClass}/>
                   </div>
 
                   <div>
-                    <label htmlFor="owner-name" className="block mb-2.5">Owner Name</label>
-                    <input id="owner-name" type="text" value={form.ownerName} onChange={(event) => updateField("ownerName", event.target.value)} placeholder="Store owner name" className={fieldClass}/>
+                    <label htmlFor="owner-name" className="block mb-2.5">
+                      Owner Name <span className="text-red">*</span>
+                    </label>
+                    <input id="owner-name" type="text" required value={form.ownerName} onChange={(event) => updateField("ownerName", event.target.value)} placeholder="Store owner name" className={fieldClass}/>
                   </div>
                 </div>
               </div>
@@ -105,13 +111,17 @@ const CreateShop = () => {
                 <h2 className="font-semibold text-custom-lg text-dark mb-4">Contact Details</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
-                    <label htmlFor="shop-email" className="block mb-2.5">Email</label>
-                    <input id="shop-email" type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} placeholder="shop@example.com" className={fieldClass}/>
+                    <label htmlFor="shop-email" className="block mb-2.5">
+                      Email <span className="text-red">*</span>
+                    </label>
+                    <input id="shop-email" type="email" required value={form.email} onChange={(event) => updateField("email", event.target.value)} placeholder="shop@example.com" className={fieldClass}/>
                   </div>
 
                   <div>
-                    <label htmlFor="shop-phone" className="block mb-2.5">Phone</label>
-                    <input id="shop-phone" type="tel" value={form.phone} onChange={(event) => updateField("phone", event.target.value)} placeholder="Contact number" className={fieldClass}/>
+                    <label htmlFor="shop-phone" className="block mb-2.5">
+                      Phone <span className="text-red">*</span>
+                    </label>
+                    <input id="shop-phone" type="tel" required value={form.phone} onChange={(event) => updateField("phone", event.target.value)} placeholder="Contact number" className={fieldClass}/>
                   </div>
                 </div>
               </div>
@@ -120,8 +130,10 @@ const CreateShop = () => {
                 <h2 className="font-semibold text-custom-lg text-dark mb-4">Store Address</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="sm:col-span-2">
-                    <label htmlFor="address-line-1" className="block mb-2.5">Address Line 1</label>
-                    <input id="address-line-1" type="text" value={form.addressLine1} onChange={(event) => updateField("addressLine1", event.target.value)} placeholder="Building, street, area" className={fieldClass}/>
+                    <label htmlFor="address-line-1" className="block mb-2.5">
+                      Address Line 1 <span className="text-red">*</span>
+                    </label>
+                    <input id="address-line-1" type="text" required value={form.addressLine1} onChange={(event) => updateField("addressLine1", event.target.value)} placeholder="Building, street, area" className={fieldClass}/>
                   </div>
 
                   <div className="sm:col-span-2">
@@ -130,23 +142,31 @@ const CreateShop = () => {
                   </div>
 
                   <div>
-                    <label htmlFor="shop-city" className="block mb-2.5">City</label>
-                    <input id="shop-city" type="text" value={form.city} onChange={(event) => updateField("city", event.target.value)} placeholder="City" className={fieldClass}/>
+                    <label htmlFor="shop-city" className="block mb-2.5">
+                      City <span className="text-red">*</span>
+                    </label>
+                    <input id="shop-city" type="text" required value={form.city} onChange={(event) => updateField("city", event.target.value)} placeholder="City" className={fieldClass}/>
                   </div>
 
                   <div>
-                    <label htmlFor="shop-state" className="block mb-2.5">State</label>
-                    <input id="shop-state" type="text" value={form.state} onChange={(event) => updateField("state", event.target.value)} placeholder="State" className={fieldClass}/>
+                    <label htmlFor="shop-state" className="block mb-2.5">
+                      State <span className="text-red">*</span>
+                    </label>
+                    <input id="shop-state" type="text" required value={form.state} onChange={(event) => updateField("state", event.target.value)} placeholder="State" className={fieldClass}/>
                   </div>
 
                   <div>
-                    <label htmlFor="shop-pincode" className="block mb-2.5">Pincode</label>
-                    <input id="shop-pincode" type="text" value={form.pincode} onChange={(event) => updateField("pincode", event.target.value)} placeholder="Postal code" className={fieldClass}/>
+                    <label htmlFor="shop-pincode" className="block mb-2.5">
+                      Pincode <span className="text-red">*</span>
+                    </label>
+                    <input id="shop-pincode" type="text" required value={form.pincode} onChange={(event) => updateField("pincode", event.target.value)} placeholder="Postal code" className={fieldClass}/>
                   </div>
 
                   <div>
-                    <label htmlFor="shop-country" className="block mb-2.5">Country</label>
-                    <input id="shop-country" type="text" value={form.country} onChange={(event) => updateField("country", event.target.value)} placeholder="Country" className={fieldClass}/>
+                    <label htmlFor="shop-country" className="block mb-2.5">
+                      Country <span className="text-red">*</span>
+                    </label>
+                    <input id="shop-country" type="text" required value={form.country} onChange={(event) => updateField("country", event.target.value)} placeholder="Country" className={fieldClass}/>
                   </div>
                 </div>
               </div>
@@ -160,8 +180,10 @@ const CreateShop = () => {
                   </label>
 
                   <div>
-                    <label htmlFor="razorpay-account-id" className="block mb-2.5">Razorpay Account ID</label>
-                    <input id="razorpay-account-id" type="text" value={form.razorpayAccountId} onChange={(event) => updateField("razorpayAccountId", event.target.value)} placeholder="Optional payment account ID" className={fieldClass}/>
+                    <label htmlFor="razorpay-account-id" className="block mb-2.5">
+                      Razorpay Account ID <span className="text-red">*</span>
+                    </label>
+                    <input id="razorpay-account-id" type="text" required value={form.razorpayAccountId} onChange={(event) => updateField("razorpayAccountId", event.target.value)} placeholder="Payment account ID" className={fieldClass}/>
                   </div>
                 </div>
               </div>
@@ -170,18 +192,24 @@ const CreateShop = () => {
                 <h2 className="font-semibold text-custom-lg text-dark mb-4">Branding</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
-                    <label htmlFor="logo-url" className="block mb-2.5">Logo URL</label>
-                    <input id="logo-url" type="url" value={form.logoUrl} onChange={(event) => updateField("logoUrl", event.target.value)} placeholder="https://example.com/logo.png" className={fieldClass}/>
+                    <label htmlFor="logo-url" className="block mb-2.5">
+                      Logo URL <span className="text-red">*</span>
+                    </label>
+                    <input id="logo-url" type="url" required value={form.logoUrl} onChange={(event) => updateField("logoUrl", event.target.value)} placeholder="https://example.com/logo.png" className={fieldClass}/>
                   </div>
 
                   <div>
-                    <label htmlFor="banner-url" className="block mb-2.5">Banner URL</label>
-                    <input id="banner-url" type="url" value={form.bannerUrl} onChange={(event) => updateField("bannerUrl", event.target.value)} placeholder="https://example.com/banner.png" className={fieldClass}/>
+                    <label htmlFor="banner-url" className="block mb-2.5">
+                      Banner URL <span className="text-red">*</span>
+                    </label>
+                    <input id="banner-url" type="url" required value={form.bannerUrl} onChange={(event) => updateField("bannerUrl", event.target.value)} placeholder="https://example.com/banner.png" className={fieldClass}/>
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label htmlFor="shop-description" className="block mb-2.5">Description</label>
-                    <textarea id="shop-description" rows={5} value={form.description} onChange={(event) => updateField("description", event.target.value)} placeholder="Tell customers what you sell and what makes your shop different" className={fieldClass}/>
+                    <label htmlFor="shop-description" className="block mb-2.5">
+                      Description <span className="text-red">*</span>
+                    </label>
+                    <textarea id="shop-description" rows={5} required value={form.description} onChange={(event) => updateField("description", event.target.value)} placeholder="Tell customers what you sell and what makes your shop different" className={fieldClass}/>
                   </div>
                 </div>
               </div>
