@@ -28,7 +28,7 @@ const CustomSelect = ({ options }) => {
         {selectedOption.label}
       </div>
       <div className={`select-items ${isOpen ? "" : "select-hide"}`}>
-        {options.slice(1, -1).map((option, index) => (<div key={index} onClick={() => handleOptionClick(option)} className={`select-item ${selectedOption === option ? "same-as-selected" : ""}`}>
+        {options.slice(1).map((option, index) => (<div key={index} onClick={() => handleOptionClick(option)} className={`select-item ${selectedOption === option ? "same-as-selected" : ""}`}>
             {option.label}
           </div>))}
       </div>

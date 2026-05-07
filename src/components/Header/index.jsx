@@ -11,14 +11,15 @@ import { selectTotalPrice } from "@/redux/features/cart-slice";
 import { useCartModalContext } from "@/app/context/CartSidebarModalContext";
 import { USER_DISPLAY_NAME_CHANGED_EVENT, clearCachedUserDisplayName, getCachedUserDisplayName, setCachedUserDisplayName, } from "@/utils/auth/user-cache";
 const searchOptions = [
-    { label: "All Categories", value: "0" },
-    { label: "Desktop", value: "1" },
-    { label: "Laptop", value: "2" },
-    { label: "Monitor", value: "3" },
-    { label: "Phone", value: "4" },
-    { label: "Watch", value: "5" },
-    { label: "Mouse", value: "6" },
-    { label: "Tablet", value: "7" },
+    { label: "Categories", value: "0" },
+    { label: "All Categories", value: "1" },
+    { label: "Desktop", value: "2" },
+    { label: "Laptop", value: "3" },
+    { label: "Monitor", value: "4" },
+    { label: "Phone", value: "5" },
+    { label: "Watch", value: "6" },
+    { label: "Mouse", value: "7" },
+    { label: "Tablet", value: "8" },
 ];
 const Header = () => {
     var _a;
