@@ -170,7 +170,7 @@ const Header = () => {
                     </div>
                   </button>
 
-                  {signedInUserName && accountMenuOpen && (<div className="absolute right-0 top-full mt-3 w-40 rounded-md border border-gray-3 bg-white py-2 shadow-1 z-99999">
+                  {signedInUserName && accountMenuOpen && (<div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-3 w-40 max-w-[calc(100vw-2rem)] rounded-md border border-gray-3 bg-white py-2 shadow-1 z-99999">
                     <Link href="/my-account" onClick={() => setAccountMenuOpen(false)} className="block px-4 py-2 text-custom-sm font-medium text-dark hover:bg-gray-1 hover:text-blue">
                       My Account
                     </Link>
