@@ -1,8 +1,49 @@
+"use client";
 import Breadcrumb from "@/components/Common/Breadcrumb";
 import Link from "next/link";
-import React from "react";
+import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 
 const Signin = () => {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setErrorMessage("");
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/signin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
+
+      const data = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        setErrorMessage(data.error ?? "Unable to sign in.");
+        return;
+      }
+
+      router.push("/");
+      router.refresh();
+    } catch {
+      setErrorMessage("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <>
       <Breadcrumb title={"Signin"} pages={["Signin"]} />
@@ -17,7 +58,7 @@ const Signin = () => {
             </div>
 
             <div>
-              <form>
+              <form onSubmit={handleSubmit}>
                 <div className="mb-5">
                   <label htmlFor="email" className="block mb-2.5">
                     Email
@@ -28,6 +69,9 @@ const Signin = () => {
                     name="email"
                     id="email"
                     placeholder="Enter your email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    required
                     className="rounded-lg border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-3 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"
                   />
                 </div>
@@ -43,15 +87,21 @@ const Signin = () => {
                     id="password"
                     placeholder="Enter your password"
                     autoComplete="on"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
                     className="rounded-lg border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-3 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"
                   />
                 </div>
 
+                {errorMessage && <p className="mb-4 text-red">{errorMessage}</p>}
+
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className="w-full flex justify-center font-medium text-white bg-dark py-3 px-6 rounded-lg ease-out duration-200 hover:bg-blue mt-7.5"
                 >
-                  Sign in to account
+                  {isSubmitting ? "Signing in..." : "Sign in to account"}
                 </button>
 
                 <a
@@ -67,7 +117,10 @@ const Signin = () => {
                 </span>
 
                 <div className="flex flex-col gap-4.5 mt-4.5">
-                  <button className="flex justify-center items-center gap-3.5 rounded-lg border border-gray-3 bg-gray-1 p-3 ease-out duration-200 hover:bg-gray-2">
+                  <button
+                    type="button"
+                    className="flex justify-center items-center gap-3.5 rounded-lg border border-gray-3 bg-gray-1 p-3 ease-out duration-200 hover:bg-gray-2"
+                  >
                     <svg
                       width="20"
                       height="20"
@@ -114,7 +167,10 @@ const Signin = () => {
                     Sign In with Google
                   </button>
 
-                  <button className="flex justify-center items-center gap-3.5 rounded-lg border border-gray-3 bg-gray-1 p-3 ease-out duration-200 hover:bg-gray-2">
+                  <button
+                    type="button"
+                    className="flex justify-center items-center gap-3.5 rounded-lg border border-gray-3 bg-gray-1 p-3 ease-out duration-200 hover:bg-gray-2"
+                  >
                     <svg
                       width="22"
                       height="22"

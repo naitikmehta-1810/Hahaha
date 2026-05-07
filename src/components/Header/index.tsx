@@ -13,6 +13,7 @@ const Header = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [stickyMenu, setStickyMenu] = useState(false);
+  const [signedInUserName, setSignedInUserName] = useState("");
   const { openCartModal } = useCartModalContext();
 
   const product = useAppSelector((state) => state.cartReducer.items);
@@ -33,7 +34,29 @@ const Header = () => {
 
   useEffect(() => {
     window.addEventListener("scroll", handleStickyMenu);
-  });
+    return () => window.removeEventListener("scroll", handleStickyMenu);
+  }, []);
+
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      try {
+        const response = await fetch("/api/me");
+        if (!response.ok) {
+          setSignedInUserName("");
+          return;
+        }
+
+        const data = (await response.json()) as {
+          user: { fullName: string } | null;
+        };
+        setSignedInUserName(data.user?.fullName ?? "");
+      } catch {
+        setSignedInUserName("");
+      }
+    };
+
+    void loadCurrentUser();
+  }, []);
 
   const options = [
     { label: "All Categories", value: "0" },
@@ -155,7 +178,10 @@ const Header = () => {
 
             <div className="flex w-full lg:w-auto justify-between items-center gap-5">
               <div className="flex items-center gap-5">
-                <Link href="/signin" className="flex items-center gap-2.5">
+                <Link
+                  href={signedInUserName ? "/my-account" : "/signin"}
+                  className="flex items-center gap-2.5"
+                >
                   <svg
                     width="24"
                     height="24"
@@ -182,7 +208,7 @@ const Header = () => {
                       account
                     </span>
                     <p className="font-medium text-custom-sm text-dark">
-                      Sign In
+                      {signedInUserName || "Sign In"}
                     </p>
                   </div>
                 </Link>

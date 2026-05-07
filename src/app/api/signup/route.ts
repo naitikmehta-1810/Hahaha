@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { randomBytes, scryptSync } from "node:crypto";
 import { getSupabaseAdminClient } from "@/utils/supabase/admin";
+import { hashPassword } from "@/utils/auth/password";
 
 type SignupBody = {
   fullName?: string;
@@ -10,12 +10,6 @@ type SignupBody = {
 };
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const hashPassword = (password: string) => {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${hash}`;
-};
 
 export async function POST(request: Request) {
   let body: SignupBody;
