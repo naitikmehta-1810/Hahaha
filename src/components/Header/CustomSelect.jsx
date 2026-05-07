@@ -23,12 +23,12 @@ const CustomSelect = ({ options }) => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [isOpen]);
-    return (<div className="dropdown-content custom-select relative w-[145px] sm:w-[200px] shrink-0">
+    return (<div className="dropdown-content custom-select custom-select-header relative w-[145px] sm:w-[200px] shrink-0">
       <div className={`select-selected whitespace-nowrap ${isOpen ? "select-arrow-active" : ""}`} onClick={toggleDropdown}>
         {selectedOption.label}
       </div>
       <div className={`select-items ${isOpen ? "" : "select-hide"}`}>
-        {options.slice(1, -1).map((option, index) => (<div key={index} onClick={() => handleOptionClick(option)} className={`select-item ${selectedOption === option ? "same-as-selected" : ""}`}>
+        {options.slice(1).map((option, index) => (<div key={index} onClick={() => handleOptionClick(option)} className={`select-item ${selectedOption === option ? "same-as-selected" : ""}`}>
             {option.label}
           </div>))}
       </div>
