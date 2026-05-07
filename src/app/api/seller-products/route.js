@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/utils/supabase/admin";
+import { getCurrentUserFromRequest } from "@/utils/auth/current-user";
 const isSellerStatus = (value) => value === "active" || value === "draft" || value === "out-of-stock";
-export async function GET() {
+export async function GET(request) {
+    const user = await getCurrentUserFromRequest(request);
+    if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const supabase = getSupabaseAdminClient();
     const { data, error } = await supabase
         .from("products")
         .select("*")
+        .eq("seller_id", user.id)
         .order("created_at", { ascending: false });
     if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -13,6 +20,11 @@ export async function GET() {
     return NextResponse.json({ products: data !== null && data !== void 0 ? data : [] }, { status: 200 });
 }
 export async function POST(request) {
+    const user = await getCurrentUserFromRequest(request);
+    if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     var _a, _b, _c, _d, _e;
     let body;
     try {
@@ -51,6 +63,7 @@ export async function POST(request) {
         image_url: image,
         description,
         status,
+        seller_id: user.id,
     })
         .select("*")
         .single();
@@ -60,12 +73,38 @@ export async function POST(request) {
     return NextResponse.json({ product: data }, { status: 201 });
 }
 export async function DELETE(request) {
+    const user = await getCurrentUserFromRequest(request);
+    if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) {
         return NextResponse.json({ error: "Product id is required." }, { status: 400 });
     }
+    
     const supabase = getSupabaseAdminClient();
+    
+    // First, verify the product belongs to the current seller
+    const { data: product, error: fetchError } = await supabase
+        .from("products")
+        .select("seller_id")
+        .eq("id", id)
+        .maybeSingle();
+    
+    if (fetchError) {
+        return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    }
+    
+    if (!product) {
+        return NextResponse.json({ error: "Product not found." }, { status: 404 });
+    }
+    
+    if (product.seller_id !== user.id) {
+        return NextResponse.json({ error: "You do not have permission to delete this product." }, { status: 403 });
+    }
+    
     const { error } = await supabase.from("products").delete().eq("id", id);
     if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
