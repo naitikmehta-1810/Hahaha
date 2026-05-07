@@ -1,5 +1,5 @@
 const USER_DISPLAY_NAME_KEY = "stuffsy_user_display_name";
-export const USER_DISPLAY_NAME_CHANGED_EVENT = "stuffsy:user-display-name-changed";
+xxexport const USER_DISPLAY_NAME_CHANGED_EVENT = "stuffsy:user-display-name-changed";
 
 const notifyUserDisplayNameChanged = (fullName) => {
   window.dispatchEvent(
