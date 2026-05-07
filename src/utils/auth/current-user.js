@@ -1,5 +1,34 @@
 import { getSupabaseAdminClient } from "@/utils/supabase/admin";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/utils/auth/session";
+
+const syncUserSellerStatus = async (supabase, user) => {
+    const { data: seller, error: sellerError } = await supabase
+        .from("sellers")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+    if (sellerError) {
+        return user;
+    }
+
+    const hasSellerProfile = Boolean(seller);
+    if (Boolean(user.is_seller) === hasSellerProfile) {
+        return user;
+    }
+
+    const { error: updateError } = await supabase
+        .from("users")
+        .update({ is_seller: hasSellerProfile, updated_at: new Date().toISOString() })
+        .eq("id", user.id);
+
+    if (updateError) {
+        return user;
+    }
+
+    return { ...user, is_seller: hasSellerProfile };
+};
+
 export const getCurrentUserFromRequest = async (request) => {
     var _a;
     const cookieHeader = (_a = request.headers.get("cookie")) !== null && _a !== void 0 ? _a : "";
@@ -21,5 +50,5 @@ export const getCurrentUserFromRequest = async (request) => {
     if (error || !user) {
         return null;
     }
-    return user;
+    return syncUserSellerStatus(supabase, user);
 };
