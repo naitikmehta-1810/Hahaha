@@ -1,17 +1,18 @@
-import { createClient } from "@/utils/supabase/server";
-import { cookies } from "next/headers";
+import Home from "@/components/Home";
+import React from "react";
 
-export default async function Page() {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+import { Metadata } from "next";
+export const metadata: Metadata = {
+  title: "Home | Stuffsy",
+  description: "This is Home for Stuffsy Template",
+};
 
-  const { data: todos } = await supabase.from("todos").select();
-
+const HomePage = () => {
   return (
-    <ul>
-      {todos?.map((todo) => (
-        <li key={todo.id}>{todo.name}</li>
-      ))}
-    </ul>
+    <main>
+      <Home />
+    </main>
   );
-}
+};
+
+export default HomePage;
