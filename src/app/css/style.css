@@ -117,6 +117,10 @@ input[type='search']::-webkit-search-results-decoration {
   @apply -mt-0.5;
 }
 
+.custom-select-header .select-selected {
+  @apply rounded-[5px] !border-r bg-white;
+}
+
 
 .hero-carousel .swiper-pagination-bullet {
   @apply h-1 w-4 rounded-[11px] bg-[#DDD];

@@ -112,13 +112,11 @@ const Header = () => {
 
             <div className="max-w-[475px] w-full">
               <form>
-                <div className="flex min-w-0 items-center">
+                <div className="flex min-w-0 items-center gap-2.5">
                   <CustomSelect options={searchOptions}/>
 
                   <div className="relative min-w-0 max-w-[333px] sm:min-w-[333px] w-full">
-                    {/* <!-- divider --> */}
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 inline-block w-px h-5.5 bg-gray-4"></span>
-                    <input onChange={(e) => setSearchQuery(e.target.value)} value={searchQuery} type="search" name="search" id="search" placeholder="I am shopping for..." autoComplete="off" className="custom-search w-full rounded-r-[5px] bg-gray-1 !border-l-0 border border-gray-3 py-2.5 pl-4 pr-10 outline-none ease-in duration-200"/>
+                    <input onChange={(e) => setSearchQuery(e.target.value)} value={searchQuery} type="search" name="search" id="search" placeholder="I am shopping for..." autoComplete="off" className="w-full rounded-[5px] bg-gray-1 border border-gray-3 py-2.5 pl-4 pr-10 outline-none ease-in duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
 
                     <button id="search-btn" aria-label="Search" className="flex items-center justify-center absolute right-3 top-1/2 -translate-y-1/2 ease-in duration-200 hover:text-blue">
                       <svg className="fill-current" width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">

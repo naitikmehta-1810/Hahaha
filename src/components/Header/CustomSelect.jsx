@@ -23,7 +23,7 @@ const CustomSelect = ({ options }) => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [isOpen]);
-    return (<div className="dropdown-content custom-select relative w-[145px] sm:w-[200px] shrink-0">
+    return (<div className="dropdown-content custom-select custom-select-header relative w-[145px] sm:w-[200px] shrink-0">
       <div className={`select-selected whitespace-nowrap ${isOpen ? "select-arrow-active" : ""}`} onClick={toggleDropdown}>
         {selectedOption.label}
       </div>
