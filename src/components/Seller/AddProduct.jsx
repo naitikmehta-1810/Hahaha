@@ -9,13 +9,47 @@ const AddProduct = () => {
     const [category, setCategory] = useState("");
     const [price, setPrice] = useState("");
     const [stock, setStock] = useState("");
-    const [image, setImage] = useState("");
+    const [imageDataUrl, setImageDataUrl] = useState("");
     const [description, setDescription] = useState("");
     const [status, setStatus] = useState("active");
     const [errorMessage, setErrorMessage] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isReadingImage, setIsReadingImage] = useState(false);
+    const handleImageChange = (event) => {
+        const selectedFile = event.target.files === null || event.target.files === void 0 ? void 0 : event.target.files[0];
+        if (!selectedFile) {
+            setImageDataUrl("");
+            return;
+        }
+        if (!selectedFile.type.startsWith("image/")) {
+            setErrorMessage("Please select a valid image file.");
+            event.target.value = "";
+            return;
+        }
+        setErrorMessage("");
+        setIsReadingImage(true);
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === "string") {
+                setImageDataUrl(reader.result);
+                setIsReadingImage(false);
+                return;
+            }
+            setIsReadingImage(false);
+            setErrorMessage("Failed to process image file.");
+        };
+        reader.onerror = () => {
+            setIsReadingImage(false);
+            setErrorMessage("Failed to process image file.");
+        };
+        reader.readAsDataURL(selectedFile);
+    };
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (isReadingImage) {
+            setErrorMessage("Please wait until the selected image finishes uploading.");
+            return;
+        }
         setErrorMessage("");
         setIsSubmitting(true);
         try {
@@ -24,7 +58,7 @@ const AddProduct = () => {
                 category: category.trim(),
                 price: Number(price),
                 stock: Number(stock),
-                image: image.trim() || "/images/products/product-1-bg-1.png",
+                image: imageDataUrl || "/images/products/product-1-bg-1.png",
                 description: description.trim(),
                 status,
             });
@@ -86,9 +120,11 @@ const AddProduct = () => {
 
         <div className="sm:col-span-2">
           <label htmlFor="image" className="block mb-2 text-dark font-medium">
-            Product Image URL (optional)
+            Product Image (optional)
           </label>
-          <input id="image" type="url" value={image} onChange={(e) => setImage(e.target.value)} placeholder="https://example.com/product-image.jpg" className="w-full rounded-md border border-gray-3 bg-gray-1 px-4 py-2.5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
+          <input id="image" type="file" accept="image/*" onChange={handleImageChange} className="w-full rounded-md border border-gray-3 bg-gray-1 px-4 py-2.5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
+          {isReadingImage && <p className="mt-2 text-custom-xs text-dark-4">Processing selected image...</p>}
+          {imageDataUrl && (<img src={imageDataUrl} alt="Selected product preview" className="mt-3 h-28 w-28 rounded-md border border-gray-3 object-cover"/>)}
         </div>
 
         <div className="sm:col-span-2">
@@ -100,7 +136,7 @@ const AddProduct = () => {
 
         <div className="sm:col-span-2">
           {errorMessage && <p className="mb-3 text-red">{errorMessage}</p>}
-          <button type="submit" disabled={isSubmitting} className="inline-flex rounded-md bg-blue px-6 py-3 text-white hover:bg-blue-dark ease-out duration-200">
+          <button type="submit" disabled={isSubmitting || isReadingImage} className="inline-flex rounded-md bg-blue px-6 py-3 text-white hover:bg-blue-dark ease-out duration-200 disabled:opacity-70 disabled:cursor-not-allowed">
             {isSubmitting ? "Saving..." : "Save Product"}
           </button>
         </div>
