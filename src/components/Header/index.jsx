@@ -50,6 +50,18 @@ const Header = () => {
                 return;
             }
             const data = (await response.json());
+            // If API reports no user (deleted server-side), clear client session/cache and refresh
+            if (data.user === null) {
+              clearCachedUserDisplayName();
+              setSignedInUserName("");
+              setIsSeller(false);
+              try {
+                router.refresh();
+              }
+              catch (_err) { }
+              return;
+            }
+
             const fullName = (_b = (_a = data.user) === null || _a === void 0 ? void 0 : _a.fullName) !== null && _b !== void 0 ? _b : "";
             setSignedInUserName(fullName);
             setIsSeller(Boolean(data.user?.isSeller));
