@@ -18,6 +18,8 @@ const Header = () => {
 
   const product = useAppSelector((state) => state.cartReducer.items);
   const totalPrice = useSelector(selectTotalPrice);
+  const accountDisplayName =
+    signedInUserName.trim().split(" ")[0]?.slice(0, 14) || "";
 
   const handleOpenCartModal = () => {
     openCartModal();
@@ -207,8 +209,8 @@ const Header = () => {
                     <span className="block text-2xs text-dark-4 uppercase">
                       account
                     </span>
-                    <p className="font-medium text-custom-sm text-dark">
-                      {signedInUserName || "Sign In"}
+                    <p className="max-w-[80px] truncate font-medium text-custom-sm text-dark">
+                      {accountDisplayName || "Sign In"}
                     </p>
                   </div>
                 </Link>
