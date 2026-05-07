@@ -9,7 +9,7 @@ import { useAppSelector } from "@/redux/store";
 import { useSelector } from "react-redux";
 import { selectTotalPrice } from "@/redux/features/cart-slice";
 import { useCartModalContext } from "@/app/context/CartSidebarModalContext";
-import { clearCachedUserDisplayName, getCachedUserDisplayName, setCachedUserDisplayName, } from "@/utils/auth/user-cache";
+import { USER_DISPLAY_NAME_CHANGED_EVENT, clearCachedUserDisplayName, getCachedUserDisplayName, setCachedUserDisplayName, } from "@/utils/auth/user-cache";
 const searchOptions = [
     { label: "All Categories", value: "0" },
     { label: "Desktop", value: "1" },
@@ -91,6 +91,13 @@ const Header = () => {
             }
         };
         void loadCurrentUser();
+    }, []);
+    useEffect(() => {
+        const handleUserDisplayNameChanged = (event) => {
+            setSignedInUserName(event.detail?.fullName || "");
+        };
+        window.addEventListener(USER_DISPLAY_NAME_CHANGED_EVENT, handleUserDisplayNameChanged);
+        return () => window.removeEventListener(USER_DISPLAY_NAME_CHANGED_EVENT, handleUserDisplayNameChanged);
     }, []);
     return (<header className={`fixed left-0 top-0 w-full z-9999 bg-white transition-all ease-in-out duration-300 ${stickyMenu && "shadow"}`}>
       <div className="max-w-[1170px] mx-auto px-4 sm:px-7.5 xl:px-0">
