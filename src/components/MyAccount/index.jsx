@@ -1,6 +1,5 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import Breadcrumb from "../Common/Breadcrumb";
 import Image from "next/image";
 import Link from "next/link";
 import Orders from "../Orders";
@@ -181,7 +180,7 @@ const MyAccount = () => {
     {
       title: "Saved Addresses",
       value: 1,
-      linkLabel: "Manage addresses",
+      linkLabel: "Manage address",
       onClick: () => setActiveTab("account-details"),
       iconBg: "bg-[#f2ecff]",
       iconColor: "text-[#7c3aed]",
@@ -301,20 +300,12 @@ const MyAccount = () => {
 
   return (
     <>
-      <Breadcrumb title={"My Account"} pages={["my account"]}/>
-
       <section className="overflow-hidden py-20 bg-gray-2">
         <div className="max-w-[1470px] w-full mx-auto px-4 md:px-6 xl:px-8">
           <div className="grid gap-6 xl:grid-cols-[280px,1fr]">
             <div className="space-y-5">
               <div className="rounded-xl border border-[#ece3f8] bg-white p-3">
-                <div className="flex items-center gap-2 border-b border-[#f0ebf8] pb-3 px-2 text-custom-sm text-dark-4">
-                  <Link href="/" className="hover:text-[#651fff]">Home</Link>
-                  <span>&gt;</span>
-                  <span className="font-medium text-dark">My Account</span>
-                </div>
-
-                <div className="pt-3">
+                <div>
                   {sidebarItems.map((item) => {
                     if (item.type === "link") {
                       return (
@@ -366,13 +357,6 @@ const MyAccount = () => {
 
               {activeTab === "dashboard" && (
                 <div className="space-y-6">
-                  <div>
-                    <h1 className="text-3xl font-bold text-dark">My Account</h1>
-                    <p className="mt-2 text-lg text-[#344064]">
-                      {isLoading ? "Loading account..." : `Welcome back, ${firstName || "there"}!`}
-                    </p>
-                  </div>
-
                   <div className="rounded-xl border border-[#ece3f8] bg-white p-5 sm:p-7">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                       <div className="flex items-center gap-4">
@@ -419,15 +403,18 @@ const MyAccount = () => {
                         </div>
 
                         {card.href ? (
-                          <Link href={card.href} className="mt-4 inline-flex text-custom-sm font-medium text-[#651fff] hover:text-[#4d0fff]">
-                            {card.linkLabel} &rarr;
+                          <Link
+                            href={card.href}
+                            className="mt-4 inline-flex items-center justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 text-sm font-semibold text-[#651fff] transition hover:border-[#651fff] hover:bg-[#f3ecff]"
+                          >
+                            {card.linkLabel}
                           </Link>
                         ) : (
                           <button
                             onClick={card.onClick}
-                            className="mt-4 inline-flex text-custom-sm font-medium text-[#651fff] hover:text-[#4d0fff]"
+                            className="mt-4 inline-flex items-center justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 text-sm font-semibold text-[#651fff] transition hover:border-[#651fff] hover:bg-[#f3ecff]"
                           >
-                            {card.linkLabel} &rarr;
+                            {card.linkLabel}
                           </button>
                         )}
                       </div>
@@ -440,9 +427,9 @@ const MyAccount = () => {
                         <h3 className="text-2xl font-semibold text-dark">Recent Orders</h3>
                         <button
                           onClick={() => setActiveTab("orders")}
-                          className="text-custom-sm font-medium text-[#651fff] hover:text-[#4d0fff]"
+                          className="inline-flex items-center justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 text-sm font-semibold text-[#651fff] transition hover:border-[#651fff] hover:bg-[#f3ecff]"
                         >
-                          View all orders &rarr;
+                          View all orders
                         </button>
                       </div>
 
