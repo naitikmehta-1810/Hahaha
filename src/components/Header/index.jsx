@@ -71,13 +71,16 @@ const Header = () => {
             setSignedInUserName(getCachedUserDisplayName());
         }
     };
-    const handleAccountClick = async () => {
+    const handleAccountClick = () => {
         if (!signedInUserName) {
             router.push("/signin");
             return;
         }
-        await loadCurrentUser();
-        setAccountMenuOpen((open) => !open);
+        const nextOpenState = !accountMenuOpen;
+        setAccountMenuOpen(nextOpenState);
+        if (nextOpenState) {
+            void loadCurrentUser();
+        }
     };
     const handleLogout = async () => {
         setIsLoggingOut(true);
