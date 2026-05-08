@@ -120,9 +120,9 @@ const Header = () => {
   }, []);
 
   return (
-    <header className="fixed left-0 top-0 z-9999 w-full">
-      <div className="w-full border-b border-[#e7def4] bg-white shadow-[0_12px_35px_rgba(52,48,75,0.08)]">
-        <div className="mx-auto flex min-h-[76px] max-w-[1470px] items-center gap-4 px-5 sm:px-7 lg:px-8">
+    <header className="fixed left-0 top-0 z-9999 w-full bg-transparent px-4 pt-3 sm:px-6 xl:px-0">
+      <div className="mx-auto max-w-[1420px] rounded-t-2xl border border-[#e6dff1] bg-white shadow-[0_18px_50px_rgba(45,36,76,0.08)]">
+        <div className="flex min-h-[76px] items-center gap-4 px-5 sm:px-7 lg:px-10">
           <Link
             href="/"
             className="flex shrink-0 items-center gap-3 text-[28px] font-bold tracking-tight text-black"
@@ -140,7 +140,7 @@ const Header = () => {
           </Link>
 
           <form
-            className="mx-auto hidden w-full max-w-[610px] md:block"
+            className="mx-auto hidden w-full max-w-[805px] md:block"
             onSubmit={(event) => event.preventDefault()}
           >
             <label htmlFor="site-search" className="relative block">
@@ -151,7 +151,7 @@ const Header = () => {
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search for products, categories, shops..."
                 autoComplete="off"
-                className="h-11 w-full rounded-lg border border-[#ded3ef] bg-[#fdf9ff] py-2.5 pl-5 pr-12 text-custom-sm font-medium text-[#24304f] outline-none duration-200 placeholder:text-[#344064] focus:border-[#8b3dff] focus:ring-4 focus:ring-[#8b3dff]/10"
+                className="h-13 w-full rounded-lg border border-[#ded3ef] bg-[#fdf9ff] py-2.5 pl-5 pr-12 text-custom-sm font-medium text-[#24304f] outline-none duration-200 placeholder:text-[#344064] focus:border-[#8b3dff] focus:ring-4 focus:ring-[#8b3dff]/10"
               />
               <button
                 type="submit"
@@ -166,7 +166,7 @@ const Header = () => {
             </label>
           </form>
 
-          <div className="ml-auto flex shrink-0 items-center gap-4 sm:gap-6">
+          <div className="ml-auto flex shrink-0 items-center gap-4 sm:gap-7">
             <Link
               href="/wishlist"
               aria-label="Wishlist"
@@ -260,7 +260,7 @@ const Header = () => {
           </div>
         </div>
 
-        <div className="mx-auto max-w-[1470px] border-t border-[#eee7f8] px-5 pb-4 md:hidden sm:px-7 lg:px-8">
+        <div className="border-t border-[#eee7f8] px-5 pb-4 md:hidden sm:px-7 lg:px-10">
           <form className="pt-4" onSubmit={(event) => event.preventDefault()}>
             <label htmlFor="site-search-mobile" className="relative block">
               <input
