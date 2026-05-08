@@ -45,12 +45,7 @@ const Login = ({ currentUser, onSignedIn }) => {
         }
     };
     if (currentUser) {
-        return (<div className="bg-white shadow-1 rounded-[10px] py-5 px-5.5">
-        <p className="text-dark">
-          Signed in as{" "}
-          <span className="font-medium">{currentUser.fullName || currentUser.email}</span>
-        </p>
-      </div>);
+        return null;
     }
     return (<div className="bg-white shadow-1 rounded-[10px]">
       <div onClick={() => setDropdown(!dropdown)} className={`cursor-pointer flex items-center gap-0.5 py-5 px-5.5 ${dropdown && "border-b border-gray-3"}`}>
