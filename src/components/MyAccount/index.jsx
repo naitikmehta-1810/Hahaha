@@ -126,6 +126,7 @@ const MyAccount = () => {
       title: "Total Orders",
       value: recentOrders.length,
       linkLabel: "View all orders",
+      linkStyle: "text",
       onClick: () => setActiveTab("orders"),
       iconBg: "bg-[#f2ecff]",
       iconColor: "text-[#651fff]",
@@ -142,6 +143,7 @@ const MyAccount = () => {
       title: "Wishlist Items",
       value: wishlistItems.length,
       linkLabel: "View wishlist",
+      linkStyle: "text",
       href: "/wishlist",
       iconBg: "bg-[#fceaf4]",
       iconColor: "text-[#ec4899]",
@@ -300,10 +302,10 @@ const MyAccount = () => {
 
   return (
     <>
-      <section className="overflow-hidden py-20 bg-gray-2">
+      <section className="overflow-hidden bg-gray-2 py-24 lg:py-28">
         <div className="max-w-[1470px] w-full mx-auto px-4 md:px-6 xl:px-8">
-          <div className="grid gap-6 xl:grid-cols-[280px,1fr]">
-            <div className="space-y-5">
+          <div className="grid gap-7 xl:grid-cols-[280px,1fr]">
+            <div className="space-y-6">
               <div className="rounded-xl border border-[#ece3f8] bg-white p-3">
                 <div>
                   {sidebarItems.map((item) => {
@@ -352,7 +354,7 @@ const MyAccount = () => {
               </div>
             </div>
 
-            <div>
+            <div className="space-y-1">
               {errorMessage && (<div className="mb-4 rounded-md bg-red/10 px-4 py-3 text-red">{errorMessage}</div>)}
 
               {activeTab === "dashboard" && (
@@ -405,16 +407,26 @@ const MyAccount = () => {
                         {card.href ? (
                           <Link
                             href={card.href}
-                            className="mt-4 inline-flex items-center justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 text-sm font-semibold text-[#651fff] transition hover:border-[#651fff] hover:bg-[#f3ecff]"
+                            className={`mt-4 inline-flex items-center text-sm font-semibold text-[#651fff] transition hover:text-[#4d0fff] ${
+                              card.linkStyle === "text"
+                                ? "gap-2"
+                                : "justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 hover:border-[#651fff] hover:bg-[#f3ecff]"
+                            }`}
                           >
                             {card.linkLabel}
+                            {card.linkStyle === "text" && <span aria-hidden="true">&rarr;</span>}
                           </Link>
                         ) : (
                           <button
                             onClick={card.onClick}
-                            className="mt-4 inline-flex items-center justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 text-sm font-semibold text-[#651fff] transition hover:border-[#651fff] hover:bg-[#f3ecff]"
+                            className={`mt-4 inline-flex items-center text-sm font-semibold text-[#651fff] transition hover:text-[#4d0fff] ${
+                              card.linkStyle === "text"
+                                ? "gap-2"
+                                : "justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 hover:border-[#651fff] hover:bg-[#f3ecff]"
+                            }`}
                           >
                             {card.linkLabel}
+                            {card.linkStyle === "text" && <span aria-hidden="true">&rarr;</span>}
                           </button>
                         )}
                       </div>
@@ -427,9 +439,10 @@ const MyAccount = () => {
                         <h3 className="text-2xl font-semibold text-dark">Recent Orders</h3>
                         <button
                           onClick={() => setActiveTab("orders")}
-                          className="inline-flex items-center justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 text-sm font-semibold text-[#651fff] transition hover:border-[#651fff] hover:bg-[#f3ecff]"
+                          className="inline-flex items-center gap-2 text-sm font-semibold text-[#651fff] transition hover:text-[#4d0fff]"
                         >
                           View all orders
+                          <span aria-hidden="true">&rarr;</span>
                         </button>
                       </div>
 
