@@ -94,19 +94,29 @@ const Header = () => {
             router.refresh();
         }
     };
-    // Sticky menu
-    const handleStickyMenu = () => {
-        if (window.scrollY >= 80) {
-            setStickyMenu(true);
-        }
-        else {
-            setStickyMenu(false);
-        }
-    };
     useEffect(() => {
-        handleStickyMenu();
+        let rafId = null;
+        const updateStickyState = () => {
+            const nextStickyState = window.scrollY >= 80;
+            setStickyMenu((prev) => (prev === nextStickyState ? prev : nextStickyState));
+        };
+        const handleStickyMenu = () => {
+            if (rafId !== null) {
+                return;
+            }
+            rafId = window.requestAnimationFrame(() => {
+                updateStickyState();
+                rafId = null;
+            });
+        };
+        updateStickyState();
         window.addEventListener("scroll", handleStickyMenu, { passive: true });
-        return () => window.removeEventListener("scroll", handleStickyMenu);
+        return () => {
+            window.removeEventListener("scroll", handleStickyMenu);
+            if (rafId !== null) {
+                window.cancelAnimationFrame(rafId);
+            }
+        };
     }, []);
     useEffect(() => {
         void loadCurrentUser();

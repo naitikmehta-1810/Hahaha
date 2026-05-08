@@ -11,17 +11,28 @@ export default function ScrollToTop() {
         });
     };
     useEffect(() => {
-        // Button is displayed after scrolling for 500 pixels
+        let rafId = null;
         const toggleVisibility = () => {
-            if (window.pageYOffset > 300) {
-                setIsVisible(true);
+            const nextVisibleState = window.pageYOffset > 300;
+            setIsVisible((prev) => (prev === nextVisibleState ? prev : nextVisibleState));
+        };
+        const handleScroll = () => {
+            if (rafId !== null) {
+                return;
             }
-            else {
-                setIsVisible(false);
+            rafId = window.requestAnimationFrame(() => {
+                toggleVisibility();
+                rafId = null;
+            });
+        };
+        toggleVisibility();
+        window.addEventListener("scroll", handleScroll, { passive: true });
+        return () => {
+            window.removeEventListener("scroll", handleScroll);
+            if (rafId !== null) {
+                window.cancelAnimationFrame(rafId);
             }
         };
-        window.addEventListener("scroll", toggleVisibility);
-        return () => window.removeEventListener("scroll", toggleVisibility);
     }, []);
     return (<>
       {isVisible && (<button onClick={scrollToTop} className={`items-center justify-center w-10 h-10 rounded-[4px] shadow-lg bg-blue ease-out duration-200 hover:bg-blue-dark fixed bottom-8 right-8 z-999 ${isVisible ? "flex" : "hidden"}`}>
