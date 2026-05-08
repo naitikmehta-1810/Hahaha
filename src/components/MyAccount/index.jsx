@@ -308,6 +308,38 @@ const MyAccount = () => {
       ),
     },
     {
+      label: "Payment Methods",
+      value: "payment-methods",
+      type: "tab",
+      icon: (
+        <SidebarIcon className="h-5 w-5">
+          <path
+            d="M4 8h16M4 12h16M8 16h3M6 5h12a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </SidebarIcon>
+      ),
+    },
+    {
+      label: "Reviews",
+      value: "reviews",
+      type: "tab",
+      icon: (
+        <SidebarIcon className="h-5 w-5">
+          <path
+            d="M12 4l2.2 4.4 4.8.7-3.5 3.4.8 4.8-4.3-2.2-4.3 2.2.8-4.8L5 9.1l4.8-.7L12 4z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            fill="none"
+            strokeLinejoin="round"
+          />
+        </SidebarIcon>
+      ),
+    },
+    {
       label: "Wishlist",
       href: "/wishlist",
       type: "link",
@@ -628,6 +660,24 @@ const MyAccount = () => {
                     Manage address
                     <span aria-hidden="true">&rarr;</span>
                   </button>
+                </div>
+              )}
+
+              {activeTab === "payment-methods" && (
+                <div className="rounded-xl border border-[#ece3f8] bg-white p-6 sm:p-8">
+                  <h3 className="text-xl font-semibold text-dark">Payment Methods</h3>
+                  <p className="mt-3 text-custom-sm text-dark-4">
+                    No saved payment methods are available for this account yet.
+                  </p>
+                </div>
+              )}
+
+              {activeTab === "reviews" && (
+                <div className="rounded-xl border border-[#ece3f8] bg-white p-6 sm:p-8">
+                  <h3 className="text-xl font-semibold text-dark">Reviews</h3>
+                  <p className="mt-3 text-custom-sm text-dark-4">
+                    Your submitted product reviews will appear here.
+                  </p>
                 </div>
               )}
 

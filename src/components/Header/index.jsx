@@ -120,9 +120,9 @@ const Header = () => {
   }, []);
 
   return (
-    <header className="fixed left-0 top-0 z-9999 w-full px-3 pt-2 sm:px-5 sm:pt-4">
-      <div className="mx-auto max-w-[1170px] rounded-t-xl border border-[#e7def4] bg-white shadow-[0_16px_50px_rgba(52,48,75,0.08)]">
-        <div className="flex min-h-[76px] items-center gap-4 px-5 sm:px-7 lg:px-8">
+    <header className="fixed left-0 top-0 z-9999 w-full">
+      <div className="w-full border-b border-[#e7def4] bg-white shadow-[0_12px_35px_rgba(52,48,75,0.08)]">
+        <div className="mx-auto flex min-h-[76px] max-w-[1470px] items-center gap-4 px-5 sm:px-7 lg:px-8">
           <Link
             href="/"
             className="flex shrink-0 items-center gap-3 text-[28px] font-bold tracking-tight text-black"
@@ -260,7 +260,7 @@ const Header = () => {
           </div>
         </div>
 
-        <div className="border-t border-[#eee7f8] px-5 pb-4 md:hidden">
+        <div className="mx-auto max-w-[1470px] border-t border-[#eee7f8] px-5 pb-4 md:hidden sm:px-7 lg:px-8">
           <form className="pt-4" onSubmit={(event) => event.preventDefault()}>
             <label htmlFor="site-search-mobile" className="relative block">
               <input
