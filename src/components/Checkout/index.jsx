@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Breadcrumb from "../Common/Breadcrumb";
 import Login from "./Login";
 import Shipping from "./Shipping";
@@ -8,6 +8,23 @@ import PaymentMethod from "./PaymentMethod";
 import Coupon from "./Coupon";
 import Billing from "./Billing";
 const Checkout = () => {
+    const [currentUser, setCurrentUser] = useState(null);
+    useEffect(() => {
+        const loadCurrentUser = async () => {
+            try {
+                const response = await fetch("/api/me");
+                const data = await response.json();
+                if (!response.ok) {
+                    return;
+                }
+                setCurrentUser(data.user ?? null);
+            }
+            catch (_a) {
+                setCurrentUser(null);
+            }
+        };
+        void loadCurrentUser();
+    }, []);
     return (<>
       <Breadcrumb title={"Checkout"} pages={["checkout"]}/>
       <section className="overflow-hidden py-20 bg-gray-2">
@@ -17,10 +34,10 @@ const Checkout = () => {
               {/* <!-- checkout left --> */}
               <div className="lg:max-w-[670px] w-full">
                 {/* <!-- login box --> */}
-                <Login />
+                <Login currentUser={currentUser} onSignedIn={setCurrentUser}/>
 
                 {/* <!-- billing details --> */}
-                <Billing />
+                <Billing currentUser={currentUser}/>
 
                 {/* <!-- address box two --> */}
                 <Shipping />

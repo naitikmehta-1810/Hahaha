@@ -1,5 +1,19 @@
-import React from "react";
-const Billing = () => {
+import React, { useEffect, useState } from "react";
+const Billing = ({ currentUser }) => {
+    const [firstName, setFirstName] = useState("");
+    const [lastName, setLastName] = useState("");
+    const [email, setEmail] = useState("");
+    useEffect(() => {
+        var _a, _b;
+        if (!currentUser) {
+            return;
+        }
+        const fullName = ((_a = currentUser.fullName) !== null && _a !== void 0 ? _a : "").trim();
+        const [first = "", ...rest] = fullName.split(/\s+/);
+        setFirstName(first);
+        setLastName(rest.join(" "));
+        setEmail((_b = currentUser.email) !== null && _b !== void 0 ? _b : "");
+    }, [currentUser]);
     return (<div className="mt-9">
       <h2 className="font-medium text-dark text-xl sm:text-2xl mb-5.5">
         Billing details
@@ -12,7 +26,7 @@ const Billing = () => {
               First Name <span className="text-red">*</span>
             </label>
 
-            <input type="text" name="firstName" id="firstName" placeholder="Jhon" className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-2.5 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
+            <input type="text" name="firstName" id="firstName" placeholder="Jhon" value={firstName} onChange={(event) => setFirstName(event.target.value)} className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-2.5 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
           </div>
 
           <div className="w-full">
@@ -20,7 +34,7 @@ const Billing = () => {
               Last Name <span className="text-red">*</span>
             </label>
 
-            <input type="text" name="lastName" id="lastName" placeholder="Deo" className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-2.5 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
+            <input type="text" name="lastName" id="lastName" placeholder="Deo" value={lastName} onChange={(event) => setLastName(event.target.value)} className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-2.5 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
           </div>
         </div>
 
@@ -95,7 +109,7 @@ const Billing = () => {
             Email Address <span className="text-red">*</span>
           </label>
 
-          <input type="email" name="email" id="email" className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-2.5 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
+          <input type="email" name="email" id="email" value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-2.5 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
         </div>
 
         <div>
