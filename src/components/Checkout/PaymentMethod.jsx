@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React from "react";
 import Image from "next/image";
-const PaymentMethod = () => {
-    const [payment, setPayment] = useState("bank");
+const PaymentMethod = ({ payment = "bank", onPaymentChange }) => {
+    const setPayment = (value) => {
+        onPaymentChange === null || onPaymentChange === void 0 ? void 0 : onPaymentChange(value);
+    };
     return (<div className="bg-white shadow-1 rounded-[10px] mt-7.5">
       <div className="border-b border-gray-3 py-5 px-4 sm:px-8.5">
         <h3 className="font-medium text-xl text-dark">Payment Method</h3>
@@ -11,7 +13,7 @@ const PaymentMethod = () => {
         <div className="flex flex-col gap-3">
           <label htmlFor="bank" className="flex cursor-pointer select-none items-center gap-4">
             <div className="relative">
-              <input type="checkbox" name="bank" id="bank" className="sr-only" onChange={() => setPayment("bank")}/>
+              <input type="radio" name="paymentMethod" id="bank" className="sr-only" checked={payment === "bank"} onChange={() => setPayment("bank")}/>
               <div className={`flex h-4 w-4 items-center justify-center rounded-full ${payment === "bank"
             ? "border-4 border-blue"
             : "border border-gray-4"}`}></div>
@@ -34,7 +36,7 @@ const PaymentMethod = () => {
 
           <label htmlFor="cash" className="flex cursor-pointer select-none items-center gap-4">
             <div className="relative">
-              <input type="checkbox" name="cash" id="cash" className="sr-only" onChange={() => setPayment("cash")}/>
+              <input type="radio" name="paymentMethod" id="cash" className="sr-only" checked={payment === "cash"} onChange={() => setPayment("cash")}/>
               <div className={`flex h-4 w-4 items-center justify-center rounded-full ${payment === "cash"
             ? "border-4 border-blue"
             : "border border-gray-4"}`}></div>
@@ -57,7 +59,7 @@ const PaymentMethod = () => {
 
           <label htmlFor="paypal" className="flex cursor-pointer select-none items-center gap-4">
             <div className="relative">
-              <input type="checkbox" name="paypal" id="paypal" className="sr-only" onChange={() => setPayment("paypal")}/>
+              <input type="radio" name="paymentMethod" id="paypal" className="sr-only" checked={payment === "paypal"} onChange={() => setPayment("paypal")}/>
               <div className={`flex h-4 w-4 items-center justify-center rounded-full ${payment === "paypal"
             ? "border-4 border-blue"
             : "border border-gray-4"}`}></div>

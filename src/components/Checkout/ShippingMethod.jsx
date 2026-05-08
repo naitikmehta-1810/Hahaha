@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React from "react";
 import Image from "next/image";
-const ShippingMethod = () => {
-    const [shippingMethod, setShippingMethod] = useState("free");
+const ShippingMethod = ({ shippingMethod = "free", onShippingMethodChange }) => {
+    const setShippingMethod = (value) => {
+        onShippingMethodChange === null || onShippingMethodChange === void 0 ? void 0 : onShippingMethodChange(value);
+    };
     return (<div className="bg-white shadow-1 rounded-[10px] mt-7.5">
       <div className="border-b border-gray-3 py-5 px-4 sm:px-8.5">
         <h3 className="font-medium text-xl text-dark">Shipping Method</h3>
@@ -11,7 +13,7 @@ const ShippingMethod = () => {
         <div className="flex flex-col gap-4">
           <label htmlFor="free" className="flex cursor-pointer select-none items-center gap-3.5">
             <div className="relative">
-              <input type="checkbox" name="free" id="free" className="sr-only" onChange={() => setShippingMethod("free")}/>
+              <input type="radio" name="shippingMethod" id="free" className="sr-only" checked={shippingMethod === "free"} onChange={() => setShippingMethod("free")}/>
               {/* selectShipping === 'free' ? 'border-4 border-blue' : 'border border-gray-4' */}
               <div className={`flex h-4 w-4 items-center justify-center rounded-full ${shippingMethod === "free"
             ? "border-4 border-blue"
@@ -22,7 +24,7 @@ const ShippingMethod = () => {
 
           <label htmlFor="fedex" className="flex cursor-pointer select-none items-center gap-3.5">
             <div className="relative">
-              <input type="checkbox" name="fedex" id="fedex" className="sr-only" onChange={() => setShippingMethod("fedex")}/>
+              <input type="radio" name="shippingMethod" id="fedex" className="sr-only" checked={shippingMethod === "fedex"} onChange={() => setShippingMethod("fedex")}/>
               <div className={`flex h-4 w-4 items-center justify-center rounded-full ${shippingMethod === "fedex"
             ? "border-4 border-blue"
             : "border border-gray-4"}`}></div>
@@ -44,7 +46,7 @@ const ShippingMethod = () => {
 
           <label htmlFor="dhl" className="flex cursor-pointer select-none items-center gap-3.5">
             <div className="relative">
-              <input type="checkbox" name="dhl" id="dhl" className="sr-only" onChange={() => setShippingMethod("dhl")}/>
+              <input type="radio" name="shippingMethod" id="dhl" className="sr-only" checked={shippingMethod === "dhl"} onChange={() => setShippingMethod("dhl")}/>
               <div className={`flex h-4 w-4 items-center justify-center rounded-full ${shippingMethod === "dhl"
             ? "border-4 border-blue"
             : "border border-gray-4"}`}></div>

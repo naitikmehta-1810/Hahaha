@@ -7,9 +7,23 @@ import ShippingMethod from "./ShippingMethod";
 import PaymentMethod from "./PaymentMethod";
 import Coupon from "./Coupon";
 import Billing from "./Billing";
+import { useAppSelector } from "@/redux/store";
+import { selectTotalPrice } from "@/redux/features/cart-slice";
+import { useSelector } from "react-redux";
+import Link from "next/link";
+import { useDispatch } from "react-redux";
+import { removeAllItemsFromCart } from "@/redux/features/cart-slice";
 const Checkout = () => {
     const [currentUser, setCurrentUser] = useState(null);
     const [isAuthResolved, setIsAuthResolved] = useState(false);
+    const [shippingMethod, setShippingMethod] = useState("free");
+    const [paymentMethod, setPaymentMethod] = useState("bank");
+    const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+    const [checkoutError, setCheckoutError] = useState("");
+    const [checkoutMessage, setCheckoutMessage] = useState("");
+    const cartItems = useAppSelector((state) => state.cartReducer.items);
+    const totalPrice = useSelector(selectTotalPrice);
+    const dispatch = useDispatch();
     useEffect(() => {
         const loadCurrentUser = async () => {
             try {
@@ -29,6 +43,81 @@ const Checkout = () => {
         };
         void loadCurrentUser();
     }, []);
+    const getInputValue = (id) => {
+        var _a;
+        return ((_a = document.getElementById(id)) === null || _a === void 0 ? void 0 : _a.value.trim()) || "";
+    };
+    const handlePlaceOrder = async () => {
+        var _a;
+        setCheckoutError("");
+        setCheckoutMessage("");
+        if (!currentUser) {
+            setCheckoutError("Please sign in to place your order.");
+            return;
+        }
+        if (cartItems.length === 0) {
+            setCheckoutError("Your cart is empty.");
+            return;
+        }
+        const firstName = getInputValue("firstName");
+        const lastName = getInputValue("lastName");
+        const email = getInputValue("email");
+        const addressLine1 = getInputValue("address");
+        const addressLine2 = getInputValue("addressTwo");
+        const city = getInputValue("town");
+        const country = getInputValue("country");
+        const phone = getInputValue("phone");
+        const notes = getInputValue("notes");
+        const fullName = `${firstName} ${lastName}`.trim();
+        if (!fullName || !email || !addressLine1 || !city || !phone) {
+            setCheckoutError("Please complete billing details before placing your order.");
+            return;
+        }
+        setIsPlacingOrder(true);
+        try {
+            const response = await fetch("/api/orders", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    cartItems: cartItems.map((item) => ({ id: item.id, quantity: item.quantity })),
+                    paymentMethod,
+                    shippingMethod,
+                    notes,
+                    shippingAddress: {
+                        fullName,
+                        email,
+                        phone,
+                        addressLine1,
+                        addressLine2,
+                        city,
+                        country,
+                    },
+                    billingAddress: {
+                        fullName,
+                        email,
+                        phone,
+                        addressLine1,
+                        addressLine2,
+                        city,
+                        country,
+                    },
+                }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                setCheckoutError((_a = data.error) !== null && _a !== void 0 ? _a : "Failed to place order.");
+                return;
+            }
+            dispatch(removeAllItemsFromCart());
+            setCheckoutMessage(`Order placed successfully. ${data.orders?.length ?? 0} order(s) created.`);
+        }
+        catch (_a) {
+            setCheckoutError("Failed to place order.");
+        }
+        finally {
+            setIsPlacingOrder(false);
+        }
+    };
     return (<>
       <Breadcrumb title={"Checkout"} pages={["checkout"]}/>
       <section className="overflow-hidden py-20 bg-gray-2">
@@ -80,45 +169,20 @@ const Checkout = () => {
                       </div>
                     </div>
 
-                    {/* <!-- product item --> */}
-                    <div className="flex items-center justify-between py-5 border-b border-gray-3">
-                      <div>
-                        <p className="text-dark">iPhone 14 Plus , 6/128GB</p>
-                      </div>
-                      <div>
-                        <p className="text-dark text-right">₹899.00</p>
-                      </div>
-                    </div>
-
-                    {/* <!-- product item --> */}
-                    <div className="flex items-center justify-between py-5 border-b border-gray-3">
-                      <div>
-                        <p className="text-dark">Asus RT Dual Band Router</p>
-                      </div>
-                      <div>
-                        <p className="text-dark text-right">₹129.00</p>
-                      </div>
-                    </div>
-
-                    {/* <!-- product item --> */}
-                    <div className="flex items-center justify-between py-5 border-b border-gray-3">
-                      <div>
-                        <p className="text-dark">Havit HV-G69 USB Gamepad</p>
-                      </div>
-                      <div>
-                        <p className="text-dark text-right">₹29.00</p>
-                      </div>
-                    </div>
-
-                    {/* <!-- product item --> */}
-                    <div className="flex items-center justify-between py-5 border-b border-gray-3">
-                      <div>
-                        <p className="text-dark">Shipping Fee</p>
-                      </div>
-                      <div>
-                        <p className="text-dark text-right">₹15.00</p>
-                      </div>
-                    </div>
+                    {cartItems.length > 0 ? (cartItems.map((item) => (<div key={item.id} className="flex items-center justify-between py-5 border-b border-gray-3">
+                          <div>
+                            <p className="text-dark">
+                              {item.title} x {item.quantity}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-dark text-right">
+                              ₹{item.discountedPrice * item.quantity}
+                            </p>
+                          </div>
+                        </div>))) : (<div className="py-5 border-b border-gray-3">
+                        <p className="text-dark">Your cart is empty.</p>
+                      </div>)}
 
                     {/* <!-- total --> */}
                     <div className="flex items-center justify-between pt-5">
@@ -127,7 +191,7 @@ const Checkout = () => {
                       </div>
                       <div>
                         <p className="font-medium text-lg text-dark text-right">
-                          ₹1072.00
+                          ₹{totalPrice}
                         </p>
                       </div>
                     </div>
@@ -138,15 +202,19 @@ const Checkout = () => {
                 <Coupon />
 
                 {/* <!-- shipping box --> */}
-                <ShippingMethod />
+                <ShippingMethod shippingMethod={shippingMethod} onShippingMethodChange={setShippingMethod}/>
 
                 {/* <!-- payment box --> */}
-                <PaymentMethod />
+                <PaymentMethod payment={paymentMethod} onPaymentChange={setPaymentMethod}/>
 
                 {/* <!-- checkout button --> */}
-                <button type="button" className="w-full flex justify-center font-medium text-white bg-blue py-3 px-6 rounded-md ease-out duration-200 hover:bg-blue-dark mt-7.5">
-                  Process to Checkout
-                </button>
+                {cartItems.length > 0 ? (<button type="button" onClick={handlePlaceOrder} disabled={isPlacingOrder} className="w-full flex justify-center font-medium text-white bg-blue py-3 px-6 rounded-md ease-out duration-200 hover:bg-blue-dark mt-7.5 disabled:opacity-70">
+                    {isPlacingOrder ? "Placing Order..." : "Place Order"}
+                  </button>) : (<Link href="/cart" className="w-full flex justify-center font-medium text-white bg-dark py-3 px-6 rounded-md ease-out duration-200 hover:bg-opacity-95 mt-7.5">
+                    Go to Cart
+                  </Link>)}
+                {checkoutError && <p className="mt-4 text-red">{checkoutError}</p>}
+                {checkoutMessage && <p className="mt-4 text-blue">{checkoutMessage}</p>}
               </div>
             </div>
           

@@ -1,4 +1,13 @@
 import React from "react";
+const getStatusStyle = (status) => {
+    if (status === "delivered") {
+        return "text-green bg-green-light-6";
+    }
+    if (status === "cancelled" || status === "on-hold" || status === "failed") {
+        return "text-red bg-red-light-6";
+    }
+    return "text-yellow bg-yellow-light-4";
+};
 const OrderDetails = ({ orderItem }) => {
     return (<>
       <div className="items-center justify-between py-4.5 px-7.5 hidden md:flex ">
@@ -39,13 +48,7 @@ const OrderDetails = ({ orderItem }) => {
         </div>
 
         <div className="min-w-[128px]">
-          <p className={`inline-block text-custom-sm  py-0.5 px-2.5 rounded-[30px] capitalize ${orderItem.status === "delivered"
-            ? "text-green bg-green-light-6"
-            : orderItem.status === "on-hold"
-                ? "text-red bg-red-light-6"
-                : orderItem.status === "processing"
-                    ? "text-yellow bg-yellow-light-4"
-                    : "Unknown Status"}`}>
+          <p className={`inline-block text-custom-sm py-0.5 px-2.5 rounded-[30px] capitalize ${getStatusStyle(orderItem.status)}`}>
             {orderItem.status}
           </p>
         </div>

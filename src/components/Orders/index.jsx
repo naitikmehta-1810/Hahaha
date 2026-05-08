@@ -1,23 +1,25 @@
 import React, { useEffect, useState } from "react";
 import SingleOrder from "./SingleOrder";
-import ordersData from "./ordersData";
 const Orders = () => {
     const [orders, setOrders] = useState([]);
+    const [errorMessage, setErrorMessage] = useState("");
     useEffect(() => {
-        fetch(`/api/order`)
+        fetch("/api/orders")
             .then((res) => res.json())
             .then((data) => {
-            setOrders(data.orders);
+            var _a;
+            setOrders((_a = data.orders) !== null && _a !== void 0 ? _a : []);
         })
             .catch((err) => {
-            console.log(err.message);
+            setErrorMessage(err.message);
         });
     }, []);
     return (<>
+      {errorMessage && <p className="px-4 sm:px-7.5 xl:px-10 py-4 text-red">{errorMessage}</p>}
       <div className="w-full overflow-x-auto">
         <div className="min-w-[770px]">
           {/* <!-- order item --> */}
-          {ordersData.length > 0 && (<div className="items-center justify-between py-4.5 px-7.5 hidden md:flex ">
+          {orders.length > 0 && (<div className="items-center justify-between py-4.5 px-7.5 hidden md:flex ">
               <div className="min-w-[111px]">
                 <p className="text-custom-sm text-dark">Order</p>
               </div>
@@ -41,13 +43,13 @@ const Orders = () => {
                 <p className="text-custom-sm text-dark">Action</p>
               </div>
             </div>)}
-          {ordersData.length > 0 ? (ordersData.map((orderItem, key) => (<SingleOrder key={key} orderItem={orderItem} smallView={false}/>))) : (<p className="py-9.5 px-4 sm:px-7.5 xl:px-10">
+          {orders.length > 0 ? (orders.map((orderItem, key) => (<SingleOrder key={key} orderItem={orderItem} smallView={false}/>))) : (<p className="py-9.5 px-4 sm:px-7.5 xl:px-10">
               You don&apos;t have any orders!
             </p>)}
         </div>
 
-        {ordersData.length > 0 &&
-            ordersData.map((orderItem, key) => (<SingleOrder key={key} orderItem={orderItem} smallView={true}/>))}
+        {orders.length > 0 &&
+            orders.map((orderItem, key) => (<SingleOrder key={key} orderItem={orderItem} smallView={true}/>))}
       </div>
     </>);
 };
