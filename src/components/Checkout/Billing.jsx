@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-const Billing = ({ currentUser }) => {
+const Billing = ({ currentUser, withTopSpacing = true }) => {
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName] = useState("");
     const [email, setEmail] = useState("");
@@ -14,7 +14,7 @@ const Billing = ({ currentUser }) => {
         setLastName(rest.join(" "));
         setEmail((_b = currentUser.email) !== null && _b !== void 0 ? _b : "");
     }, [currentUser]);
-    return (<div className="mt-9">
+    return (<div className={withTopSpacing ? "mt-9" : ""}>
       <h2 className="font-medium text-dark text-xl sm:text-2xl mb-5.5">
         Billing details
       </h2>
