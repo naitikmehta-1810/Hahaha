@@ -65,11 +65,13 @@ const Checkout = () => {
         const addressLine1 = getInputValue("address");
         const addressLine2 = getInputValue("addressTwo");
         const city = getInputValue("town");
+        const state = getInputValue("state");
+        const postalCode = getInputValue("postalCode");
         const country = getInputValue("country");
         const phone = getInputValue("phone");
         const notes = getInputValue("notes");
         const fullName = `${firstName} ${lastName}`.trim();
-        if (!fullName || !email || !addressLine1 || !city || !phone) {
+        if (!fullName || !email || !addressLine1 || !city || !state || !postalCode || !phone) {
             setCheckoutError("Please complete billing details before placing your order.");
             return;
         }
@@ -90,6 +92,8 @@ const Checkout = () => {
                         addressLine1,
                         addressLine2,
                         city,
+                        state,
+                        postalCode,
                         country,
                     },
                     billingAddress: {
@@ -99,6 +103,8 @@ const Checkout = () => {
                         addressLine1,
                         addressLine2,
                         city,
+                        state,
+                        postalCode,
                         country,
                     },
                 }),

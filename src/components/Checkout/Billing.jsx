@@ -39,14 +39,6 @@ const Billing = ({ currentUser, withTopSpacing = true }) => {
         </div>
 
         <div className="mb-5">
-          <label htmlFor="companyName" className="block mb-2.5">
-            Company Name
-          </label>
-
-          <input type="text" name="companyName" id="companyName" className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-2.5 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
-        </div>
-
-        <div className="mb-5">
           <label htmlFor="countryName" className="block mb-2.5">
             Country/ Region
             <span className="text-red">*</span>
@@ -84,6 +76,24 @@ const Billing = ({ currentUser, withTopSpacing = true }) => {
           </label>
 
           <input type="text" name="town" id="town" className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-2.5 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-5 sm:gap-8 mb-5">
+          <div className="w-full">
+            <label htmlFor="state" className="block mb-2.5">
+              State <span className="text-red">*</span>
+            </label>
+
+            <input type="text" name="state" id="state" className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-2.5 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
+          </div>
+
+          <div className="w-full">
+            <label htmlFor="postalCode" className="block mb-2.5">
+              Postal Code <span className="text-red">*</span>
+            </label>
+
+            <input type="text" name="postalCode" id="postalCode" className="rounded-md border border-gray-3 bg-gray-1 placeholder:text-dark-5 w-full py-2.5 px-5 outline-none duration-200 focus:border-transparent focus:shadow-input focus:ring-2 focus:ring-blue/20"/>
+          </div>
         </div>
 
         <div className="mb-5">
