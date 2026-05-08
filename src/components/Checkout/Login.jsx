@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-const Login = ({ currentUser, onSignedIn }) => {
+const Login = ({ currentUser, onSignedIn, isAuthResolved }) => {
     const [dropdown, setDropdown] = useState(false);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -44,7 +44,7 @@ const Login = ({ currentUser, onSignedIn }) => {
             setIsSubmitting(false);
         }
     };
-    if (currentUser) {
+    if (!isAuthResolved || currentUser) {
         return null;
     }
     return (<div className="bg-white shadow-1 rounded-[10px]">

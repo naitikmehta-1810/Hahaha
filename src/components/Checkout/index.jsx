@@ -9,6 +9,7 @@ import Coupon from "./Coupon";
 import Billing from "./Billing";
 const Checkout = () => {
     const [currentUser, setCurrentUser] = useState(null);
+    const [isAuthResolved, setIsAuthResolved] = useState(false);
     useEffect(() => {
         const loadCurrentUser = async () => {
             try {
@@ -22,6 +23,9 @@ const Checkout = () => {
             catch (_a) {
                 setCurrentUser(null);
             }
+            finally {
+                setIsAuthResolved(true);
+            }
         };
         void loadCurrentUser();
     }, []);
@@ -33,10 +37,10 @@ const Checkout = () => {
               {/* <!-- checkout left --> */}
               <div className="lg:max-w-[670px] w-full">
                 {/* <!-- login box --> */}
-                <Login currentUser={currentUser} onSignedIn={setCurrentUser}/>
+                <Login currentUser={currentUser} onSignedIn={setCurrentUser} isAuthResolved={isAuthResolved}/>
 
                 {/* <!-- billing details --> */}
-                <Billing currentUser={currentUser} withTopSpacing={!currentUser}/>
+                <Billing currentUser={currentUser} withTopSpacing={isAuthResolved && !currentUser}/>
 
                 {/* <!-- address box two --> */}
                 <Shipping />
