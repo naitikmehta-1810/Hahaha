@@ -102,10 +102,10 @@ const Home = () => {
   };
 
   return (
-    <main className="overflow-hidden bg-[#f5f3fb] pb-16 pt-28 sm:pt-32">
-      <section className="mx-auto w-full max-w-[1320px] px-4 sm:px-6">
-        <div className="rounded-2xl border border-[#e6e1f3] bg-white p-4 shadow-[0_18px_55px_rgba(50,44,80,0.08)] sm:p-5 lg:p-6">
-          <div className="flex flex-wrap items-center gap-3 border-b border-[#eee8f8] pb-4">
+    <main className="overflow-hidden bg-[#f5f3fb] pb-20 pt-32 sm:pt-36 lg:pt-34">
+      <section className="mx-auto w-full max-w-[1470px] px-4 sm:px-7 lg:px-8">
+        <div className="rounded-2xl border border-[#e6e1f3] bg-white p-5 shadow-[0_18px_55px_rgba(50,44,80,0.08)] sm:p-6 lg:p-7">
+          <div className="flex flex-wrap items-center gap-3 border-b border-[#eee8f8] pb-5">
             <button className="inline-flex items-center gap-3 rounded-lg border border-[#ece4fa] bg-[#faf7ff] px-4 py-3 text-sm font-semibold text-dark">
               Categories
               <span className="text-[#651fff]">›</span>
@@ -123,8 +123,8 @@ const Home = () => {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-[250px,1fr]">
-            <aside className="rounded-xl border border-[#ece5f9] bg-[#fcfbff] p-4">
+          <div className="mt-5 grid gap-5 lg:grid-cols-[280px,1fr]">
+            <aside className="rounded-xl border border-[#ece5f9] bg-[#fcfbff] p-5">
               <ul className="space-y-2">
                 {sidebarCategories.map((category) => (
                   <li key={category}>
@@ -140,8 +140,8 @@ const Home = () => {
               </Link>
             </aside>
 
-            <div className="space-y-4">
-              <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#351497] to-[#9a46f4] px-6 py-8 text-white sm:px-8 sm:py-10">
+            <div className="space-y-5">
+              <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#351497] to-[#9a46f4] px-7 py-10 text-white sm:px-10 sm:py-12">
                 <div className="max-w-[420px]">
                   <h1 className="text-3xl font-semibold leading-tight sm:text-5xl">Discover Unique Handmade Treasures</h1>
                   <p className="mt-4 text-base text-white/90 sm:text-xl">Find things you&apos;ll love. Support real makers.</p>
@@ -159,7 +159,7 @@ const Home = () => {
                 </div>
               </div>
 
-              <div className="grid gap-3 rounded-xl border border-[#ece5f9] bg-[#faf8ff] px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 rounded-xl border border-[#ece5f9] bg-[#faf8ff] px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
                 {featureData.map((feature) => (
                   <div key={feature.title} className="flex items-center gap-3 border-[#e7dff8] lg:border-r last:lg:border-r-0 lg:pr-3">
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f0e8ff] text-[#651fff]">◷</span>
@@ -173,8 +173,8 @@ const Home = () => {
             </div>
           </div>
 
-          <section className="mt-8">
-            <div className="mb-4 flex items-center justify-between gap-3">
+          <section className="mt-10">
+            <div className="mb-5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-4">
                 <h2 className="text-3xl font-semibold text-dark">Popular Right Now</h2>
                 <div className="hidden items-center gap-2 md:flex">
@@ -188,21 +188,21 @@ const Home = () => {
                 View all
               </Link>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {popularProducts.map((item) => (
                 <ProductCard key={item.id} item={item} onOpen={openProduct(item)} />
               ))}
             </div>
           </section>
 
-          <section className="mt-8">
-            <div className="mb-4 flex items-center justify-between">
+          <section className="mt-10">
+            <div className="mb-5 flex items-center justify-between">
               <h2 className="text-3xl font-semibold text-dark">Shop by Category</h2>
               <Link href="/shop-with-sidebar" className="text-sm font-semibold text-[#4f5772] hover:text-[#651fff]">
                 View all
               </Link>
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
               {categoryTiles.map((category) => (
                 <button
                   key={category.title}
@@ -215,8 +215,8 @@ const Home = () => {
             </div>
           </section>
 
-          <section className="mt-8">
-            <div className="mb-4 flex items-center justify-between gap-3">
+          <section className="mt-10">
+            <div className="mb-5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-4">
                 <h2 className="text-3xl font-semibold text-dark">Recommended for You</h2>
                 <div className="hidden items-center gap-2 md:flex">
@@ -229,7 +229,7 @@ const Home = () => {
                 View all
               </Link>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {recommendedProducts.map((item) => (
                 <ProductCard key={`recommended-${item.id}`} item={item} onOpen={openProduct(item)} />
               ))}
