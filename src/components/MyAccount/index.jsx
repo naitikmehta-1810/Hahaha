@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Breadcrumb from "../Common/Breadcrumb";
 import Orders from "../Orders";
 import { useAppSelector } from "@/redux/store";
 
@@ -381,6 +382,7 @@ const MyAccount = () => {
 
   return (
     <>
+      <Breadcrumb title={"My Account"} pages={["my account"]}/>
       <section className="overflow-hidden bg-gray-2 py-24 lg:py-28">
         <div className="max-w-[1470px] w-full mx-auto px-4 md:px-6 xl:px-8">
           <div className="grid gap-7 xl:grid-cols-[280px,1fr]">
@@ -454,6 +456,13 @@ const MyAccount = () => {
 
               {activeTab === "dashboard" && (
                 <div className="space-y-6">
+                  <div>
+                    <h1 className="text-3xl font-bold text-dark">My Account</h1>
+                    <p className="mt-2 text-lg text-[#344064]">
+                      {isLoading ? "Loading account..." : `Welcome back, ${firstName || "there"}!`}
+                    </p>
+                  </div>
+
                   <div className="overflow-hidden rounded-xl border border-[#ece3f8] bg-white">
                     <div className="h-2 w-full bg-gradient-to-r from-[#6f2cff] via-[#914cff] to-[#c35fff]" />
                     <div className="p-6 sm:p-8 lg:p-9">
