@@ -456,15 +456,7 @@ const MyAccount = () => {
 
               {activeTab === "dashboard" && (
                 <div className="space-y-6">
-                  <div>
-                    <h1 className="text-3xl font-bold text-dark">My Account</h1>
-                    <p className="mt-2 text-lg text-[#344064]">
-                      {isLoading ? "Loading account..." : `Welcome back, ${firstName || "there"}!`}
-                    </p>
-                  </div>
-
                   <div className="overflow-hidden rounded-xl border border-[#ece3f8] bg-white">
-                    <div className="h-2 w-full bg-gradient-to-r from-[#6f2cff] via-[#914cff] to-[#c35fff]" />
                     <div className="p-6 sm:p-8 lg:p-9">
                       <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-center gap-4">
