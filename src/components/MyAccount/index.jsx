@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Orders from "../Orders";
 import { useAppSelector } from "@/redux/store";
 
@@ -25,6 +26,7 @@ const getStatusStyle = (status) => {
 };
 
 const MyAccount = () => {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -37,15 +39,18 @@ const MyAccount = () => {
   const [passwordMessage, setPasswordMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isSeller, setIsSeller] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [recentOrders, setRecentOrders] = useState([]);
   const wishlistItems = useAppSelector((state) => state.wishlistReducer.items);
 
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const [profileResponse, ordersResponse] = await Promise.all([
+        const [profileResponse, ordersResponse, meResponse] = await Promise.all([
           fetch("/api/account/profile"),
           fetch("/api/orders"),
+          fetch("/api/me"),
         ]);
         const profileData = await profileResponse.json();
         if (!profileResponse.ok) {
@@ -61,6 +66,11 @@ const MyAccount = () => {
         if (ordersResponse.ok) {
           const ordersData = await ordersResponse.json();
           setRecentOrders(Array.isArray(ordersData.orders) ? ordersData.orders : []);
+        }
+
+        if (meResponse.ok) {
+          const meData = await meResponse.json();
+          setIsSeller(Boolean(meData?.user?.isSeller));
         }
       } catch {
         setErrorMessage("Failed to load account details.");
@@ -118,6 +128,18 @@ const MyAccount = () => {
       setConfirmNewPassword("");
     } catch {
       setErrorMessage("Failed to update password.");
+    }
+  };
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await fetch("/api/logout", { method: "POST" });
+      router.push("/signin");
+      router.refresh();
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
@@ -254,6 +276,38 @@ const MyAccount = () => {
       ),
     },
     {
+      label: "Downloads",
+      value: "downloads",
+      type: "tab",
+      icon: (
+        <SidebarIcon className="h-5 w-5">
+          <path
+            d="M12 4v10m0 0l-4-4m4 4l4-4M5 18h14"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </SidebarIcon>
+      ),
+    },
+    {
+      label: "Addresses",
+      value: "addresses",
+      type: "tab",
+      icon: (
+        <SidebarIcon className="h-5 w-5">
+          <path
+            d="M12 21s6-6.3 6-11a6 6 0 10-12 0c0 4.7 6 11 6 11z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            fill="none"
+          />
+          <circle cx="12" cy="10" r="2" fill="currentColor" />
+        </SidebarIcon>
+      ),
+    },
+    {
       label: "Wishlist",
       href: "/wishlist",
       type: "link",
@@ -271,7 +325,7 @@ const MyAccount = () => {
       ),
     },
     {
-      label: "Profile Details",
+      label: "Account Details",
       value: "account-details",
       type: "tab",
       icon: (
@@ -286,7 +340,10 @@ const MyAccount = () => {
         </SidebarIcon>
       ),
     },
-    {
+  ];
+
+  if (isSeller) {
+    sidebarItems.push({
       label: "Seller Dashboard",
       href: "/seller",
       type: "link",
@@ -301,8 +358,26 @@ const MyAccount = () => {
           />
         </SidebarIcon>
       ),
-    },
-  ];
+    });
+  }
+
+  sidebarItems.push({
+    label: isLoggingOut ? "Logging out..." : "Logout",
+    type: "action",
+    onClick: handleLogout,
+    disabled: isLoggingOut,
+    icon: (
+      <SidebarIcon className="h-5 w-5">
+        <path
+          d="M10 16l-4-4m0 0l4-4m-4 4h9M14 5h2a2 2 0 012 2v10a2 2 0 01-2 2h-2"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </SidebarIcon>
+    ),
+  });
 
   return (
     <>
@@ -325,6 +400,20 @@ const MyAccount = () => {
                         </Link>
                       );
                     }
+                    if (item.type === "action") {
+                      return (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={item.onClick}
+                          disabled={item.disabled}
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-custom-sm text-dark-4 transition hover:bg-[#f8f2ff] hover:text-[#651fff] disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          {item.icon}
+                          {item.label}
+                        </button>
+                      );
+                    }
                     const isActive = activeTab === item.value;
                     return (
                       <button
@@ -344,18 +433,20 @@ const MyAccount = () => {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-[#ece3f8] bg-white p-5">
-                <h3 className="text-xl font-semibold text-[#4a1fb8]">Sell on Stuffsy</h3>
-                <p className="mt-2 text-custom-sm text-dark-4">
-                  Start your online store and grow your business with us.
-                </p>
-                <Link
-                  href="/seller/create-shop"
-                  className="mt-5 inline-flex rounded-md bg-[#651fff] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#4d0fff]"
-                >
-                  Start Selling
-                </Link>
-              </div>
+              {!isSeller && (
+                <div className="rounded-xl border border-[#ece3f8] bg-white p-5">
+                  <h3 className="text-xl font-semibold text-[#4a1fb8]">Sell on Stuffsy</h3>
+                  <p className="mt-2 text-custom-sm text-dark-4">
+                    Start your online store and grow your business with us.
+                  </p>
+                  <Link
+                    href="/seller/create-shop"
+                    className="mt-5 inline-flex rounded-md bg-[#651fff] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#4d0fff]"
+                  >
+                    Start Selling
+                  </Link>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -363,35 +454,38 @@ const MyAccount = () => {
 
               {activeTab === "dashboard" && (
                 <div className="space-y-6">
-                  <div className="rounded-xl border border-[#ece3f8] bg-white p-5 sm:p-7">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                      <div className="flex items-center gap-4">
-                        <Image
-                          src="/images/users/user-01.jpg"
-                          alt="User"
-                          width={84}
-                          height={84}
-                          className="h-[84px] w-[84px] rounded-full object-cover"
-                        />
-                        <div>
-                          <div className="flex flex-wrap items-center gap-3">
-                            <p className="text-2xl font-semibold text-dark">{fullName || "My Account"}</p>
-                            <span className="rounded-[20px] bg-[#f3edff] px-3 py-1 text-custom-xs font-medium text-[#651fff]">
-                              Verified
-                            </span>
-                          </div>
-                          <div className="mt-2 flex flex-wrap items-center gap-5 text-custom-sm text-dark-4">
-                            <span>{email || "Signed-in user"}</span>
-                            <span>+91 98156 43210</span>
+                  <div className="overflow-hidden rounded-xl border border-[#ece3f8] bg-white">
+                    <div className="h-2 w-full bg-gradient-to-r from-[#6f2cff] via-[#914cff] to-[#c35fff]" />
+                    <div className="p-6 sm:p-8 lg:p-9">
+                      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-center gap-4">
+                          <Image
+                            src="/images/users/user-01.jpg"
+                            alt="User"
+                            width={84}
+                            height={84}
+                            className="h-[84px] w-[84px] rounded-full object-cover"
+                          />
+                          <div>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <p className="text-2xl font-semibold text-dark">{fullName || "My Account"}</p>
+                              <span className="rounded-[20px] bg-[#f3edff] px-3 py-1 text-custom-xs font-medium text-[#651fff]">
+                                Verified
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-5 text-custom-sm text-dark-4">
+                              <span>{email || "Signed-in user"}</span>
+                              <span>+91 98156 43210</span>
+                            </div>
                           </div>
                         </div>
+                        <button
+                          onClick={() => setActiveTab("account-details")}
+                          className="inline-flex rounded-lg border border-[#dccdf8] px-5 py-2.5 text-custom-sm font-medium text-[#651fff] hover:border-[#651fff]"
+                        >
+                          Edit Profile
+                        </button>
                       </div>
-                      <button
-                        onClick={() => setActiveTab("account-details")}
-                        className="inline-flex rounded-lg border border-[#dccdf8] px-5 py-2.5 text-custom-sm font-medium text-[#651fff] hover:border-[#651fff]"
-                      >
-                        Edit Profile
-                      </button>
                     </div>
                   </div>
 
@@ -504,6 +598,32 @@ const MyAccount = () => {
               {activeTab === "orders" && (<div className="bg-white rounded-xl border border-[#ece3f8] shadow-1">
                   <Orders />
                 </div>)}
+
+              {activeTab === "downloads" && (
+                <div className="rounded-xl border border-[#ece3f8] bg-white p-6 sm:p-8">
+                  <h3 className="text-xl font-semibold text-dark">Downloads</h3>
+                  <p className="mt-3 text-custom-sm text-dark-4">
+                    No downloadable products are available yet.
+                  </p>
+                </div>
+              )}
+
+              {activeTab === "addresses" && (
+                <div className="rounded-xl border border-[#ece3f8] bg-white p-6 sm:p-8">
+                  <h3 className="text-xl font-semibold text-dark">Addresses</h3>
+                  <p className="mt-3 text-custom-sm text-dark-4">
+                    You can manage your primary address from your account details.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("account-details")}
+                    className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#651fff] hover:text-[#4d0fff]"
+                  >
+                    Manage address
+                    <span aria-hidden="true">&rarr;</span>
+                  </button>
+                </div>
+              )}
 
               {activeTab === "account-details" && (<div className="flex flex-col gap-6">
                   <form onSubmit={handleProfileSubmit} className="bg-white rounded-xl border border-[#ece3f8] shadow-1 p-6 sm:p-8">
