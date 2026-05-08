@@ -164,6 +164,8 @@ const MyAccount = () => {
       title: "Reviews Given",
       value: recentOrders.filter((order) => order.status === "delivered").length,
       linkLabel: "View reviews",
+      linkStyle: "text",
+      alignActionRight: true,
       href: "/shop-with-sidebar",
       iconBg: "bg-[#fff7e8]",
       iconColor: "text-[#f59e0b]",
@@ -183,6 +185,8 @@ const MyAccount = () => {
       title: "Saved Addresses",
       value: 1,
       linkLabel: "Manage address",
+      linkStyle: "text",
+      alignActionRight: true,
       onClick: () => setActiveTab("account-details"),
       iconBg: "bg-[#f2ecff]",
       iconColor: "text-[#7c3aed]",
@@ -409,7 +413,7 @@ const MyAccount = () => {
                             href={card.href}
                             className={`mt-4 inline-flex items-center text-sm font-semibold text-[#651fff] transition hover:text-[#4d0fff] ${
                               card.linkStyle === "text"
-                                ? "gap-2"
+                                ? `gap-2 ${card.alignActionRight ? "ml-auto" : ""}`
                                 : "justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 hover:border-[#651fff] hover:bg-[#f3ecff]"
                             }`}
                           >
@@ -421,7 +425,7 @@ const MyAccount = () => {
                             onClick={card.onClick}
                             className={`mt-4 inline-flex items-center text-sm font-semibold text-[#651fff] transition hover:text-[#4d0fff] ${
                               card.linkStyle === "text"
-                                ? "gap-2"
+                                ? `gap-2 ${card.alignActionRight ? "ml-auto" : ""}`
                                 : "justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 hover:border-[#651fff] hover:bg-[#f3ecff]"
                             }`}
                           >
