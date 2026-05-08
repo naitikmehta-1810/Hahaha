@@ -37,6 +37,9 @@ export const cart = createSlice({
         removeAllItemsFromCart: (state) => {
             state.items = [];
         },
+        hydrateCartItems: (state, action) => {
+            state.items = Array.isArray(action.payload) ? action.payload : [];
+        },
     },
 });
 export const selectCartItems = (state) => state.cartReducer.items;
@@ -45,5 +48,5 @@ export const selectTotalPrice = createSelector([selectCartItems], (items) => {
         return total + item.discountedPrice * item.quantity;
     }, 0);
 });
-export const { addItemToCart, removeItemFromCart, updateCartItemQuantity, removeAllItemsFromCart, } = cart.actions;
+export const { addItemToCart, removeItemFromCart, updateCartItemQuantity, removeAllItemsFromCart, hydrateCartItems, } = cart.actions;
 export default cart.reducer;

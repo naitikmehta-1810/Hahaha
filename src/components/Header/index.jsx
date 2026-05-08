@@ -28,7 +28,7 @@ const Header = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [navigationOpen, setNavigationOpen] = useState(false);
     const [stickyMenu, setStickyMenu] = useState(false);
-    const [signedInUserName, setSignedInUserName] = useState(() => getCachedUserDisplayName());
+    const [signedInUserName, setSignedInUserName] = useState("");
     const [isSeller, setIsSeller] = useState(false);
     const [accountMenuOpen, setAccountMenuOpen] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -122,6 +122,7 @@ const Header = () => {
         };
     }, []);
     useEffect(() => {
+        setSignedInUserName(getCachedUserDisplayName());
         void loadCurrentUser();
     }, []);
     useEffect(() => {

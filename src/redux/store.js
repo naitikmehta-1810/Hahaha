@@ -4,34 +4,13 @@ import cartReducer from "./features/cart-slice";
 import wishlistReducer from "./features/wishlist-slice";
 import productDetailsReducer from "./features/product-details";
 import { useSelector } from "react-redux";
-const CART_STORAGE_KEY = "stuffsy-cart-items";
-const loadCartItems = () => {
-    if (typeof window === "undefined") {
-        return [];
-    }
-    try {
-        const raw = window.localStorage.getItem(CART_STORAGE_KEY);
-        if (!raw) {
-            return [];
-        }
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
-    }
-    catch (_a) {
-        return [];
-    }
-};
+export const CART_STORAGE_KEY = "stuffsy-cart-items";
 export const store = configureStore({
     reducer: {
         quickViewReducer,
         cartReducer,
         wishlistReducer,
         productDetailsReducer,
-    },
-    preloadedState: {
-        cartReducer: {
-            items: loadCartItems(),
-        },
     },
 });
 if (typeof window !== "undefined") {
