@@ -538,116 +538,114 @@ const CreateShop = () => {
 
             <form id="create-shop-form" onSubmit={handleSubmit}>
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-                <div className="space-y-4">
-                  <div className="grid gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
-                    <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
-                      <div className="space-y-1">
-                        {setupSections.map((item, index) => (
-                          <button
-                            key={item}
-                            type="button"
-                            className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${
-                              index === 0
-                                ? "bg-[#efe9ff] text-[#5f2de0]"
-                                : "text-[#55608e] hover:bg-[#f4efff] hover:text-[#6f30ff]"
-                            }`}
-                          >
-                            {item}
-                          </button>
-                        ))}
-                      </div>
+                <div className="grid gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
+                  <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5 lg:row-span-3">
+                    <div className="space-y-1">
+                      {setupSections.map((item, index) => (
+                        <button
+                          key={item}
+                          type="button"
+                          className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${
+                            index === 0
+                              ? "bg-[#efe9ff] text-[#5f2de0]"
+                              : "text-[#55608e] hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                          }`}
+                        >
+                          {item}
+                        </button>
+                      ))}
                     </div>
+                  </div>
 
-                    <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
-                      <div className="space-y-4">
-                        <div>
-                          <h2 className="text-2xl font-semibold leading-tight text-[#141c43]">Shop Information</h2>
-                          <p className="mt-1 text-sm text-[#67709a]">Basic information about your shop.</p>
+                  <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
+                    <div className="space-y-4">
+                      <div>
+                        <h2 className="text-2xl font-semibold leading-tight text-[#141c43]">Shop Information</h2>
+                        <p className="mt-1 text-sm text-[#67709a]">Basic information about your shop.</p>
+                      </div>
+
+                      <div>
+                        <label htmlFor="shop-name" className="mb-2 block text-sm font-medium text-[#28315f]">
+                          Shop Name <span className="text-[#ec4a59]">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            id="shop-name"
+                            type="text"
+                            required
+                            maxLength={50}
+                            value={form.storeName}
+                            onChange={(event) => updateField("storeName", event.target.value)}
+                            className={`${baseInputClass} pr-14`}
+                          />
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#8b93b3]">
+                            {form.storeName.length}/50
+                          </span>
                         </div>
+                      </div>
 
-                        <div>
-                          <label htmlFor="shop-name" className="mb-2 block text-sm font-medium text-[#28315f]">
-                            Shop Name <span className="text-[#ec4a59]">*</span>
-                          </label>
-                          <div className="relative">
-                            <input
-                              id="shop-name"
-                              type="text"
-                              required
-                              maxLength={50}
-                              value={form.storeName}
-                              onChange={(event) => updateField("storeName", event.target.value)}
-                              className={`${baseInputClass} pr-14`}
-                            />
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#8b93b3]">
-                              {form.storeName.length}/50
-                            </span>
+                      <div>
+                        <label htmlFor="shop-tagline" className="mb-2 block text-sm font-medium text-[#28315f]">
+                          Shop Tagline <span className="text-[#ec4a59]">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            id="shop-tagline"
+                            type="text"
+                            required
+                            maxLength={80}
+                            value={form.tagline}
+                            onChange={(event) => updateField("tagline", event.target.value)}
+                            className={`${baseInputClass} pr-14`}
+                          />
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#8b93b3]">
+                            {form.tagline.length}/80
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="shop-description" className="mb-2 block text-sm font-medium text-[#28315f]">
+                          Shop Description <span className="text-[#ec4a59]">*</span>
+                        </label>
+                        <div className="rounded-lg border border-[#e3e6f2]">
+                          <div className="flex items-center gap-1 border-b border-[#e9ebf5] px-2 py-1.5 text-sm">
+                            <button type="button" className={toolbarButtonClass}>
+                              Normal
+                            </button>
+                            <button type="button" className={toolbarButtonClass}>
+                              B
+                            </button>
+                            <button type="button" className={toolbarButtonClass}>
+                              I
+                            </button>
+                            <button type="button" className={toolbarButtonClass}>
+                              U
+                            </button>
+                            <button type="button" className={toolbarButtonClass}>
+                              -
+                            </button>
                           </div>
-                        </div>
-
-                        <div>
-                          <label htmlFor="shop-tagline" className="mb-2 block text-sm font-medium text-[#28315f]">
-                            Shop Tagline <span className="text-[#ec4a59]">*</span>
-                          </label>
                           <div className="relative">
-                            <input
-                              id="shop-tagline"
-                              type="text"
+                            <textarea
+                              id="shop-description"
+                              rows={4}
                               required
-                              maxLength={80}
-                              value={form.tagline}
-                              onChange={(event) => updateField("tagline", event.target.value)}
-                              className={`${baseInputClass} pr-14`}
+                              maxLength={500}
+                              value={form.description}
+                              onChange={(event) => updateField("description", event.target.value)}
+                              className="w-full resize-none rounded-b-lg bg-white px-4 py-3 text-[15px] text-[#1f2852] outline-none"
                             />
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#8b93b3]">
-                              {form.tagline.length}/80
+                            <span className="pointer-events-none absolute bottom-3 right-3 text-xs text-[#8b93b3]">
+                              {form.description.length}/500
                             </span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label htmlFor="shop-description" className="mb-2 block text-sm font-medium text-[#28315f]">
-                            Shop Description <span className="text-[#ec4a59]">*</span>
-                          </label>
-                          <div className="rounded-lg border border-[#e3e6f2]">
-                            <div className="flex items-center gap-1 border-b border-[#e9ebf5] px-2 py-1.5 text-sm">
-                              <button type="button" className={toolbarButtonClass}>
-                                Normal
-                              </button>
-                              <button type="button" className={toolbarButtonClass}>
-                                B
-                              </button>
-                              <button type="button" className={toolbarButtonClass}>
-                                I
-                              </button>
-                              <button type="button" className={toolbarButtonClass}>
-                                U
-                              </button>
-                              <button type="button" className={toolbarButtonClass}>
-                                -
-                              </button>
-                            </div>
-                            <div className="relative">
-                              <textarea
-                                id="shop-description"
-                                rows={4}
-                                required
-                                maxLength={500}
-                                value={form.description}
-                                onChange={(event) => updateField("description", event.target.value)}
-                                className="w-full resize-none rounded-b-lg bg-white px-4 py-3 text-[15px] text-[#1f2852] outline-none"
-                              />
-                              <span className="pointer-events-none absolute bottom-3 right-3 text-xs text-[#8b93b3]">
-                                {form.description.length}/500
-                              </span>
-                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
+                  <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5 lg:col-start-2">
                     <h3 className="text-2xl font-semibold leading-tight text-[#141c43]">Shop Contact Information</h3>
                     <p className="mt-1 text-sm text-[#67709a]">This information will be visible to your customers.</p>
 
@@ -696,7 +694,7 @@ const CreateShop = () => {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
+                  <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5 lg:col-start-2">
                     <h3 className="text-2xl font-semibold leading-tight text-[#141c43]">Social Links</h3>
                     <p className="mt-1 text-sm text-[#67709a]">Add social media links to connect with your customers.</p>
 
