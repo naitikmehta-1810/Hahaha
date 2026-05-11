@@ -6,22 +6,28 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 const baseInputClass =
-  "h-11 w-full rounded-lg border border-[#e3e6f2] bg-white px-4 text-[15px] text-[#1f2852] outline-none transition placeholder:text-[#8b93b3] focus:border-[#7a33ff] focus:ring-4 focus:ring-[#7a33ff]/10";
+  "h-11 w-full rounded-lg border border-[#e3e6f2] bg-white px-4 text-sm text-[#1f2852] outline-none transition placeholder:text-[#8b93b3] focus:border-[#7a33ff] focus:ring-4 focus:ring-[#7a33ff]/10";
 
 const toolbarButtonClass =
   "inline-flex h-8 min-w-8 items-center justify-center rounded-md text-[#4a547d] transition hover:bg-[#f3eeff] hover:text-[#6f30ff]";
 
 const sidebarMainNav = [
-  { label: "Dashboard", icon: "⌂" },
-  { label: "Orders", icon: "◫", badge: "12" },
-  { label: "Products", icon: "◈" },
-  { label: "Customers", icon: "◎" },
-  { label: "Analytics", icon: "◫" },
-  { label: "Marketing", icon: "⌁" },
-  { label: "Payouts", icon: "◉" },
+  { label: "Dashboard", href: "/seller", badge: null },
+  { label: "Orders", href: null, badge: "12" },
+  { label: "Products", href: "/seller/products", badge: null },
+  { label: "Customers", href: null, badge: null },
+  { label: "Analytics", href: "/seller/analytics", badge: null },
+  { label: "Marketing", href: null, badge: null },
+  { label: "Payouts", href: null, badge: null },
 ];
 
-const sidebarSettingsNav = ["Shop Setup", "Payment Settings", "Shipping Settings", "Policies", "Vacation Mode"];
+const sidebarSettingsNav = [
+  { label: "Shop Setup", href: "/seller/create-shop", isActive: true },
+  { label: "Payment Settings", href: null, isActive: false },
+  { label: "Shipping Settings", href: null, isActive: false },
+  { label: "Policies", href: null, isActive: false },
+  { label: "Vacation Mode", href: null, isActive: false },
+];
 
 const setupSections = [
   "Shop Information",
@@ -32,8 +38,41 @@ const setupSections = [
   "SEO & Discoverability",
 ];
 
+const topIconClass =
+  "relative inline-flex h-10 w-10 items-center justify-center rounded-full text-[#43507d] transition hover:bg-[#f3efff] hover:text-[#6f30ff]";
+
+const HeaderBellIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M15.5 17H8.5C7.67 17 7 16.33 7 15.5V11C7 8.24 9.24 6 12 6C14.76 6 17 8.24 17 11V15.5C17 16.33 16.33 17 15.5 17Z"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M10 18.5C10.35 19.1 11.04 19.5 12 19.5C12.96 19.5 13.65 19.1 14 18.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
+const HeaderChatIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M7 8.5H17M7 12H13M8.5 18H6C4.9 18 4 17.1 4 16V7C4 5.9 4.9 5 6 5H18C19.1 5 20 5.9 20 7V13C20 14.1 19.1 15 18 15H13L8.5 18Z"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const CreateShop = () => {
   const router = useRouter();
+  const [headerSearch, setHeaderSearch] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [form, setForm] = useState({
     storeName: "Macrame Magic",
     tagline: "Handmade with love, crafted for your space.",
@@ -58,8 +97,6 @@ const CreateShop = () => {
     logoUrl: "",
     bannerUrl: "",
   });
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -73,6 +110,23 @@ const CreateShop = () => {
     const values = [form.city, form.country].filter(Boolean);
     return values.length ? values.join(", ") : "Mumbai, India";
   }, [form.city, form.country]);
+
+  const handleHeaderSearchSubmit = (event) => {
+    event.preventDefault();
+    const query = headerSearch.trim();
+    if (!query) {
+      router.push("/shop-with-sidebar");
+      return;
+    }
+    router.push(`/shop-with-sidebar?search=${encodeURIComponent(query)}`);
+  };
+
+  const handleLogout = async () => {
+    setIsSigningOut(true);
+    await fetch("/api/logout", { method: "POST" });
+    router.push("/signin");
+    router.refresh();
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -130,7 +184,7 @@ const CreateShop = () => {
         <aside className="hidden w-[260px] border-r border-[#e6e9f4] bg-white xl:block">
           <div className="flex h-[72px] items-center gap-3 border-b border-[#e6e9f4] px-8">
             <Image src="/images/logo/Stuffsy_logo.png" alt="Stuffsy logo" width={34} height={34} />
-            <span className="text-[42px] font-bold leading-none text-black">Stuffsy</span>
+            <span className="text-4xl font-bold leading-none text-black">Stuffsy</span>
           </div>
 
           <div className="px-5 py-6">
@@ -138,7 +192,7 @@ const CreateShop = () => {
               <div className="flex items-center gap-3">
                 <Image src={previewLogo} alt="Seller avatar" width={52} height={52} className="h-13 w-13 rounded-full object-cover" />
                 <div>
-                  <p className="text-[30px] font-semibold leading-tight text-[#1f2856]">{previewName}</p>
+                  <p className="text-lg font-semibold leading-tight text-[#1f2856]">{previewName}</p>
                   <span className="mt-1 inline-flex rounded-full bg-[#ede6ff] px-2.5 py-1 text-xs font-medium text-[#6f30ff]">
                     Star Seller
                   </span>
@@ -150,61 +204,85 @@ const CreateShop = () => {
             </div>
 
             <nav className="mt-6 space-y-1 border-b border-[#eceef7] pb-5">
-              {sidebarMainNav.map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
-                >
-                  <span className="inline-flex items-center gap-2.5">
-                    <span className="text-base">{item.icon}</span>
-                    {item.label}
-                  </span>
-                  {item.badge && (
-                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              ))}
+              {sidebarMainNav.map((item) => {
+                const classes =
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium transition " +
+                  (item.href
+                    ? "text-[#4d5884] hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                    : "cursor-not-allowed text-[#a4abc5]");
+
+                if (!item.href) {
+                  return (
+                    <button key={item.label} type="button" className={classes} disabled>
+                      <span>{item.label}</span>
+                      {item.badge && (
+                        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+
+                return (
+                  <Link key={item.label} href={item.href} className={classes}>
+                    <span>{item.label}</span>
+                    {item.badge && (
+                      <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
             </nav>
 
             <div className="mt-5">
               <button type="button" className="mb-2 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-semibold text-[#6f30ff]">
                 Shop Settings
-                <span>⌃</span>
+                <span>-</span>
               </button>
-              {sidebarSettingsNav.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  className={`mb-1 w-full rounded-lg px-3 py-2.5 text-left text-[15px] font-medium transition ${
-                    item === "Shop Setup"
-                      ? "bg-[#efe9ff] text-[#5f2de0]"
-                      : "text-[#4e5783] hover:bg-[#f4efff] hover:text-[#6f30ff]"
-                  }`}
-                >
-                  {item}
-                </button>
-              ))}
+              {sidebarSettingsNav.map((item) => {
+                const classes = `mb-1 w-full rounded-lg px-3 py-2.5 text-left text-[15px] font-medium transition ${
+                  item.isActive
+                    ? "bg-[#efe9ff] text-[#5f2de0]"
+                    : item.href
+                      ? "text-[#4e5783] hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                      : "cursor-not-allowed text-[#a4abc5]"
+                }`;
+
+                if (!item.href) {
+                  return (
+                    <button key={item.label} type="button" disabled className={classes}>
+                      {item.label}
+                    </button>
+                  );
+                }
+
+                return (
+                  <Link key={item.label} href={item.href} className={classes}>
+                    {item.label}
+                  </Link>
+                );
+              })}
             </div>
 
             <div className="mt-5 border-t border-[#eceef7] pt-5">
-              <button
-                type="button"
+              <Link
+                href="/my-account"
                 className="inline-flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
               >
                 <span>Messages</span>
                 <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
                   5
                 </span>
-              </button>
-              <button
-                type="button"
+              </Link>
+              <Link
+                href="/support"
                 className="mt-1 inline-flex w-full items-center rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
               >
                 Support
-              </button>
+              </Link>
             </div>
 
             <Link
@@ -218,28 +296,72 @@ const CreateShop = () => {
 
         <div className="min-w-0 flex-1">
           <div className="flex h-[72px] items-center justify-between border-b border-[#e6e9f4] bg-white px-5 md:px-8">
-            <label className="relative hidden w-full max-w-[520px] md:block">
+            <form onSubmit={handleHeaderSearchSubmit} className="relative hidden w-full max-w-[520px] md:block">
               <input
                 type="search"
+                value={headerSearch}
+                onChange={(event) => setHeaderSearch(event.target.value)}
                 placeholder="Search for anything..."
                 className="h-11 w-full rounded-lg border border-[#e3e6f2] bg-[#f7f8fd] pl-4 pr-11 text-[15px] text-[#29325d] outline-none placeholder:text-[#7b84ab] focus:border-[#7a33ff] focus:ring-4 focus:ring-[#7a33ff]/10"
               />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[#4b5580]">⌕</span>
-            </label>
+              <button type="submit" aria-label="Search shop" className="absolute right-4 top-1/2 -translate-y-1/2 text-[#4b5580]">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M20 20L16.65 16.65" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            </form>
 
-            <div className="ml-auto flex items-center gap-5">
-              <button type="button" className="text-xl text-[#4a547d]">
-                ♫
-              </button>
-              <button type="button" className="text-xl text-[#4a547d]">
-                ◌
-              </button>
-              <div className="flex items-center gap-3">
-                <Image src={previewLogo} alt="User avatar" width={44} height={44} className="h-11 w-11 rounded-full object-cover" />
-                <div className="hidden sm:block">
-                  <p className="text-[28px] font-semibold leading-tight text-[#1d2550]">{previewName}</p>
-                  <p className="text-[15px] text-[#69729b]">Seller</p>
-                </div>
+            <div className="ml-auto flex items-center gap-2 sm:gap-4">
+              <Link href="/my-account" aria-label="Notifications" className={topIconClass}>
+                <HeaderBellIcon />
+                <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-[#6f30ff]" />
+              </Link>
+              <Link href="/my-account" aria-label="Messages" className={topIconClass}>
+                <HeaderChatIcon />
+              </Link>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsAccountMenuOpen((prev) => !prev)}
+                  className="flex items-center gap-3 rounded-lg px-1.5 py-1 transition hover:bg-[#f7f4ff]"
+                >
+                  <Image src={previewLogo} alt="User avatar" width={44} height={44} className="h-11 w-11 rounded-full object-cover" />
+                  <div className="hidden text-left sm:block">
+                    <p className="text-base font-semibold leading-tight text-[#1d2550]">{previewName}</p>
+                    <p className="text-sm text-[#69729b]">Seller</p>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="hidden text-[#596289] sm:block" aria-hidden="true">
+                    <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+
+                {isAccountMenuOpen && (
+                  <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-lg border border-[#e6e0f4] bg-white py-2 shadow-[0_14px_34px_rgba(48,38,88,0.14)]">
+                    <Link
+                      href="/my-account"
+                      onClick={() => setIsAccountMenuOpen(false)}
+                      className="block px-4 py-2 text-sm font-medium text-[#2a345f] transition hover:bg-[#f7f4ff] hover:text-[#6f30ff]"
+                    >
+                      My Account
+                    </Link>
+                    <Link
+                      href="/seller/create-shop"
+                      onClick={() => setIsAccountMenuOpen(false)}
+                      className="block px-4 py-2 text-sm font-medium text-[#2a345f] transition hover:bg-[#f7f4ff] hover:text-[#6f30ff]"
+                    >
+                      Shop Setup
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      disabled={isSigningOut}
+                      className="block w-full px-4 py-2 text-left text-sm font-medium text-[#2a345f] transition hover:bg-[#f7f4ff] hover:text-[#6f30ff] disabled:opacity-70"
+                    >
+                      {isSigningOut ? "Signing out..." : "Logout"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -248,7 +370,7 @@ const CreateShop = () => {
             <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-sm text-[#687199]">Home &gt; Shop Settings &gt; Shop Setup</p>
-                <h1 className="mt-2 text-[50px] font-semibold leading-tight text-[#141c43]">Shop Setup</h1>
+                <h1 className="mt-2 text-4xl font-semibold leading-tight text-[#141c43]">Shop Setup</h1>
                 <p className="mt-1 text-[15px] text-[#636c96]">
                   Set up your shop profile and preferences to start selling.
                 </p>
@@ -273,7 +395,7 @@ const CreateShop = () => {
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
                 <div className="space-y-4">
                   <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
-                    <div className="grid gap-4 lg:grid-cols-[185px_minmax(0,1fr)]">
+                    <div className="grid gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
                       <div className="rounded-lg border border-[#e6e9f4] p-2">
                         {setupSections.map((item, index) => (
                           <button
@@ -292,7 +414,7 @@ const CreateShop = () => {
 
                       <div className="space-y-4">
                         <div>
-                          <h2 className="text-[32px] font-semibold leading-tight text-[#141c43]">Shop Information</h2>
+                          <h2 className="text-2xl font-semibold leading-tight text-[#141c43]">Shop Information</h2>
                           <p className="mt-1 text-sm text-[#67709a]">Basic information about your shop.</p>
                         </div>
 
@@ -355,7 +477,7 @@ const CreateShop = () => {
                                 U
                               </button>
                               <button type="button" className={toolbarButtonClass}>
-                                •
+                                -
                               </button>
                             </div>
                             <div className="relative">
@@ -379,7 +501,7 @@ const CreateShop = () => {
                   </div>
 
                   <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
-                    <h3 className="text-[32px] font-semibold leading-tight text-[#141c43]">Shop Contact Information</h3>
+                    <h3 className="text-2xl font-semibold leading-tight text-[#141c43]">Shop Contact Information</h3>
                     <p className="mt-1 text-sm text-[#67709a]">This information will be visible to your customers.</p>
 
                     <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -428,7 +550,7 @@ const CreateShop = () => {
                   </div>
 
                   <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
-                    <h3 className="text-[32px] font-semibold leading-tight text-[#141c43]">Social Links</h3>
+                    <h3 className="text-2xl font-semibold leading-tight text-[#141c43]">Social Links</h3>
                     <p className="mt-1 text-sm text-[#67709a]">Add social media links to connect with your customers.</p>
 
                     <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -474,7 +596,7 @@ const CreateShop = () => {
 
                 <div className="space-y-4">
                   <div className="rounded-xl border border-[#e6e9f4] bg-white p-4">
-                    <h3 className="text-[30px] font-semibold leading-tight text-[#141c43]">Shop Preview</h3>
+                    <h3 className="text-2xl font-semibold leading-tight text-[#141c43]">Shop Preview</h3>
                     <p className="mt-1 text-sm text-[#67709a]">This is how your shop will appear to customers.</p>
 
                     <div className="mt-4 overflow-hidden rounded-xl border border-[#eceef7]">
@@ -494,7 +616,7 @@ const CreateShop = () => {
                         </div>
                         <div className="pt-10">
                           <div className="flex items-center gap-2">
-                            <h4 className="text-[36px] font-semibold leading-tight text-[#1a224a]">{previewName}</h4>
+                            <h4 className="text-3xl font-semibold leading-tight text-[#1a224a]">{previewName}</h4>
                             <span className="rounded-full bg-[#efe6ff] px-2.5 py-1 text-xs font-semibold text-[#6f30ff]">
                               Star Seller
                             </span>
@@ -517,7 +639,7 @@ const CreateShop = () => {
                   </div>
 
                   <div className="rounded-xl border border-[#e6e9f4] bg-white p-4">
-                    <h3 className="text-[30px] font-semibold leading-tight text-[#141c43]">Shop Logo</h3>
+                    <h3 className="text-2xl font-semibold leading-tight text-[#141c43]">Shop Logo</h3>
                     <p className="mt-1 text-sm text-[#67709a]">Upload a logo that represents your brand.</p>
 
                     <div className="mt-4 flex items-center gap-4">
@@ -541,7 +663,7 @@ const CreateShop = () => {
                   </div>
 
                   <div className="rounded-xl border border-[#e6e9f4] bg-[#f8f5ff] p-4">
-                    <h3 className="text-[24px] font-semibold leading-tight text-[#6130dd]">Tips for a great shop</h3>
+                    <h3 className="text-base font-semibold text-[#6130dd]">Tips for a great shop</h3>
                     <ul className="mt-3 space-y-2 text-sm text-[#515b87]">
                       <li>Use a clear and memorable shop name.</li>
                       <li>Upload a professional logo and banner.</li>
