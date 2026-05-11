@@ -1,8 +1,6 @@
 import { Analytics } from "@vercel/analytics/next";
 import "../css/euclid-circular-a-font.css";
 import "../css/style.css";
-import Header from "../../components/Header";
-import Footer from "../../components/Footer";
 import { ModalProvider } from "../context/QuickViewModalContext";
 import { CartModalProvider } from "../context/CartSidebarModalContext";
 import { ReduxProvider } from "@/redux/provider";
@@ -11,6 +9,7 @@ import CartSidebarModal from "@/components/Common/CartSidebarModal";
 import { PreviewSliderProvider } from "../context/PreviewSliderContext";
 import PreviewSliderModal from "@/components/Common/PreviewSlider";
 import ScrollToTop from "@/components/Common/ScrollToTop";
+import SiteShellFrame from "./SiteShellFrame";
 export default function RootLayout({ children, }) {
     return (<html lang="en" suppressHydrationWarning={true}>
       <body>
@@ -18,8 +17,7 @@ export default function RootLayout({ children, }) {
           <CartModalProvider>
             <ModalProvider>
               <PreviewSliderProvider>
-                <Header />
-                <main className="pt-[124px] md:pt-[86px]">{children}</main>
+                <SiteShellFrame>{children}</SiteShellFrame>
 
                 <QuickViewModal />
                 <CartSidebarModal />
@@ -29,7 +27,6 @@ export default function RootLayout({ children, }) {
           </CartModalProvider>
         </ReduxProvider>
         <ScrollToTop />
-        <Footer />
         <Analytics />
       </body>
     </html>);
