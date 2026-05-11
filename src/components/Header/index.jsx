@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import Heart from "@/components/Header/Heart";
 import { useRouter } from "next/navigation";
 import { useAppSelector } from "@/redux/store";
 import { useCartModalContext } from "@/app/context/CartSidebarModalContext";
@@ -172,15 +173,7 @@ const Header = () => {
               aria-label="Wishlist"
               className="hidden text-[#253050] transition hover:text-[#7418ff] sm:inline-flex"
             >
-              <HeaderIcon className="h-7 w-7">
-                <path
-                  d="M20.5 8.75C20.5 14.25 12 19 12 19S3.5 14.25 3.5 8.75C3.5 6.4 5.32 4.5 7.58 4.5C9.02 4.5 10.29 5.25 11 6.39C11.71 5.25 12.98 4.5 14.42 4.5C16.68 4.5 20.5 6.4 20.5 8.75Z"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </HeaderIcon>
+              <Heart className="h-7 w-7" />
             </Link>
 
             <button
