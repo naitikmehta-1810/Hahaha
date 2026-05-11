@@ -539,8 +539,8 @@ const CreateShop = () => {
             <form id="create-shop-form" onSubmit={handleSubmit}>
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
-                    <div className="grid gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
+                  <div className="grid gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
+                    <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
                       <div className="space-y-1">
                         {setupSections.map((item, index) => (
                           <button
@@ -556,7 +556,9 @@ const CreateShop = () => {
                           </button>
                         ))}
                       </div>
+                    </div>
 
+                    <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5">
                       <div className="space-y-4">
                         <div>
                           <h2 className="text-2xl font-semibold leading-tight text-[#141c43]">Shop Information</h2>
