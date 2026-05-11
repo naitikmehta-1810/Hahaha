@@ -6,14 +6,20 @@ import { useDispatch } from "react-redux";
 import { useProducts } from "@/hooks/useProducts";
 import { updateproductDetails } from "@/redux/features/product-details";
 import { addItemToWishlist } from "@/redux/features/wishlist-slice";
+import { ShieldCheck, Truck } from "lucide-react";
 
-const PurpleIcon = ({ children, className = "" }) => (
-  <span className={`inline-flex items-center justify-center text-[#7427ff] ${className}`}>
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      {children}
-    </svg>
-  </span>
-);
+const PurpleIcon = ({ children, className = "" }) => {
+  const isElement = React.isValidElement(children);
+  return (
+    <span className={`inline-flex items-center justify-center text-[#7427ff] ${className}`}>
+      {isElement ? React.cloneElement(children, { className: "h-5 w-5" }) : (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          {children}
+        </svg>
+      )}
+    </span>
+  );
+};
 
 const iconPaths = {
   home: (
@@ -31,10 +37,7 @@ const iconPaths = {
     </>
   ),
   bag: (
-    <>
-      <path d="M6.2 8.5h11.6l-.8 11H7l-.8-11Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M9 8.5a3 3 0 0 1 6 0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </>
+    <Truck strokeWidth={1.7} />
   ),
   star: (
     <path d="m12 4.2 2.2 4.4 4.8.7-3.5 3.4.8 4.8L12 15.2l-4.3 2.3.8-4.8L5 9.3l4.8-.7L12 4.2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
@@ -55,7 +58,7 @@ const iconPaths = {
     </>
   ),
   shield: (
-    <path d="M12 20s6-2.7 6-8V6.5L12 4 6 6.5V12c0 5.3 6 8 6 8Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    <ShieldCheck strokeWidth={1.7} />
   ),
   return: (
     <>
@@ -102,7 +105,7 @@ const categoryTiles = [
 ];
 
 const featureData = [
-  { title: "Free Shipping", description: "On orders over ₹999", icon: "bag" },
+  { title: "Free Shipping", description: "On orders over ₹999", icon: <Truck strokeWidth={1.7} /> },
   { title: "Easy Returns", description: "Within 7 days", icon: "return" },
   { title: "Secure Payments", description: "100% protected", icon: "shield" },
   { title: "24/7 Support", description: "We're here to help", icon: "support" },

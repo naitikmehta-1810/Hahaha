@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import Heart from "@/components/Header/Heart";
+import { Heart, ShoppingCart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAppSelector } from "@/redux/store";
 import { useCartModalContext } from "@/app/context/CartSidebarModalContext";
@@ -182,17 +182,7 @@ const Header = () => {
               aria-label="Open cart"
               className="relative text-[#253050] transition hover:text-[#7418ff]"
             >
-              <HeaderIcon className="h-8 w-8">
-                <path
-                  d="M6.2 6.2H21L19.2 14.7H8L6.2 3.5H3"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx="9.5" cy="19.4" r="1.35" fill="currentColor" />
-                <circle cx="17.4" cy="19.4" r="1.35" fill="currentColor" />
-              </HeaderIcon>
+              <ShoppingCart className="h-8 w-8" />
               <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#651fff] px-1 text-xs font-bold leading-none text-white">
                 {cartItems.length}
               </span>
