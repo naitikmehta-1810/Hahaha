@@ -12,13 +12,13 @@ const toolbarButtonClass =
   "inline-flex h-8 min-w-8 items-center justify-center rounded-md text-[#4a547d] transition hover:bg-[#f3eeff] hover:text-[#6f30ff]";
 
 const sidebarMainNav = [
-  { label: "Dashboard", href: "/seller", badge: null },
-  { label: "Orders", href: null, badge: "12" },
-  { label: "Products", href: "/seller/products", badge: null },
-  { label: "Customers", href: null, badge: null },
-  { label: "Analytics", href: "/seller/analytics", badge: null },
-  { label: "Marketing", href: null, badge: null },
-  { label: "Payouts", href: null, badge: null },
+  { label: "Dashboard", href: "/seller", icon: "dashboard" },
+  { label: "Orders", href: null, badge: "12", icon: "orders" },
+  { label: "Products", href: "/seller/products", icon: "products" },
+  { label: "Customers", href: null, icon: "customers" },
+  { label: "Analytics", href: "/seller/analytics", icon: "analytics" },
+  { label: "Marketing", href: null, icon: "marketing" },
+  { label: "Payouts", href: null, icon: "payouts" },
 ];
 
 const sidebarSettingsNav = [
@@ -40,6 +40,124 @@ const setupSections = [
 
 const topIconClass =
   "relative inline-flex h-10 w-10 items-center justify-center rounded-full text-[#43507d] transition hover:bg-[#f3efff] hover:text-[#6f30ff]";
+
+const SidebarIcon = ({ name }) => {
+  const commonProps = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    "aria-hidden": true,
+  };
+
+  if (name === "dashboard") {
+    return (
+      <svg {...commonProps}>
+        <path d="M4 12L12 4L20 12V19C20 19.55 19.55 20 19 20H5C4.45 20 4 19.55 4 19V12Z" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+
+  if (name === "orders") {
+    return (
+      <svg {...commonProps}>
+        <rect x="5" y="4" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8 8H16M8 12H14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (name === "products") {
+    return (
+      <svg {...commonProps}>
+        <path d="M12 3L19 7V17L12 21L5 17V7L12 3Z" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M9 12L11 14L15 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (name === "customers") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M4.5 18C5.3 15.9 7 15 9 15C11 15 12.7 15.9 13.5 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M15 8C16.7 8 18 9.3 18 11M15 15C16.2 15.2 17.4 15.9 18 17.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (name === "analytics") {
+    return (
+      <svg {...commonProps}>
+        <path d="M5 19H19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M8 17V10M12 17V6M16 17V13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (name === "marketing") {
+    return (
+      <svg {...commonProps}>
+        <path d="M4 12V17C4 17.55 4.45 18 5 18H8V12H4Z" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8 8L18 5V15L8 12V8Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (name === "payouts") {
+    return (
+      <svg {...commonProps}>
+        <rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="12" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+
+  if (name === "settings") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M12 3V5M12 19V21M3 12H5M19 12H21M5.6 5.6L7 7M17 17L18.4 18.4M18.4 5.6L17 7M7 17L5.6 18.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (name === "messages") {
+    return (
+      <svg {...commonProps}>
+        <rect x="4" y="5" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M4.5 7L12 12L19.5 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (name === "billing") {
+    return (
+      <svg {...commonProps}>
+        <rect x="4.5" y="5" width="15" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8 9.5H16M8 13.5H13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (name === "support") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M9.3 9.5C9.3 8.1 10.4 7 12 7C13.6 7 14.7 8 14.7 9.3C14.7 10.5 13.9 11 13.1 11.5C12.4 11.9 12 12.3 12 13.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="12" cy="16.5" r="1" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...commonProps}>
+      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 8V12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="12" cy="16" r="1" fill="currentColor" />
+    </svg>
+  );
+};
 
 const HeaderBellIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -200,6 +318,9 @@ const CreateShop = () => {
               </div>
               <Link href="/seller" className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#4f5883] hover:text-[#6f30ff]">
                 View Shop
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M14 5H19V10M10 14L19 5M19 14V19H5V5H10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </Link>
             </div>
 
@@ -214,7 +335,10 @@ const CreateShop = () => {
                 if (!item.href) {
                   return (
                     <button key={item.label} type="button" className={classes} disabled>
-                      <span>{item.label}</span>
+                      <span className="inline-flex items-center gap-2.5">
+                        <SidebarIcon name={item.icon} />
+                        {item.label}
+                      </span>
                       {item.badge && (
                         <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
                           {item.badge}
@@ -226,7 +350,10 @@ const CreateShop = () => {
 
                 return (
                   <Link key={item.label} href={item.href} className={classes}>
-                    <span>{item.label}</span>
+                    <span className="inline-flex items-center gap-2.5">
+                      <SidebarIcon name={item.icon} />
+                      {item.label}
+                    </span>
                     {item.badge && (
                       <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
                         {item.badge}
@@ -239,7 +366,10 @@ const CreateShop = () => {
 
             <div className="mt-5">
               <button type="button" className="mb-2 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-semibold text-[#6f30ff]">
-                Shop Settings
+                <span className="inline-flex items-center gap-2.5">
+                  <SidebarIcon name="settings" />
+                  Shop Settings
+                </span>
                 <span>-</span>
               </button>
               {sidebarSettingsNav.map((item) => {
@@ -267,20 +397,35 @@ const CreateShop = () => {
               })}
             </div>
 
+            <div className="mt-5">
+              <button
+                type="button"
+                disabled
+                className="inline-flex w-full cursor-not-allowed items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#a4abc5]"
+              >
+                <SidebarIcon name="billing" />
+                Billing
+              </button>
+            </div>
+
             <div className="mt-5 border-t border-[#eceef7] pt-5">
               <Link
                 href="/my-account"
                 className="inline-flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
               >
-                <span>Messages</span>
+                <span className="inline-flex items-center gap-2.5">
+                  <SidebarIcon name="messages" />
+                  Messages
+                </span>
                 <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
                   5
                 </span>
               </Link>
               <Link
                 href="/support"
-                className="mt-1 inline-flex w-full items-center rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                className="mt-1 inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
               >
+                <SidebarIcon name="support" />
                 Support
               </Link>
             </div>
@@ -315,7 +460,9 @@ const CreateShop = () => {
             <div className="ml-auto flex items-center gap-2 sm:gap-4">
               <Link href="/my-account" aria-label="Notifications" className={topIconClass}>
                 <HeaderBellIcon />
-                <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-[#6f30ff]" />
+                <span className="absolute right-0 top-0 inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-[#6f30ff] px-1 text-[10px] font-semibold leading-none text-white">
+                  4
+                </span>
               </Link>
               <Link href="/my-account" aria-label="Messages" className={topIconClass}>
                 <HeaderChatIcon />
