@@ -120,8 +120,8 @@ const Header = () => {
   }, []);
 
   return (
-    <header className="fixed left-0 top-0 z-9999 w-full bg-transparent px-4 pt-3 sm:px-6 xl:px-0">
-      <div className="mx-auto max-w-[1420px] rounded-t-2xl border border-[#e6dff1] bg-white shadow-[0_18px_50px_rgba(45,36,76,0.08)]">
+    <header className="fixed left-0 top-0 z-9999 w-full border-b border-[#e6dff1] bg-white shadow-[0_12px_35px_rgba(45,36,76,0.08)]">
+      <div className="w-full">
         <div className="flex min-h-[76px] items-center gap-4 px-5 sm:px-7 lg:px-10">
           <Link
             href="/"

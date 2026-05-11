@@ -154,8 +154,8 @@ const ShopWithSidebar = () => {
   const categorySelectionSet = new Set(selectedCategories);
 
   return (
-    <section className="pb-20 pt-6 lg:pt-10 xl:pt-14 bg-[#f4f5f8]">
-      <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8">
+    <section className="bg-[#f4f5f8] pb-20 pt-6 lg:pt-10 xl:pt-14">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="rounded-2xl border border-[#ece7f8] bg-white p-5 sm:p-7">
           <ul className="mb-5 flex items-center gap-2.5 text-custom-sm text-[#4d567a]">
             <li>Home</li>
