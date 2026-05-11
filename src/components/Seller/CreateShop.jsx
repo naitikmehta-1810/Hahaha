@@ -179,43 +179,6 @@ const CreateShop = () => {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <div className="flex h-18 items-center justify-between border-b border-[#e6e9f4] bg-white px-5 md:px-10">
-            <div className="hidden max-w-[540px] flex-1 md:block">
-              <div className="relative">
-                <input
-                  type="search"
-                  placeholder="Search for anything..."
-                  className="h-11 w-full rounded-lg border border-[#e4e6f2] bg-[#fafbff] px-4 pr-11 text-[15px] outline-none focus:border-[#7a32ff] focus:ring-4 focus:ring-[#7a32ff]/10"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[#6f769d]">⌕</span>
-              </div>
-            </div>
-            <div className="ml-auto flex items-center gap-4">
-              <button type="button" className="relative text-[#4c5683]">
-                <span className="text-[19px]">◌</span>
-                <span className="absolute -right-1.5 -top-1.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-[#6f30ff] px-1 text-[10px] font-bold text-white">
-                  4
-                </span>
-              </button>
-              <button type="button" className="text-[#4c5683]">
-                ⊚
-              </button>
-              <div className="flex items-center gap-3">
-                <Image
-                  src={previewLogo}
-                  alt="Seller"
-                  width={36}
-                  height={36}
-                  className="h-9 w-9 rounded-full object-cover"
-                />
-                <div className="hidden sm:block">
-                  <p className="text-[15px] font-semibold text-[#1f2856]">{previewName}</p>
-                  <p className="text-xs text-[#6f769d]">Seller</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div className="px-4 py-6 md:px-8 xl:px-10">
             <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
               <div>
