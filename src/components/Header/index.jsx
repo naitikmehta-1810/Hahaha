@@ -122,7 +122,7 @@ const Header = () => {
   return (
     <header className="fixed left-0 top-0 z-9999 w-full border-b border-[#e6dff1] bg-white shadow-[0_12px_35px_rgba(45,36,76,0.08)]">
       <div className="w-full">
-        <div className="flex min-h-[76px] items-center gap-4 px-5 sm:px-7 lg:px-10">
+        <div className="flex min-h-[76px] items-center gap-4 px-0">
           <Link
             href="/"
             className="flex shrink-0 items-center gap-3 text-[28px] font-bold tracking-tight text-black"
@@ -260,7 +260,7 @@ const Header = () => {
           </div>
         </div>
 
-        <div className="border-t border-[#eee7f8] px-5 pb-4 md:hidden sm:px-7 lg:px-10">
+        <div className="border-t border-[#eee7f8] px-0 pb-4 md:hidden">
           <form className="pt-4" onSubmit={(event) => event.preventDefault()}>
             <label htmlFor="site-search-mobile" className="relative block">
               <input

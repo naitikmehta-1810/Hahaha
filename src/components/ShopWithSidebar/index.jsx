@@ -155,8 +155,8 @@ const ShopWithSidebar = () => {
 
   return (
     <section className="bg-[#f4f5f8] pb-20 pt-6 lg:pt-10 xl:pt-14">
-      <div className="w-full px-4 sm:px-6 lg:px-8">
-        <div className="rounded-2xl border border-[#ece7f8] bg-white p-5 sm:p-7">
+      <div className="w-full px-0">
+        <div className="rounded-none border border-[#ece7f8] bg-white p-0">
           <ul className="mb-5 flex items-center gap-2.5 text-custom-sm text-[#4d567a]">
             <li>Home</li>
             <li>›</li>
