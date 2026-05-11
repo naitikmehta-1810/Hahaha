@@ -190,6 +190,7 @@ const CreateShop = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isShopSettingsOpen, setIsShopSettingsOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [form, setForm] = useState({
     storeName: "Macrame Magic",
@@ -305,35 +306,51 @@ const CreateShop = () => {
             <span className="text-4xl font-bold leading-none text-black">Stuffsy</span>
           </div>
 
-          <div className="mt-6 rounded-xl border border-[#eceef7] bg-[#fbfcff] p-4 mx-5">
-            <div className="flex items-center gap-3">
-              <Image src={previewLogo} alt="Seller avatar" width={52} height={52} className="h-13 w-13 rounded-full object-cover" />
-              <div>
-                <p className="text-lg font-semibold leading-tight text-[#1f2856]">{previewName}</p>
-                <span className="mt-1 inline-flex rounded-full bg-[#ede6ff] px-2.5 py-1 text-xs font-medium text-[#6f30ff]">
-                  Star Seller
-                </span>
+          <div className="px-5 py-6">
+            <div className="rounded-xl border border-[#eceef7] bg-[#fbfcff] p-4">
+              <div className="flex items-center gap-3">
+                <Image src={previewLogo} alt="Seller avatar" width={52} height={52} className="h-13 w-13 rounded-full object-cover" />
+                <div>
+                  <p className="text-lg font-semibold leading-tight text-[#1f2856]">{previewName}</p>
+                  <span className="mt-1 inline-flex rounded-full bg-[#ede6ff] px-2.5 py-1 text-xs font-medium text-[#6f30ff]">
+                    Star Seller
+                  </span>
+                </div>
               </div>
+              <Link href="/seller" className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#4f5883] hover:text-[#6f30ff]">
+                View Shop
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M14 5H19V10M10 14L19 5M19 14V19H5V5H10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </Link>
             </div>
-            <Link href="/seller" className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#4f5883] hover:text-[#6f30ff]">
-              View Shop
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M14 5H19V10M10 14L19 5M19 14V19H5V5H10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </Link>
-          </div>
 
-          <nav className="mt-6 space-y-1 border-b border-[#eceef7] pb-5 mx-5">
-            {sidebarMainNav.map((item) => {
-              const classes =
-                "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium transition " +
-                (item.href
-                  ? "text-[#4d5884] hover:bg-[#f4efff] hover:text-[#6f30ff]"
-                  : "cursor-not-allowed text-[#a4abc5]");
+            <nav className="mt-6 space-y-1 border-b border-[#eceef7] pb-5">
+              {sidebarMainNav.map((item) => {
+                const classes =
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium transition " +
+                  (item.href
+                    ? "text-[#4d5884] hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                    : "cursor-not-allowed text-[#a4abc5]");
 
-              if (!item.href) {
+                if (!item.href) {
+                  return (
+                    <button key={item.label} type="button" className={classes} disabled>
+                      <span className="inline-flex items-center gap-2.5">
+                        <SidebarIcon name={item.icon} />
+                        {item.label}
+                      </span>
+                      {item.badge && (
+                        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+
                 return (
-                  <button key={item.label} type="button" className={classes} disabled>
+                  <Link key={item.label} href={item.href} className={classes}>
                     <span className="inline-flex items-center gap-2.5">
                       <SidebarIcon name={item.icon} />
                       {item.label}
@@ -343,98 +360,102 @@ const CreateShop = () => {
                         {item.badge}
                       </span>
                     )}
-                  </button>
+                  </Link>
                 );
-              }
+              })}
+            </nav>
 
-              return (
-                <Link key={item.label} href={item.href} className={classes}>
-                  <span className="inline-flex items-center gap-2.5">
-                    <SidebarIcon name={item.icon} />
-                    {item.label}
-                  </span>
-                  {item.badge && (
-                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
-                      {item.badge}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={() => setIsShopSettingsOpen((prev) => !prev)}
+                className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-semibold text-[#6f30ff] transition hover:bg-[#f4efff]"
+              >
+                <span className="inline-flex items-center gap-2.5">
+                  <SidebarIcon name="settings" />
+                  Shop Settings
+                </span>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className={`transition-transform ${isShopSettingsOpen ? "rotate-180" : ""}`}
+                  aria-hidden="true"
+                >
+                  <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
 
-          <div className="mt-5 mx-5">
-            <button type="button" className="mb-2 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-semibold text-[#6f30ff]">
-              <span className="inline-flex items-center gap-2.5">
-                <SidebarIcon name="settings" />
-                Shop Settings
-              </span>
-              <span>-</span>
-            </button>
-            {sidebarSettingsNav.map((item) => {
-              const classes = `mb-1 w-full rounded-lg px-3 py-2.5 text-left text-[15px] font-medium transition ${
-                item.isActive
-                  ? "bg-[#efe9ff] text-[#5f2de0]"
-                  : item.href
-                    ? "text-[#4e5783] hover:bg-[#f4efff] hover:text-[#6f30ff]"
-                    : "cursor-not-allowed text-[#a4abc5]"
-              }`;
+              {isShopSettingsOpen && (
+                <div className="mx-auto mt-2 w-[88%] rounded-lg border border-[#eadffd] bg-[#faf7ff] p-2">
+                  {sidebarSettingsNav.map((item) => {
+                    const classes = `mb-1 w-full rounded-lg px-3 py-2 text-center text-[14px] font-medium transition ${
+                      item.isActive
+                        ? "bg-[#efe9ff] text-[#5f2de0]"
+                        : item.href
+                          ? "text-[#4e5783] hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                          : "cursor-not-allowed text-[#a4abc5]"
+                    }`;
 
-              if (!item.href) {
-                return (
-                  <button key={item.label} type="button" disabled className={classes}>
-                    {item.label}
-                  </button>
-                );
-              }
+                    if (!item.href) {
+                      return (
+                        <button key={item.label} type="button" disabled className={classes}>
+                          {item.label}
+                        </button>
+                      );
+                    }
 
-              return (
-                <Link key={item.label} href={item.href} className={classes}>
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
+                    return (
+                      <Link key={item.label} href={item.href} className={classes}>
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-          <div className="mt-5 mx-5">
-            <button
-              type="button"
-              disabled
-              className="inline-flex w-full cursor-not-allowed items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#a4abc5]"
-            >
-              <SidebarIcon name="billing" />
-              Billing
-            </button>
-          </div>
+            <div className="mt-5">
+              <button
+                type="button"
+                disabled
+                className="inline-flex w-full cursor-not-allowed items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#a4abc5]"
+              >
+                <SidebarIcon name="billing" />
+                Billing
+              </button>
+            </div>
 
-          <div className="mt-5 border-t border-[#eceef7] pt-5 mx-5">
+            <div className="mt-5 border-t border-[#eceef7] pt-5">
+              <Link
+                href="/my-account"
+                className="inline-flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
+              >
+                <span className="inline-flex items-center gap-2.5">
+                  <SidebarIcon name="messages" />
+                  Messages
+                </span>
+                <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
+                  5
+                </span>
+              </Link>
+              <Link
+                href="/support"
+                className="mt-1 inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
+              >
+                <SidebarIcon name="support" />
+                Support
+              </Link>
+            </div>
+
             <Link
-              href="/my-account"
-              className="inline-flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
+              href="/seller"
+              className="mt-5 inline-flex w-full items-center justify-center rounded-lg border border-[#8d52ff] px-4 py-2.5 text-[15px] font-semibold text-[#6f30ff] transition hover:bg-[#f4efff]"
             >
-              <span className="inline-flex items-center gap-2.5">
-                <SidebarIcon name="messages" />
-                Messages
-              </span>
-              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
-                5
-              </span>
-            </Link>
-            <Link
-              href="/support"
-              className="mt-1 inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
-            >
-              <SidebarIcon name="support" />
-              Support
+              View Shop
             </Link>
           </div>
-
-          <Link
-            href="/seller"
-            className="mt-5 inline-flex w-[220px] items-center justify-center rounded-lg border border-[#8d52ff] px-4 py-2.5 text-[15px] font-semibold text-[#6f30ff] transition hover:bg-[#f4efff] mx-5"
-          >
-            View Shop
-          </Link>
         </aside>
 
         <div className="min-w-0 flex-1">
