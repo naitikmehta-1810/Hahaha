@@ -9,10 +9,10 @@ import { addItemToWishlist } from "@/redux/features/wishlist-slice";
 import { ShieldCheck, Truck } from "lucide-react";
 
 const PurpleIcon = ({ children, className = "" }) => {
-  const isElement = React.isValidElement(children);
+  const isClonable = React.isValidElement(children) && children.type !== React.Fragment;
   return (
     <span className={`inline-flex items-center justify-center text-[#7427ff] ${className}`}>
-      {isElement ? React.cloneElement(children, { className: "h-5 w-5" }) : (
+      {isClonable ? React.cloneElement(children, { className: "h-5 w-5" }) : (
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           {children}
         </svg>
@@ -105,7 +105,7 @@ const categoryTiles = [
 ];
 
 const featureData = [
-  { title: "Free Shipping", description: "On orders over ₹999", icon: <Truck strokeWidth={1.7} /> },
+  { title: "Free Shipping", description: "On orders over ₹999", icon: "bag" },
   { title: "Easy Returns", description: "Within 7 days", icon: "return" },
   { title: "Secure Payments", description: "100% protected", icon: "shield" },
   { title: "24/7 Support", description: "We're here to help", icon: "support" },
