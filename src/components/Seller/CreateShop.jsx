@@ -538,8 +538,8 @@ const CreateShop = () => {
 
             <form id="create-shop-form" onSubmit={handleSubmit}>
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-                <div className="grid gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
-                  <div className="rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5 lg:row-span-3">
+                <div className="grid gap-4 lg:grid-cols-[minmax(170px,190px)_minmax(0,1fr)]">
+                  <div className="h-fit rounded-xl border border-[#e6e9f4] bg-white p-4 md:p-5 lg:self-start">
                     <div className="space-y-1">
                       {setupSections.map((item, index) => (
                         <button
