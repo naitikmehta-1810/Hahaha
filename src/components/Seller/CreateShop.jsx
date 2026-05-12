@@ -253,11 +253,6 @@ const CreateShop = () => {
     <section className="min-h-screen bg-[#f7f8fc] text-[#1d2550]">
       <div className="flex min-h-screen">
         <aside className="hidden w-[260px] border-r border-[#e6e9f4] bg-white xl:block">
-          <div className="flex h-[72px] items-center gap-3 border-b border-[#e6e9f4] px-8">
-            <Image src="/images/logo/Stuffsy_logo.png" alt="Stuffsy logo" width={34} height={34} />
-            <span className="text-4xl font-bold leading-none text-black">Stuffsy</span>
-          </div>
-
           <div className="px-5 py-6">
             <div className="rounded-xl border border-[#eceef7] bg-[#fbfcff] p-4">
               <div className="flex items-center gap-3">
