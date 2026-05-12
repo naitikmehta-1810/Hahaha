@@ -253,119 +253,125 @@ const CreateShop = () => {
   return (
     <section className="min-h-screen bg-white text-[#1d2550]">
       <div className="flex min-h-screen">
-        <aside className="hidden w-[260px] border-r border-[#e6e9f4] bg-white xl:block">
+        <aside className="hidden w-[260px] border-r border-[#e6e9f4] bg-[#f8f8fc] xl:block">
           <div className="px-5 py-6">
-            <div className="rounded-xl border border-[#eceef7] bg-[#fbfcff] p-4">
-              <div className="flex items-center gap-3">
-                <Image src={previewLogo} alt="Seller avatar" width={52} height={52} className="h-13 w-13 rounded-full object-cover" />
-                <div>
-                  <p className="text-lg font-semibold leading-tight text-[#1f2856]">{previewName}</p>
-                  <span className="mt-1 inline-flex rounded-full bg-[#ede6ff] px-2.5 py-1 text-xs font-medium text-[#6f30ff]">
-                    Star Seller
-                  </span>
+            <div>
+              <div className="border-b border-[#eceef7] pb-5">
+                <div className="flex items-center gap-3">
+                  <Image src={previewLogo} alt="Seller avatar" width={52} height={52} className="h-13 w-13 rounded-full object-cover" />
+                  <div>
+                    <p className="text-lg font-semibold leading-tight text-[#1f2856]">{previewName}</p>
+                    <span className="mt-1 inline-flex rounded-full bg-[#ede6ff] px-2.5 py-1 text-xs font-medium text-[#6f30ff]">
+                      Star Seller
+                    </span>
+                  </div>
                 </div>
+                <Link href="/seller" className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#4f5883] hover:text-[#6f30ff]">
+                  View Shop
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M14 5H19V10M10 14L19 5M19 14V19H5V5H10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </Link>
               </div>
-              <Link href="/seller" className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#4f5883] hover:text-[#6f30ff]">
-                View Shop
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M14 5H19V10M10 14L19 5M19 14V19H5V5H10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </Link>
-            </div>
 
-            <div className="mt-6 space-y-1">
-              {sidebarMainNav.map((item) => (
-                <Link
-                  key={item.label}
-                  href={resolveSidebarHref(item.href)}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
+              <div className="mt-5 space-y-1">
+                {sidebarMainNav.map((item) => (
+                  <Link
+                    key={item.label}
+                    href={resolveSidebarHref(item.href)}
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                  >
+                    <span className="inline-flex items-center gap-2.5">
+                      <SidebarIcon name={item.icon} />
+                      {item.label}
+                    </span>
+                    {item.badge && (
+                      <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => setIsShopSettingsOpen((prev) => !prev)}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-semibold text-[#6f30ff] transition hover:bg-[#f4efff]"
                 >
                   <span className="inline-flex items-center gap-2.5">
-                    <SidebarIcon name={item.icon} />
-                    {item.label}
+                    <SidebarIcon name="settings" />
+                    Shop Settings
                   </span>
-                  {item.badge && (
-                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
-                      {item.badge}
-                    </span>
-                  )}
-                </Link>
-              ))}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className={`transition-transform ${isShopSettingsOpen ? "rotate-180" : ""}`}
+                    aria-hidden="true"
+                  >
+                    <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setIsShopSettingsOpen((prev) => !prev)}
-                className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-semibold text-[#6f30ff] transition hover:bg-[#f4efff]"
-              >
-                <span className="inline-flex items-center gap-2.5">
-                  <SidebarIcon name="settings" />
-                  Shop Settings
-                </span>
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  className={`transition-transform ${isShopSettingsOpen ? "rotate-180" : ""}`}
-                  aria-hidden="true"
+                {isShopSettingsOpen && (
+                  <div className="space-y-1 pl-8">
+                    {sidebarSettingsNav.map((item) => (
+                      <Link
+                        key={item.label}
+                        href={resolveSidebarHref(item.href)}
+                        className={`block w-full rounded-lg px-3 py-2 text-left text-[14px] font-medium transition ${
+                          item.isActive
+                            ? "bg-[#efe9ff] text-[#5f2de0]"
+                            : "text-[#4e5783] hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+
+                <Link
+                  href="#"
+                  className="inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
                 >
-                  <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
+                  <SidebarIcon name="billing" />
+                  Billing
+                </Link>
+              </div>
 
-              {isShopSettingsOpen && (
-                <div className="space-y-1 pl-8">
-                  {sidebarSettingsNav.map((item) => (
-                    <Link
-                      key={item.label}
-                      href={resolveSidebarHref(item.href)}
-                      className={`block w-full rounded-lg px-3 py-2 text-left text-[14px] font-medium transition ${
-                        item.isActive
-                          ? "bg-[#efe9ff] text-[#5f2de0]"
-                          : "text-[#4e5783] hover:bg-[#f4efff] hover:text-[#6f30ff]"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
+              <div className="mt-5 space-y-1 border-t border-[#eceef7] pt-5">
+                <Link
+                  href="/my-account"
+                  className="inline-flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                >
+                  <span className="inline-flex items-center gap-2.5">
+                    <SidebarIcon name="messages" />
+                    Messages
+                  </span>
+                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
+                    5
+                  </span>
+                </Link>
+                <Link
+                  href="/support"
+                  className="inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                >
+                  <SidebarIcon name="support" />
+                  Support
+                </Link>
+              </div>
 
-              <Link
-                href="#"
-                className="inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
-              >
-                <SidebarIcon name="billing" />
-                Billing
-              </Link>
-
-              <Link
-                href="/my-account"
-                className="inline-flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
-              >
-                <span className="inline-flex items-center gap-2.5">
-                  <SidebarIcon name="messages" />
-                  Messages
-                </span>
-                <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
-                  5
-                </span>
-              </Link>
-              <Link
-                href="/support"
-                className="inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
-              >
-                <SidebarIcon name="support" />
-                Support
-              </Link>
+              <div className="mt-5 border-t border-[#eceef7] pt-5">
+                <Link
+                  href="/seller"
+                  className="inline-flex w-full items-center justify-center rounded-lg border border-[#8d52ff] px-4 py-2.5 text-[15px] font-semibold text-[#6f30ff] transition hover:bg-[#f4efff]"
+                >
+                  View Shop
+                </Link>
+              </div>
             </div>
-
-            <Link
-              href="/seller"
-              className="mt-5 inline-flex w-full items-center justify-center rounded-lg border border-[#8d52ff] px-4 py-2.5 text-[15px] font-semibold text-[#6f30ff] transition hover:bg-[#f4efff]"
-            >
-              View Shop
-            </Link>
           </div>
         </aside>
 
