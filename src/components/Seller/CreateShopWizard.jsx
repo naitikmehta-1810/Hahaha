@@ -399,7 +399,7 @@ const CreateShopWizard = ({ stepKey }) => {
             </div>
           </aside>
 
-          <div className="rounded-[26px] border border-[#e2d9f6] bg-white px-4 py-5 shadow-[0_10px_35px_rgba(66,40,130,0.08)] sm:px-5 sm:py-6 lg:px-6">
+          <div className="rounded-[26px] border border-[#e2d9f6] bg-white px-4 py-5 shadow-[0_10px_35px_rgba(66,40,130,0.08)] sm:px-5 sm:py-6 lg:px-6 xl:flex xl:w-full xl:max-w-[760px] xl:aspect-square xl:flex-col xl:justify-self-end">
             <h2 className="text-3xl font-semibold text-[#0f163a]">What are you interested in?</h2>
             <p className="mt-1.5 text-base text-[#5f6a93]">
               Select one or more categories that best match the products you want to sell.
@@ -439,7 +439,7 @@ const CreateShopWizard = ({ stepKey }) => {
               })}
             </div>
 
-            <div className="mt-6 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+            <div className="mt-6 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center xl:mt-auto">
               <p className="text-sm text-[#5f6a93]">You can change this later from your shop settings.</p>
               <button
                 type="button"
