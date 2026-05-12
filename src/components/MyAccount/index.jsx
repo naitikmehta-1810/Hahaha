@@ -413,7 +413,7 @@ const MyAccount = () => {
 
   return (
     <>
-      <section className="overflow-hidden bg-gray-2 py-24 lg:py-28">
+      <section className="overflow-hidden bg-gray-2 pb-16 pt-4 lg:pb-20 lg:pt-6">
         <div className="max-w-[1470px] w-full mx-auto px-4 md:px-6 xl:px-8">
           <div className="grid gap-7 xl:grid-cols-[280px,1fr]">
             <div className="space-y-6">
