@@ -4,6 +4,7 @@ import { useModalContext } from "@/app/context/QuickViewModalContext";
 import { updateQuickView } from "@/redux/features/quickView-slice";
 import { addItemToCart } from "@/redux/features/cart-slice";
 import { addItemToWishlist } from "@/redux/features/wishlist-slice";
+import { updateproductDetails } from "@/redux/features/product-details";
 import { useDispatch } from "react-redux";
 import Link from "next/link";
 import Image from "next/image";
@@ -22,6 +23,9 @@ const SingleGridItem = ({ item }) => {
     };
     const handleItemToWishList = () => {
         dispatch(addItemToWishlist(Object.assign(Object.assign({}, item), { status: "available", quantity: 1 })));
+    };
+    const handleProductDetails = () => {
+        dispatch(updateproductDetails(Object.assign({}, item)));
     };
     return (<div className="group">
       <div className="relative overflow-hidden flex items-center justify-center rounded-lg bg-white shadow-1 min-h-[270px] mb-4">
@@ -63,7 +67,7 @@ const SingleGridItem = ({ item }) => {
       </div>
 
       <h3 className="font-medium text-dark ease-out duration-200 hover:text-blue mb-1.5">
-        <Link href="/shop-details"> {item.title} </Link>
+        <Link href="/product-page" onClick={handleProductDetails}> {item.title} </Link>
       </h3>
 
       <span className="flex items-center gap-2 font-medium text-lg">

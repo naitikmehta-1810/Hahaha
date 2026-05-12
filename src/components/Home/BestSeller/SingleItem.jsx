@@ -7,6 +7,7 @@ import { addItemToCart } from "@/redux/features/cart-slice";
 import Image from "next/image";
 import Link from "next/link";
 import { addItemToWishlist } from "@/redux/features/wishlist-slice";
+import { updateproductDetails } from "@/redux/features/product-details";
 const SingleItem = ({ item }) => {
     var _a, _b, _c;
     const productImage = (_c = (_b = (_a = item.imgs) === null || _a === void 0 ? void 0 : _a.previews) === null || _b === void 0 ? void 0 : _b[0]) !== null && _c !== void 0 ? _c : "/images/products/product-1-bg-1.png";
@@ -22,6 +23,9 @@ const SingleItem = ({ item }) => {
     };
     const handleItemToWishList = () => {
         dispatch(addItemToWishlist(Object.assign(Object.assign({}, item), { status: "available", quantity: 1 })));
+    };
+    const handleProductDetails = () => {
+        dispatch(updateproductDetails(Object.assign({}, item)));
     };
     return (<div className="group">
       <div className="relative overflow-hidden rounded-lg bg-[#F6F7FB] min-h-[403px]">
@@ -39,7 +43,7 @@ const SingleItem = ({ item }) => {
           </div>
 
           <h3 className="font-medium text-dark ease-out duration-200 hover:text-blue mb-1.5">
-            <Link href="/shop-details"> {item.title} </Link>
+            <Link href="/product-page" onClick={handleProductDetails}> {item.title} </Link>
           </h3>
 
           <span className="flex items-center justify-center gap-2 font-medium text-lg">

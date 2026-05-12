@@ -386,7 +386,7 @@ const ShopWithSidebar = () => {
                           className="mb-1.5 text-lg font-semibold text-[#232c56] transition hover:text-[#6f30ff]"
                           onClick={() => handleProductDetails(item)}
                         >
-                          <Link href="/shop-details">{item.title}</Link>
+                          <Link href="/product-page">{item.title}</Link>
                         </h3>
 
                         <p className="mb-2 text-2xl font-semibold text-dark">{formatCurrency(item.discountedPrice)}</p>

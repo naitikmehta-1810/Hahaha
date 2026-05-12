@@ -157,7 +157,7 @@ const ProductCard = ({ item, onOpen }) => {
           </svg>
         </button>
 
-        <Link href="/shop-details" onClick={onOpen} className="block">
+        <Link href="/product-page" onClick={onOpen} className="block">
           <div className="flex aspect-square items-center justify-center bg-[#f4eee7] p-4">
             <Image src={image} alt={item.title} width={180} height={180} className="h-full w-full object-contain transition duration-300 group-hover:scale-105" />
           </div>
@@ -166,7 +166,7 @@ const ProductCard = ({ item, onOpen }) => {
 
       <div className="mt-2.5">
         <h3 className="line-clamp-1 text-[14px] font-medium leading-5 text-[#1d2340]">
-          <Link href="/shop-details" onClick={onOpen} className="transition hover:text-[#7427ff]">
+          <Link href="/product-page" onClick={onOpen} className="transition hover:text-[#7427ff]">
             {item.title}
           </Link>
         </h3>
