@@ -24,12 +24,6 @@ const categoryOptions = [
   "Others",
 ];
 
-const stepItems = [
-  { key: "step_1", label: "Categories" },
-  { key: "step_2", label: "Shop Details" },
-  { key: "step_3", label: "Terms & Conditions" },
-];
-
 const valueProps = [
   {
     title: "Personalized experience",
@@ -333,49 +327,7 @@ const CreateShopWizard = ({ stepKey }) => {
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(244,239,255,0.36),rgba(244,239,255,0.5))]" />
 
       <div className="relative mx-auto max-w-[1470px] px-4 sm:px-6 xl:px-8">
-        <div className="mb-7 flex items-center justify-between gap-4">
-          <Link
-            href="/"
-            className="flex shrink-0 items-center gap-2.5 text-[28px] font-bold tracking-tight text-black"
-            aria-label="Stuffsy home"
-          >
-            <Image
-              src="/images/logo/Stuffsy_logo.png"
-              alt="Stuffsy Logo"
-              width={44}
-              height={44}
-              className="h-11 w-11 object-contain"
-              priority
-            />
-            <span className="hidden xsm:block">Stuffsy</span>
-          </Link>
-          <div className="hidden items-start gap-3 lg:flex">
-            {stepItems.map((step, index) => {
-              const isActive = step.key === stepKey;
-              return (
-                <div key={step.key} className="flex items-center gap-3">
-                  <div className="w-[112px] text-center">
-                    <span
-                      className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold ${
-                        isActive
-                          ? "border-[#6f30ff] bg-[#6f30ff] text-white"
-                          : "border-[#d4d8eb] bg-white text-[#141c43]"
-                      }`}
-                    >
-                      {index + 1}
-                    </span>
-                    <p className={`mt-1.5 text-sm font-semibold ${isActive ? "text-[#6f30ff]" : "text-[#3e476b]"}`}>
-                      {step.label}
-                    </p>
-                  </div>
-                  {index < stepItems.length - 1 && <span className="mt-5 h-px w-8 bg-[#d8caff]" />}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)] xl:gap-4">
+        <div className="grid gap-6 xl:mx-auto xl:max-w-[1240px] xl:grid-cols-[320px_minmax(0,1fr)] xl:justify-center xl:gap-4">
           <aside className="rounded-[20px] border border-[#e4dbf7] bg-white/70 p-5 xl:bg-transparent xl:border-0 xl:p-1">
             <span className="inline-flex rounded-xl bg-[#e9ddff] px-4 py-2 text-sm font-semibold text-[#241651]">
               STEP 1 OF 3
