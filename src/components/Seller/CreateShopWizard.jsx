@@ -44,6 +44,9 @@ const valueProps = [
   },
 ];
 
+const STEP1_BG_URL =
+  "https://aoywrazmsjbyqncdmgix.supabase.co/storage/v1/object/sign/Background_images/step1_bg.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iNjlhMzEyZC1iMTQ0LTRlNzctOTkyYy05MmI1NWZjZDYyZGMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJCYWNrZ3JvdW5kX2ltYWdlcy9zdGVwMV9iZy5wbmciLCJpYXQiOjE3Nzg2MDk4NjQsImV4cCI6MTgxMDE0NTg2NH0.PPxy7uzAX89xJ4YInUEAobyu3vkx5w3pt0PBOECBzWo";
+
 const createSlug = (value) =>
   value
     .toLowerCase()
@@ -320,14 +323,13 @@ const CreateShopWizard = ({ stepKey }) => {
   };
 
   const renderStep1 = () => (
-    <section
-      className="relative overflow-hidden bg-cover bg-center bg-no-repeat py-12"
-      style={{
-        backgroundImage:
-          "url('https://aoywrazmsjbyqncdmgix.supabase.co/storage/v1/object/sign/Background_images/step1_bg.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iNjlhMzEyZC1iMTQ0LTRlNzctOTkyYy05MmI1NWZjZDYyZGMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJCYWNrZ3JvdW5kX2ltYWdlcy9zdGVwMV9iZy5wbmciLCJpYXQiOjE3Nzg2MDk4NjQsImV4cCI6MTgxMDE0NTg2NH0.PPxy7uzAX89xJ4YInUEAobyu3vkx5w3pt0PBOECBzWo')",
-      }}
-    >
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(244,239,255,0.82),rgba(244,239,255,0.9))]" />
+    <section className="relative overflow-hidden py-12">
+      <img
+        src={STEP1_BG_URL}
+        alt=""
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(244,239,255,0.36),rgba(244,239,255,0.5))]" />
 
       <div className="relative mx-auto max-w-[1320px] px-4 sm:px-6 xl:px-8">
         <div className="mb-10 hidden items-center justify-end lg:flex">
