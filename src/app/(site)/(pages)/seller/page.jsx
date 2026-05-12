@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
-import Dashboard from "@/components/Seller/Dashboard";
+import CreateShop from "@/components/Seller/CreateShop";
 import { getCurrentUserFromHeaders } from "@/utils/auth/seller-guard";
 
 export const metadata = {
-    title: "Create Shop | Stuffsy",
-    description: "Create your seller shop on Stuffsy.",
+    title: "Seller Dashboard | Stuffsy",
+    description: "Manage your seller shop on Stuffsy.",
 };
 
 const SellerPage = async () => {
@@ -17,7 +17,7 @@ const SellerPage = async () => {
     }
 
     return (<main>
-      <Dashboard />
+      <CreateShop />
     </main>);
 };
 export default SellerPage;
