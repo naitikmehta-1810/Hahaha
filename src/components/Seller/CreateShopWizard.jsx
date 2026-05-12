@@ -324,7 +324,7 @@ const CreateShopWizard = ({ stepKey }) => {
   };
 
   const renderStep1 = () => (
-    <section className="relative overflow-hidden py-3 lg:py-4">
+    <section className="relative py-3 lg:py-4">
       <img
         src={STEP1_BG_URL}
         alt=""
