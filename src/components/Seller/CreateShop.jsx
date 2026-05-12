@@ -38,9 +38,6 @@ const setupSections = [
   "SEO & Discoverability",
 ];
 
-const topIconClass =
-  "relative inline-flex h-10 w-10 items-center justify-center rounded-full text-[#43507d] transition hover:bg-[#f3efff] hover:text-[#6f30ff]";
-
 const SidebarIcon = ({ name }) => {
   const commonProps = {
     width: 16,
@@ -159,37 +156,9 @@ const SidebarIcon = ({ name }) => {
   );
 };
 
-const HeaderBellIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M15.5 17H8.5C7.67 17 7 16.33 7 15.5V11C7 8.24 9.24 6 12 6C14.76 6 17 8.24 17 11V15.5C17 16.33 16.33 17 15.5 17Z"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path d="M10 18.5C10.35 19.1 11.04 19.5 12 19.5C12.96 19.5 13.65 19.1 14 18.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-  </svg>
-);
-
-const HeaderChatIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M7 8.5H17M7 12H13M8.5 18H6C4.9 18 4 17.1 4 16V7C4 5.9 4.9 5 6 5H18C19.1 5 20 5.9 20 7V13C20 14.1 19.1 15 18 15H13L8.5 18Z"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 const CreateShop = () => {
   const router = useRouter();
-  const [headerSearch, setHeaderSearch] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isShopSettingsOpen, setIsShopSettingsOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [form, setForm] = useState({
@@ -229,23 +198,6 @@ const CreateShop = () => {
     const values = [form.city, form.country].filter(Boolean);
     return values.length ? values.join(", ") : "Mumbai, India";
   }, [form.city, form.country]);
-
-  const handleHeaderSearchSubmit = (event) => {
-    event.preventDefault();
-    const query = headerSearch.trim();
-    if (!query) {
-      router.push("/shop-with-sidebar");
-      return;
-    }
-    router.push(`/shop-with-sidebar?search=${encodeURIComponent(query)}`);
-  };
-
-  const handleLogout = async () => {
-    setIsSigningOut(true);
-    await fetch("/api/logout", { method: "POST" });
-    router.push("/signin");
-    router.refresh();
-  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -459,79 +411,6 @@ const CreateShop = () => {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <div className="flex h-[72px] items-center justify-between border-b border-[#e6e9f4] bg-white px-5 md:px-8">
-            <form onSubmit={handleHeaderSearchSubmit} className="relative hidden w-full max-w-[520px] md:block">
-              <input
-                type="search"
-                value={headerSearch}
-                onChange={(event) => setHeaderSearch(event.target.value)}
-                placeholder="Search for anything..."
-                className="h-11 w-full rounded-lg border border-[#e3e6f2] bg-[#f7f8fd] pl-4 pr-11 text-[15px] text-[#29325d] outline-none placeholder:text-[#7b84ab] focus:border-[#7a33ff] focus:ring-4 focus:ring-[#7a33ff]/10"
-              />
-              <button type="submit" aria-label="Search shop" className="absolute right-4 top-1/2 -translate-y-1/2 text-[#4b5580]">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M20 20L16.65 16.65" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              </button>
-            </form>
-
-            <div className="ml-auto flex items-center gap-2 sm:gap-4">
-              <Link href="/my-account" aria-label="Notifications" className={topIconClass}>
-                <HeaderBellIcon />
-                <span className="absolute right-0 top-0 inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-[#6f30ff] px-1 text-[10px] font-semibold leading-none text-white">
-                  4
-                </span>
-              </Link>
-              <Link href="/my-account" aria-label="Messages" className={topIconClass}>
-                <HeaderChatIcon />
-              </Link>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIsAccountMenuOpen((prev) => !prev)}
-                  className="flex items-center gap-3 rounded-lg px-1.5 py-1 transition hover:bg-[#f7f4ff]"
-                >
-                  <Image src={previewLogo} alt="User avatar" width={44} height={44} className="h-11 w-11 rounded-full object-cover" />
-                  <div className="hidden text-left sm:block">
-                    <p className="text-base font-semibold leading-tight text-[#1d2550]">{previewName}</p>
-                    <p className="text-sm text-[#69729b]">Seller</p>
-                  </div>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="hidden text-[#596289] sm:block" aria-hidden="true">
-                    <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-
-                {isAccountMenuOpen && (
-                  <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-lg border border-[#e6e0f4] bg-white py-2 shadow-[0_14px_34px_rgba(48,38,88,0.14)]">
-                    <Link
-                      href="/my-account"
-                      onClick={() => setIsAccountMenuOpen(false)}
-                      className="block px-4 py-2 text-sm font-medium text-[#2a345f] transition hover:bg-[#f7f4ff] hover:text-[#6f30ff]"
-                    >
-                      My Account
-                    </Link>
-                    <Link
-                      href="/seller/create-shop"
-                      onClick={() => setIsAccountMenuOpen(false)}
-                      className="block px-4 py-2 text-sm font-medium text-[#2a345f] transition hover:bg-[#f7f4ff] hover:text-[#6f30ff]"
-                    >
-                      Shop Setup
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      disabled={isSigningOut}
-                      className="block w-full px-4 py-2 text-left text-sm font-medium text-[#2a345f] transition hover:bg-[#f7f4ff] hover:text-[#6f30ff] disabled:opacity-70"
-                    >
-                      {isSigningOut ? "Signing out..." : "Logout"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
           <div className="px-5 py-6 md:px-8">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
               <div>
