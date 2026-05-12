@@ -223,7 +223,7 @@ const Header = () => {
                     My Account
                   </Link>
                   <Link
-                    href={isSeller ? "/seller" : "/seller/create-shop"}
+                    href={isSeller ? "/seller" : "/seller/create-shop/step_1"}
                     onClick={() => setAccountMenuOpen(false)}
                     className="block px-4 py-2 text-custom-sm font-medium text-dark hover:bg-[#f8f2ff] hover:text-[#7418ff]"
                   >

@@ -13,7 +13,7 @@ export const requireSellerPageAccess = async () => {
         redirect("/signin");
     }
     if (!user.is_seller) {
-        redirect("/seller/create-shop");
+        redirect("/seller/create-shop/step_1");
     }
     return user;
 };

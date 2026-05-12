@@ -1,4 +1,4 @@
-import CreateShop from "@/components/Seller/CreateShop";
+import { redirect } from "next/navigation";
 import { redirectSellerAwayFromCreateShop } from "@/utils/auth/seller-guard";
 
 export const metadata = {
@@ -8,9 +8,7 @@ export const metadata = {
 
 const CreateShopPage = async () => {
     await redirectSellerAwayFromCreateShop();
-    return (<main>
-      <CreateShop />
-    </main>);
+    redirect("/seller/create-shop/step_1");
 };
 
 export default CreateShopPage;

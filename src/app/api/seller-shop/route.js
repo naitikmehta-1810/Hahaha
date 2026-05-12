@@ -39,23 +39,24 @@ export async function POST(request) {
 
     const storeName = cleanText(body.storeName);
     const storeSlug = cleanSlug(body.storeSlug);
+    const category = cleanText(body.category) || "Handmade";
+    const ownerName = cleanText(body.ownerName) || user.full_name || storeName;
+    const email = cleanText(body.email) || user.email;
+    const phone = cleanText(body.phone);
+    const addressLine1 = cleanText(body.addressLine1) || "Address will be updated soon.";
+    const city = cleanText(body.city) || "Mumbai";
+    const state = cleanText(body.state) || "Maharashtra";
+    const pincode = cleanText(body.pincode) || "400001";
+    const country = cleanText(body.country) || "India";
+    const razorpayAccountId = cleanText(body.razorpayAccountId) || "pending-setup";
+    const logoUrl = cleanText(body.logoUrl) || "/images/users/user-01.jpg";
+    const bannerUrl = cleanText(body.bannerUrl) || "/images/sellers/sellers-06.png";
+    const description = cleanText(body.description) || `Seller shop for ${storeName || "your brand"}.`;
 
     const requiredFields = [
         [storeName, "Store name"],
-        [storeSlug, "Store slug"],
-        [cleanText(body.category), "Category"],
-        [cleanText(body.ownerName), "Owner name"],
-        [cleanText(body.email), "Email"],
-        [cleanText(body.phone), "Phone"],
-        [cleanText(body.addressLine1), "Address line 1"],
-        [cleanText(body.city), "City"],
-        [cleanText(body.state), "State"],
-        [cleanText(body.pincode), "Pincode"],
-        [cleanText(body.country), "Country"],
-        [cleanText(body.razorpayAccountId), "Razorpay account ID"],
-        [cleanText(body.logoUrl), "Logo URL"],
-        [cleanText(body.bannerUrl), "Banner URL"],
-        [cleanText(body.description), "Description"],
+        [phone, "Phone"],
+        [email, "Email"],
     ];
     const missingField = requiredFields.find(([value]) => !value);
     if (missingField) {
@@ -92,21 +93,21 @@ export async function POST(request) {
         user_id: user.id,
         store_name: storeName,
         store_slug: storeSlug || createSlug(storeName, user.id),
-        category: cleanText(body.category),
-        owner_name: cleanText(body.ownerName) || user.full_name,
-        email: cleanText(body.email) || user.email,
-        phone: cleanText(body.phone),
-        address_line1: cleanText(body.addressLine1),
+        category,
+        owner_name: ownerName,
+        email,
+        phone,
+        address_line1: addressLine1,
         address_line2: cleanText(body.addressLine2),
-        city: cleanText(body.city),
-        state: cleanText(body.state),
-        pincode: cleanText(body.pincode),
-        country: cleanText(body.country) || "India",
+        city,
+        state,
+        pincode,
+        country,
         pickup_same_as_store: (_a = body.pickupSameAsStore) !== null && _a !== void 0 ? _a : true,
-        razorpay_account_id: cleanText(body.razorpayAccountId),
-        logo_url: cleanText(body.logoUrl),
-        banner_url: cleanText(body.bannerUrl),
-        description: cleanText(body.description),
+        razorpay_account_id: razorpayAccountId,
+        logo_url: logoUrl,
+        banner_url: bannerUrl,
+        description,
         verification_status: "pending",
         is_active: true,
     })

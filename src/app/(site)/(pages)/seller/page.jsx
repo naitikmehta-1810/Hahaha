@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import CreateShop from "@/components/Seller/CreateShop";
+import Dashboard from "@/components/Seller/Dashboard";
 import { getCurrentUserFromHeaders } from "@/utils/auth/seller-guard";
 
 export const metadata = {
@@ -12,9 +12,12 @@ const SellerPage = async () => {
     if (!user) {
         redirect("/signin");
     }
+    if (!user.is_seller) {
+        redirect("/seller/create-shop/step_1");
+    }
 
     return (<main>
-      <CreateShop />
+      <Dashboard />
     </main>);
 };
 export default SellerPage;

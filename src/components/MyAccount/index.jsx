@@ -472,7 +472,7 @@ const MyAccount = () => {
                     Start your online store and grow your business with us.
                   </p>
                   <Link
-                    href="/seller/create-shop"
+                    href="/seller/create-shop/step_1"
                     className="mt-5 inline-flex rounded-md bg-[#651fff] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#4d0fff]"
                   >
                     Start Selling
