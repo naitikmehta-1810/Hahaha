@@ -8,7 +8,8 @@ const SiteShellFrame = ({ children }) => {
   const pathname = usePathname();
   const isSellerRoute = pathname?.startsWith("/seller");
   const isCreateShopRoute = pathname?.startsWith("/seller/create-shop");
-  const showGlobalHeader = !isSellerRoute || isCreateShopRoute;
+  const isSellerDashboardRoute = pathname === "/seller";
+  const showGlobalHeader = !isSellerRoute || isCreateShopRoute || isSellerDashboardRoute;
 
   return (
     <>
