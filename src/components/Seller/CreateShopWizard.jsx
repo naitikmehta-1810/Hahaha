@@ -375,12 +375,14 @@ const CreateShopWizard = ({ stepKey }) => {
           </div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)] xl:gap-4">
           <aside className="rounded-[20px] border border-[#e4dbf7] bg-white/70 p-5 xl:bg-transparent xl:border-0 xl:p-1">
             <span className="inline-flex rounded-xl bg-[#e9ddff] px-4 py-2 text-sm font-semibold text-[#241651]">
               STEP 1 OF 3
             </span>
-            <h1 className="mt-7 text-4xl font-semibold leading-tight text-[#121a40]">Let&apos;s get started 👋</h1>
+            <h1 className="mt-7 text-4xl font-semibold leading-tight text-[#121a40]">
+              Let&apos;s get <span className="whitespace-nowrap">started 👋</span>
+            </h1>
             <p className="mt-4 text-lg leading-relaxed text-[#49547b]">Tell us what you&apos;re interested in.</p>
             <p className="mt-2 text-lg leading-relaxed text-[#49547b]">
               You can select one or more categories that best describe what you want to sell.
@@ -399,7 +401,7 @@ const CreateShopWizard = ({ stepKey }) => {
             </div>
           </aside>
 
-          <div className="rounded-[26px] border border-[#e2d9f6] bg-white px-5 py-6 shadow-[0_10px_35px_rgba(66,40,130,0.08)] sm:px-6 sm:py-7 lg:px-7 xl:flex xl:w-full xl:max-w-[900px] xl:aspect-square xl:flex-col xl:justify-self-end">
+          <div className="rounded-[26px] border border-[#e2d9f6] bg-white px-5 py-6 shadow-[0_10px_35px_rgba(66,40,130,0.08)] sm:px-6 sm:py-7 lg:px-7 xl:flex xl:w-full xl:max-w-[900px] xl:aspect-square xl:flex-col">
             <h2 className="text-4xl font-semibold text-[#0f163a]">What are you interested in?</h2>
             <p className="mt-2 text-lg text-[#5f6a93]">
               Select one or more categories that best match the products you want to sell.
