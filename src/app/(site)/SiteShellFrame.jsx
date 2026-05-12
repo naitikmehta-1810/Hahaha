@@ -7,10 +7,11 @@ import { usePathname } from "next/navigation";
 const SiteShellFrame = ({ children }) => {
   const pathname = usePathname();
   const isSellerRoute = pathname?.startsWith("/seller");
+  const isCreateShopRoute = pathname?.startsWith("/seller/create-shop");
 
   return (
     <>
-      <Header />
+      {!isCreateShopRoute && <Header />}
       <main>{children}</main>
       {!isSellerRoute && <Footer />}
     </>

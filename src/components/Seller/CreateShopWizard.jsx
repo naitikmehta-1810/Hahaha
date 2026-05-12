@@ -8,6 +8,11 @@ import { useEffect, useMemo, useState } from "react";
 const STORAGE_KEY = "seller-shop-onboarding";
 
 const stepOrder = ["step_1", "step_2", "step_3"];
+const stepItems = [
+  { key: "step_1", label: "Categories" },
+  { key: "step_2", label: "Shop Details" },
+  { key: "step_3", label: "Terms & Conditions" },
+];
 
 const categoryOptions = [
   "Home Decor",
@@ -318,7 +323,7 @@ const CreateShopWizard = ({ stepKey }) => {
   };
 
   const renderStep1 = () => (
-    <section className="relative pt-0 pb-5 lg:pb-6">
+    <section className="relative overflow-hidden pb-5 pt-3 lg:pb-6 lg:pt-5">
       <img
         src={STEP1_BG_URL}
         alt=""
@@ -327,6 +332,50 @@ const CreateShopWizard = ({ stepKey }) => {
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(244,239,255,0.36),rgba(244,239,255,0.5))]" />
 
       <div className="relative mx-auto max-w-[1470px] px-4 sm:px-6 xl:px-8">
+        <div className="mb-8 flex items-center justify-between gap-4 xl:mb-10">
+          <Link
+            href="/"
+            className="flex shrink-0 items-center gap-2.5 text-[28px] font-bold tracking-tight text-black"
+            aria-label="Stuffsy home"
+          >
+            <Image
+              src="/images/logo/Stuffsy_logo.png"
+              alt="Stuffsy Logo"
+              width={44}
+              height={44}
+              className="h-11 w-11 object-contain"
+              priority
+            />
+            <span className="hidden xsm:block">Stuffsy</span>
+          </Link>
+
+          <div className="hidden items-start gap-3 lg:flex">
+            {stepItems.map((step, index) => {
+              const isActive = step.key === stepKey;
+              const isComplete = index < activeStepIndex;
+              return (
+                <div key={step.key} className="flex items-center gap-3">
+                  <div className="w-[120px] text-center">
+                    <span
+                      className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold ${
+                        isActive || isComplete
+                          ? "border-[#6f30ff] bg-[#6f30ff] text-white"
+                          : "border-[#d4d8eb] bg-white text-[#141c43]"
+                      }`}
+                    >
+                      {index + 1}
+                    </span>
+                    <p className={`mt-1.5 text-sm font-semibold ${isActive ? "text-[#6f30ff]" : "text-[#3e476b]"}`}>
+                      {step.label}
+                    </p>
+                  </div>
+                  {index < stepItems.length - 1 && <span className="mt-5 h-px w-10 border-t border-dashed border-[#d8caff]" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="grid gap-6 xl:mx-auto xl:max-w-[1240px] xl:grid-cols-[320px_minmax(0,1fr)] xl:justify-center xl:gap-4">
           <aside className="rounded-[20px] border border-[#e4dbf7] bg-white/70 p-5 xl:bg-transparent xl:border-0 xl:p-1">
             <span className="inline-flex rounded-xl bg-[#e9ddff] px-4 py-2 text-sm font-semibold text-[#241651]">
