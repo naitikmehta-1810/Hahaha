@@ -72,7 +72,7 @@ const readStoredData = () => {
 };
 
 const CategoryIcon = ({ category }) => {
-  const iconClass = "h-7 w-7 text-[#7b37ff]";
+  const iconClass = "h-9 w-9 text-[#7b37ff]";
 
   if (category === "Home Decor") {
     return (
@@ -192,8 +192,8 @@ const CategoryIcon = ({ category }) => {
 };
 
 const FeatureIcon = () => (
-  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#dacbff]">
-    <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 text-[#7b37ff]" aria-hidden="true">
+  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#dacbff]">
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-[#7b37ff]" aria-hidden="true">
       <path d="M12 3L19 7V12C19 17 15.8 20.8 12 22C8.2 20.8 5 17 5 12V7L12 3Z" stroke="currentColor" strokeWidth="1.7" />
       <path d="M9.5 12.2L11.2 13.9L14.8 10.3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -324,7 +324,7 @@ const CreateShopWizard = ({ stepKey }) => {
   };
 
   const renderStep1 = () => (
-    <section className="relative py-3 lg:py-4">
+    <section className="relative py-5 lg:py-6">
       <img
         src={STEP1_BG_URL}
         alt=""
@@ -332,11 +332,11 @@ const CreateShopWizard = ({ stepKey }) => {
       />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(244,239,255,0.36),rgba(244,239,255,0.5))]" />
 
-      <div className="relative mx-auto max-w-[1320px] px-4 sm:px-6 xl:px-8">
-        <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="relative mx-auto max-w-[1470px] px-4 sm:px-6 xl:px-8">
+        <div className="mb-7 flex items-center justify-between gap-4">
           <Link
             href="/"
-            className="flex shrink-0 items-center gap-2.5 text-[24px] font-bold tracking-tight text-black"
+            className="flex shrink-0 items-center gap-2.5 text-[28px] font-bold tracking-tight text-black"
             aria-label="Stuffsy home"
           >
             <Image
@@ -344,19 +344,19 @@ const CreateShopWizard = ({ stepKey }) => {
               alt="Stuffsy Logo"
               width={44}
               height={44}
-              className="h-8 w-8 object-contain"
+              className="h-11 w-11 object-contain"
               priority
             />
             <span className="hidden xsm:block">Stuffsy</span>
           </Link>
-          <div className="hidden items-start gap-2.5 lg:flex">
+          <div className="hidden items-start gap-3 lg:flex">
             {stepItems.map((step, index) => {
               const isActive = step.key === stepKey;
               return (
-                <div key={step.key} className="flex items-center gap-2.5">
-                  <div className="w-[94px] text-center">
+                <div key={step.key} className="flex items-center gap-3">
+                  <div className="w-[112px] text-center">
                     <span
-                      className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold ${
+                      className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold ${
                         isActive
                           ? "border-[#6f30ff] bg-[#6f30ff] text-white"
                           : "border-[#d4d8eb] bg-white text-[#141c43]"
@@ -364,44 +364,44 @@ const CreateShopWizard = ({ stepKey }) => {
                     >
                       {index + 1}
                     </span>
-                    <p className={`mt-1.5 text-xs font-semibold ${isActive ? "text-[#6f30ff]" : "text-[#3e476b]"}`}>
+                    <p className={`mt-1.5 text-sm font-semibold ${isActive ? "text-[#6f30ff]" : "text-[#3e476b]"}`}>
                       {step.label}
                     </p>
                   </div>
-                  {index < stepItems.length - 1 && <span className="mt-4 h-px w-6 bg-[#d8caff]" />}
+                  {index < stepItems.length - 1 && <span className="mt-5 h-px w-8 bg-[#d8caff]" />}
                 </div>
               );
             })}
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[248px_minmax(0,1fr)]">
-          <aside className="rounded-[20px] border border-[#e4dbf7] bg-white/70 p-4 xl:bg-transparent xl:border-0 xl:p-2">
-            <span className="inline-flex rounded-xl bg-[#e9ddff] px-3 py-1.5 text-[11px] font-semibold text-[#241651]">
+        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="rounded-[20px] border border-[#e4dbf7] bg-white/70 p-5 xl:bg-transparent xl:border-0 xl:p-1">
+            <span className="inline-flex rounded-xl bg-[#e9ddff] px-4 py-2 text-sm font-semibold text-[#241651]">
               STEP 1 OF 3
             </span>
-            <h1 className="mt-3 text-2xl font-semibold leading-tight text-[#121a40]">Let&apos;s get started 👋</h1>
-            <p className="mt-2 text-sm leading-relaxed text-[#49547b]">Tell us what you&apos;re interested in.</p>
-            <p className="mt-1 text-sm leading-relaxed text-[#49547b]">
+            <h1 className="mt-7 text-4xl font-semibold leading-tight text-[#121a40]">Let&apos;s get started 👋</h1>
+            <p className="mt-4 text-lg leading-relaxed text-[#49547b]">Tell us what you&apos;re interested in.</p>
+            <p className="mt-2 text-lg leading-relaxed text-[#49547b]">
               You can select one or more categories that best describe what you want to sell.
             </p>
 
-            <div className="mt-5 space-y-3.5">
+            <div className="mt-10 space-y-6">
               {valueProps.map((item) => (
-                <div key={item.title} className="flex items-start gap-3">
+                <div key={item.title} className="flex items-start gap-4">
                   <FeatureIcon />
                   <div>
-                    <h3 className="text-sm font-semibold text-[#111b41]">{item.title}</h3>
-                    <p className="mt-0.5 text-xs text-[#4f5a82]">{item.description}</p>
+                    <h3 className="text-xl font-semibold text-[#111b41]">{item.title}</h3>
+                    <p className="mt-1 text-base text-[#4f5a82]">{item.description}</p>
                   </div>
                 </div>
               ))}
             </div>
           </aside>
 
-          <div className="rounded-[26px] border border-[#e2d9f6] bg-white px-4 py-4.5 shadow-[0_10px_35px_rgba(66,40,130,0.08)] sm:px-5 sm:py-5 lg:px-5 xl:flex xl:w-full xl:max-w-[700px] xl:aspect-square xl:flex-col xl:justify-self-end">
-            <h2 className="text-2xl font-semibold text-[#0f163a]">What are you interested in?</h2>
-            <p className="mt-1 text-sm text-[#5f6a93]">
+          <div className="rounded-[26px] border border-[#e2d9f6] bg-white px-5 py-6 shadow-[0_10px_35px_rgba(66,40,130,0.08)] sm:px-6 sm:py-7 lg:px-7 xl:flex xl:w-full xl:max-w-[900px] xl:aspect-square xl:flex-col xl:justify-self-end">
+            <h2 className="text-4xl font-semibold text-[#0f163a]">What are you interested in?</h2>
+            <p className="mt-2 text-lg text-[#5f6a93]">
               Select one or more categories that best match the products you want to sell.
             </p>
 
@@ -411,7 +411,7 @@ const CreateShopWizard = ({ stepKey }) => {
               </p>
             )}
 
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {categoryOptions.map((category) => {
                 const selected = form.categories.includes(category);
                 return (
@@ -419,32 +419,32 @@ const CreateShopWizard = ({ stepKey }) => {
                     key={category}
                     type="button"
                     onClick={() => handleCategoryToggle(category)}
-                    className={`relative flex aspect-square w-full flex-col items-center justify-center rounded-2xl border bg-white px-2 py-2.5 text-center transition ${
+                    className={`relative flex aspect-square w-full flex-col items-center justify-center rounded-2xl border bg-white px-3 py-3 text-center transition ${
                       selected
-                        ? "border-[#7b37ff] shadow-[0_0_0_2px_rgba(123,55,255,0.08)]"
+                        ? "border-[#7b37ff] bg-[#f8f3ff] shadow-[0_0_0_2px_rgba(123,55,255,0.08)]"
                         : "border-[#e1e5f2] hover:border-[#8a50ff]"
                     }`}
                   >
                     {selected && (
-                      <span className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#6f30ff] text-white">
+                      <span className="absolute right-2.5 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#6f30ff] text-white">
                         <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
                           <path d="M6.5 12.5L10 16L17.5 8.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </span>
                     )}
                     <CategoryIcon category={category} />
-                    <span className="mt-2 text-sm font-semibold leading-tight text-[#121a40]">{category}</span>
+                    <span className="mt-3 text-[22px] font-semibold leading-tight text-[#121a40]">{category}</span>
                   </button>
                 );
               })}
             </div>
 
-            <div className="mt-4 flex flex-col items-start justify-between gap-2.5 sm:flex-row sm:items-center xl:mt-auto">
-              <p className="text-xs text-[#5f6a93]">You can change this later from your shop settings.</p>
+            <div className="mt-8 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center xl:mt-auto">
+              <p className="text-lg text-[#5f6a93]">You can change this later from your shop settings.</p>
               <button
                 type="button"
                 onClick={handleStep1Next}
-                className="inline-flex h-11 min-w-[164px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6f30ff] to-[#7f49ff] px-5 text-base font-semibold text-white transition hover:from-[#5f22eb] hover:to-[#7038f1]"
+                className="inline-flex h-14 min-w-[260px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6f30ff] to-[#7f49ff] px-8 text-xl font-semibold text-white transition hover:from-[#5f22eb] hover:to-[#7038f1]"
               >
                 Next
                 <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
