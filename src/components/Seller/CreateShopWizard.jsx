@@ -328,7 +328,7 @@ const CreateShopWizard = ({ stepKey }) => {
       <img
         src={STEP1_BG_URL}
         alt=""
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+        className="pointer-events-none absolute inset-0 h-full w-full object-contain object-center"
       />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(244,239,255,0.36),rgba(244,239,255,0.5))]" />
 
@@ -419,7 +419,7 @@ const CreateShopWizard = ({ stepKey }) => {
                     key={category}
                     type="button"
                     onClick={() => handleCategoryToggle(category)}
-                    className={`relative flex min-h-[108px] flex-col items-center justify-center rounded-2xl border bg-white px-2.5 py-3 text-center transition ${
+                    className={`relative flex aspect-square w-full flex-col items-center justify-center rounded-2xl border bg-white px-2.5 py-3 text-center transition ${
                       selected
                         ? "border-[#7b37ff] shadow-[0_0_0_2px_rgba(123,55,255,0.08)]"
                         : "border-[#e1e5f2] hover:border-[#8a50ff]"
