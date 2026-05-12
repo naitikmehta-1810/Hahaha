@@ -13,7 +13,7 @@ const SiteShellFrame = ({ children }) => {
   return (
     <>
       {showGlobalHeader && <Header />}
-      <main className={showGlobalHeader ? "pt-[124px] md:pt-[86px]" : ""}>{children}</main>
+      <main>{children}</main>
       {!isSellerRoute && <Footer />}
     </>
   );
