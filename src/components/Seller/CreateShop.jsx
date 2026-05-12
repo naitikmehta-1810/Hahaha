@@ -198,6 +198,7 @@ const CreateShop = () => {
     const values = [form.city, form.country].filter(Boolean);
     return values.length ? values.join(", ") : "Mumbai, India";
   }, [form.city, form.country]);
+  const resolveSidebarHref = (href) => href ?? "#";
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -250,9 +251,9 @@ const CreateShop = () => {
   };
 
   return (
-    <section className="min-h-screen bg-[#f8f8fc] text-[#1d2550]">
+    <section className="min-h-screen bg-white text-[#1d2550]">
       <div className="flex min-h-screen">
-        <aside className="hidden w-[260px] border-r border-[#e6e9f4] bg-[#f8f8fc] xl:block">
+        <aside className="hidden w-[260px] border-r border-[#e6e9f4] bg-white xl:block">
           <div className="px-5 py-6">
             <div className="rounded-xl border border-[#eceef7] bg-[#fbfcff] p-4">
               <div className="flex items-center gap-3">
@@ -272,47 +273,25 @@ const CreateShop = () => {
               </Link>
             </div>
 
-            <nav className="mt-6 space-y-1 border-b border-[#eceef7] pb-5">
-              {sidebarMainNav.map((item) => {
-                const classes =
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium transition " +
-                  (item.href
-                    ? "text-[#4d5884] hover:bg-[#f4efff] hover:text-[#6f30ff]"
-                    : "cursor-not-allowed text-[#a4abc5]");
-
-                if (!item.href) {
-                  return (
-                    <button key={item.label} type="button" className={classes} disabled>
-                      <span className="inline-flex items-center gap-2.5">
-                        <SidebarIcon name={item.icon} />
-                        {item.label}
-                      </span>
-                      {item.badge && (
-                        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                }
-
-                return (
-                  <Link key={item.label} href={item.href} className={classes}>
-                    <span className="inline-flex items-center gap-2.5">
-                      <SidebarIcon name={item.icon} />
-                      {item.label}
+            <div className="mt-6 space-y-1">
+              {sidebarMainNav.map((item) => (
+                <Link
+                  key={item.label}
+                  href={resolveSidebarHref(item.href)}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                >
+                  <span className="inline-flex items-center gap-2.5">
+                    <SidebarIcon name={item.icon} />
+                    {item.label}
+                  </span>
+                  {item.badge && (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
+                      {item.badge}
                     </span>
-                    {item.badge && (
-                      <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#efe8ff] px-1.5 text-[11px] font-semibold text-[#6f30ff]">
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </nav>
+                  )}
+                </Link>
+              ))}
 
-            <div className="mt-5">
               <button
                 type="button"
                 onClick={() => setIsShopSettingsOpen((prev) => !prev)}
@@ -335,46 +314,31 @@ const CreateShop = () => {
               </button>
 
               {isShopSettingsOpen && (
-                <div className="mx-auto mt-2 w-[88%] rounded-lg border border-[#eadffd] bg-[#faf7ff] p-2">
-                  {sidebarSettingsNav.map((item) => {
-                    const classes = `mb-1 w-full rounded-lg px-3 py-2 text-center text-[14px] font-medium transition ${
-                      item.isActive
-                        ? "bg-[#efe9ff] text-[#5f2de0]"
-                        : item.href
-                          ? "text-[#4e5783] hover:bg-[#f4efff] hover:text-[#6f30ff]"
-                          : "cursor-not-allowed text-[#a4abc5]"
-                    }`;
-
-                    if (!item.href) {
-                      return (
-                        <button key={item.label} type="button" disabled className={classes}>
-                          {item.label}
-                        </button>
-                      );
-                    }
-
-                    return (
-                      <Link key={item.label} href={item.href} className={classes}>
-                        {item.label}
-                      </Link>
-                    );
-                  })}
+                <div className="space-y-1 pl-8">
+                  {sidebarSettingsNav.map((item) => (
+                    <Link
+                      key={item.label}
+                      href={resolveSidebarHref(item.href)}
+                      className={`block w-full rounded-lg px-3 py-2 text-left text-[14px] font-medium transition ${
+                        item.isActive
+                          ? "bg-[#efe9ff] text-[#5f2de0]"
+                          : "text-[#4e5783] hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
                 </div>
               )}
-            </div>
 
-            <div className="mt-5">
-              <button
-                type="button"
-                disabled
-                className="inline-flex w-full cursor-not-allowed items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#a4abc5]"
+              <Link
+                href="#"
+                className="inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
               >
                 <SidebarIcon name="billing" />
                 Billing
-              </button>
-            </div>
+              </Link>
 
-            <div className="mt-5 border-t border-[#eceef7] pt-5">
               <Link
                 href="/my-account"
                 className="inline-flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
@@ -389,7 +353,7 @@ const CreateShop = () => {
               </Link>
               <Link
                 href="/support"
-                className="mt-1 inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
+                className="inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#4d5884] transition hover:bg-[#f4efff] hover:text-[#6f30ff]"
               >
                 <SidebarIcon name="support" />
                 Support
