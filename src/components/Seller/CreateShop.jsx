@@ -250,9 +250,9 @@ const CreateShop = () => {
   };
 
   return (
-    <section className="min-h-screen bg-[#f7f8fc] text-[#1d2550]">
+    <section className="min-h-screen bg-[#f8f8fc] text-[#1d2550]">
       <div className="flex min-h-screen">
-        <aside className="hidden w-[260px] border-r border-[#e6e9f4] bg-white xl:block">
+        <aside className="hidden w-[260px] border-r border-[#e6e9f4] bg-[#f8f8fc] xl:block">
           <div className="px-5 py-6">
             <div className="rounded-xl border border-[#eceef7] bg-[#fbfcff] p-4">
               <div className="flex items-center gap-3">
