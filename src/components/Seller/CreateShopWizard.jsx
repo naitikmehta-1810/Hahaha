@@ -45,7 +45,7 @@ const valueProps = [
 ];
 
 const STEP1_BG_URL =
-  "https://aoywrazmsjbyqncdmgix.supabase.co/storage/v1/object/sign/Background_images/step1_bg.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iNjlhMzEyZC1iMTQ0LTRlNzctOTkyYy05MmI1NWZjZDYyZGMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJCYWNrZ3JvdW5kX2ltYWdlcy9zdGVwMV9iZy5wbmciLCJpYXQiOjE3Nzg2MDk4NjQsImV4cCI6MTgxMDE0NTg2NH0.PPxy7uzAX89xJ4YInUEAobyu3vkx5w3pt0PBOECBzWo";
+  "https://aoywrazmsjbyqncdmgix.supabase.co/storage/v1/object/sign/Background_images/step1_bg.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iNjlhMzEyZC1iMTQ0LTRlNzctOTkyYy05MmI1NWZjZDYyZGMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJCYWNrZ3JvdW5kX2ltYWdlcy9zdGVwMV9iZy5wbmciLCJpYXQiOjE3Nzg2MTEzNDAsImV4cCI6MTgxMDE0NzM0MH0.QoJF-w9gZxR1e7OVf4fBnd6Ajd-hBiWeZIhDObR5k1M";
 
 const createSlug = (value) =>
   value
