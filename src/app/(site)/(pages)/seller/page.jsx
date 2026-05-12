@@ -1,13 +1,20 @@
-import Dashboard from "@/components/Seller/Dashboard";
-import { requireSellerPageAccess } from "@/utils/auth/seller-guard";
+import { redirect } from "next/navigation";
+import CreateShop from "@/components/Seller/CreateShop";
+import { getCurrentUserFromHeaders } from "@/utils/auth/seller-guard";
+
 export const metadata = {
-    title: "Seller Dashboard | Stuffsy",
-    description: "Seller dashboard for managing products and store performance.",
+    title: "Create Shop | Stuffsy",
+    description: "Create your seller shop on Stuffsy.",
 };
-const SellerDashboardPage = async () => {
-    await requireSellerPageAccess();
+
+const SellerPage = async () => {
+    const user = await getCurrentUserFromHeaders();
+    if (!user) {
+        redirect("/signin");
+    }
+
     return (<main>
-      <Dashboard />
+      <CreateShop />
     </main>);
 };
-export default SellerDashboardPage;
+export default SellerPage;
