@@ -266,7 +266,7 @@ const CreateShop = () => {
                     </span>
                   </div>
                 </div>
-                <Link href="/seller" className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#4f5883] hover:text-[#6f30ff]">
+                <Link href="/seller" className="mt-4 inline-flex w-full items-center justify-end gap-2 text-sm font-medium text-[#4f5883] hover:text-[#6f30ff]">
                   View Shop
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M14 5H19V10M10 14L19 5M19 14V19H5V5H10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
