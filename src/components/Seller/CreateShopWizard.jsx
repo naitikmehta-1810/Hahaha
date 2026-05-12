@@ -320,8 +320,14 @@ const CreateShopWizard = ({ stepKey }) => {
   };
 
   const renderStep1 = () => (
-    <section className="relative overflow-hidden bg-[#f4efff] py-12">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_left_center,rgba(160,106,255,0.08),transparent_42%),radial-gradient(circle_at_right_center,rgba(160,106,255,0.08),transparent_42%)]" />
+    <section
+      className="relative overflow-hidden bg-cover bg-center bg-no-repeat py-12"
+      style={{
+        backgroundImage:
+          "url('https://aoywrazmsjbyqncdmgix.supabase.co/storage/v1/object/sign/Background_images/step1_bg.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iNjlhMzEyZC1iMTQ0LTRlNzctOTkyYy05MmI1NWZjZDYyZGMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJCYWNrZ3JvdW5kX2ltYWdlcy9zdGVwMV9iZy5wbmciLCJpYXQiOjE3Nzg2MDk4NjQsImV4cCI6MTgxMDE0NTg2NH0.PPxy7uzAX89xJ4YInUEAobyu3vkx5w3pt0PBOECBzWo')",
+      }}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(244,239,255,0.82),rgba(244,239,255,0.9))]" />
 
       <div className="relative mx-auto max-w-[1320px] px-4 sm:px-6 xl:px-8">
         <div className="mb-10 hidden items-center justify-end lg:flex">
