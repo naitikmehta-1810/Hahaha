@@ -71,7 +71,7 @@ const readStoredData = () => {
 };
 
 const CategoryIcon = ({ category }) => {
-  const iconClass = "h-9 w-9 text-[#7b37ff]";
+  const iconClass = "h-8 w-8 text-[#7b37ff]";
 
   if (category === "Home Decor") {
     return (
@@ -323,16 +323,16 @@ const CreateShopWizard = ({ stepKey }) => {
   };
 
   const renderStep1 = () => (
-    <section className="relative overflow-hidden pb-5 pt-3 lg:pb-6 lg:pt-5">
+    <section className="relative min-h-screen overflow-hidden pb-5 pt-3 lg:pb-6 lg:pt-5">
       <img
         src={STEP1_BG_URL}
         alt=""
-        className="pointer-events-none absolute inset-0 h-full w-full object-contain object-center"
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
       />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(244,239,255,0.36),rgba(244,239,255,0.5))]" />
 
-      <div className="relative mx-auto max-w-[1470px] px-4 sm:px-6 xl:px-8">
-        <div className="mb-8 flex items-center justify-between gap-4 xl:mb-10">
+      <div className="relative mx-auto max-w-[1420px] px-4 sm:px-6 xl:px-8">
+        <div className="mb-6 flex items-center justify-between gap-4 xl:mb-8">
           <Link
             href="/"
             className="flex shrink-0 items-center gap-2.5 text-[28px] font-bold tracking-tight text-black"
@@ -357,7 +357,7 @@ const CreateShopWizard = ({ stepKey }) => {
                 <div key={step.key} className="flex items-center gap-3">
                   <div className="w-[120px] text-center">
                     <span
-                      className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold ${
+                      className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold ${
                         isActive || isComplete
                           ? "border-[#6f30ff] bg-[#6f30ff] text-white"
                           : "border-[#d4d8eb] bg-white text-[#141c43]"
@@ -376,35 +376,35 @@ const CreateShopWizard = ({ stepKey }) => {
           </div>
         </div>
 
-        <div className="grid gap-6 xl:mx-auto xl:max-w-[1240px] xl:grid-cols-[320px_minmax(0,1fr)] xl:justify-center xl:gap-4">
-          <aside className="rounded-[20px] border border-[#e4dbf7] bg-white/70 p-5 xl:bg-transparent xl:border-0 xl:p-1">
+        <div className="grid gap-5 xl:mx-auto xl:max-w-[1200px] xl:grid-cols-[290px_minmax(0,1fr)] xl:justify-center xl:gap-4">
+          <aside className="rounded-[20px] border border-[#e4dbf7] bg-white/70 p-4 xl:bg-transparent xl:border-0 xl:p-1">
             <span className="inline-flex rounded-xl bg-[#e9ddff] px-4 py-2 text-sm font-semibold text-[#241651]">
               STEP 1 OF 3
             </span>
-            <h1 className="mt-7 text-4xl font-semibold leading-tight text-[#121a40]">
+            <h1 className="mt-6 text-3xl font-semibold leading-tight text-[#121a40]">
               Let&apos;s get <span className="whitespace-nowrap">started 👋</span>
             </h1>
-            <p className="mt-4 text-lg leading-relaxed text-[#49547b]">Tell us what you&apos;re interested in.</p>
-            <p className="mt-2 text-lg leading-relaxed text-[#49547b]">
+            <p className="mt-3 text-base leading-relaxed text-[#49547b]">Tell us what you&apos;re interested in.</p>
+            <p className="mt-1.5 text-base leading-relaxed text-[#49547b]">
               You can select one or more categories that best describe what you want to sell.
             </p>
 
-            <div className="mt-10 space-y-6">
+            <div className="mt-8 space-y-5">
               {valueProps.map((item) => (
                 <div key={item.title} className="flex items-start gap-4">
                   <FeatureIcon />
                   <div>
-                    <h3 className="text-xl font-semibold text-[#111b41]">{item.title}</h3>
-                    <p className="mt-1 text-base text-[#4f5a82]">{item.description}</p>
+                    <h3 className="text-lg font-semibold text-[#111b41]">{item.title}</h3>
+                    <p className="mt-1 text-sm text-[#4f5a82]">{item.description}</p>
                   </div>
                 </div>
               ))}
             </div>
           </aside>
 
-          <div className="rounded-[26px] border border-[#e2d9f6] bg-white px-5 py-6 shadow-[0_10px_35px_rgba(66,40,130,0.08)] sm:px-6 sm:py-7 lg:px-7 xl:flex xl:w-full xl:max-w-[900px] xl:aspect-square xl:flex-col">
-            <h2 className="text-4xl font-semibold text-[#0f163a]">What are you interested in?</h2>
-            <p className="mt-2 text-lg text-[#5f6a93]">
+          <div className="rounded-[26px] border border-[#e2d9f6] bg-white px-5 py-5 shadow-[0_10px_35px_rgba(66,40,130,0.08)] sm:px-6 sm:py-6 lg:px-7 xl:flex xl:w-full xl:max-w-[860px] xl:flex-col">
+            <h2 className="text-3xl font-semibold text-[#0f163a]">What are you interested in?</h2>
+            <p className="mt-2 text-base text-[#5f6a93]">
               Select one or more categories that best match the products you want to sell.
             </p>
 
@@ -414,7 +414,7 @@ const CreateShopWizard = ({ stepKey }) => {
               </p>
             )}
 
-            <div className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="mt-6 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4">
               {categoryOptions.map((category) => {
                 const selected = form.categories.includes(category);
                 return (
@@ -436,18 +436,18 @@ const CreateShopWizard = ({ stepKey }) => {
                       </span>
                     )}
                     <CategoryIcon category={category} />
-                    <span className="mt-3 text-[22px] font-semibold leading-tight text-[#121a40]">{category}</span>
+                    <span className="mt-2.5 text-lg font-semibold leading-tight text-[#121a40]">{category}</span>
                   </button>
                 );
               })}
             </div>
 
             <div className="mt-8 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center xl:mt-auto">
-              <p className="text-lg text-[#5f6a93]">You can change this later from your shop settings.</p>
+              <p className="text-base text-[#5f6a93]">You can change this later from your shop settings.</p>
               <button
                 type="button"
                 onClick={handleStep1Next}
-                className="inline-flex h-14 min-w-[260px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6f30ff] to-[#7f49ff] px-8 text-xl font-semibold text-white transition hover:from-[#5f22eb] hover:to-[#7038f1]"
+                className="inline-flex h-12 min-w-[220px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6f30ff] to-[#7f49ff] px-7 text-lg font-semibold text-white transition hover:from-[#5f22eb] hover:to-[#7038f1]"
               >
                 Next
                 <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
