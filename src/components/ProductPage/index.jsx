@@ -9,6 +9,8 @@ import { usePreviewSlider } from "@/app/context/PreviewSliderContext";
 import { addItemToCart } from "@/redux/features/cart-slice";
 import { addItemToWishlist } from "@/redux/features/wishlist-slice";
 import { updateproductDetails } from "@/redux/features/product-details";
+import { useProducts } from "@/hooks/useProducts";
+import ProductItem from "@/components/Common/ProductItem";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("en-IN", {
@@ -24,6 +26,7 @@ const ProductPage = () => {
   const [activePreview, setActivePreview] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [showMore, setShowMore] = useState(false);
+  const { products: allProducts } = useProducts();
   const productFromStore = useAppSelector((state) => state.productDetailsReducer.value);
   const product = storedProduct || productFromStore;
 
@@ -53,6 +56,14 @@ const ProductPage = () => {
     const thumbnailImages = product?.imgs?.thumbnails?.length ? product.imgs.thumbnails : previewImages;
     return { previewImages, thumbnailImages };
   }, [product]);
+
+  const recommendedProducts = useMemo(() => {
+    if (!product || !allProducts.length) return [];
+    // Get products from same category, excluding the current product
+    return allProducts
+      .filter((p) => p.id !== product.id && p.category === product.category)
+      .slice(0, 8);
+  }, [product, allProducts]);
 
   const price = Number(product?.price) || 0;
   const discountedPrice = Number(product?.discountedPrice) || 0;
@@ -85,6 +96,42 @@ const ProductPage = () => {
 
   const handleAddToWishlist = () => {
     dispatch(addItemToWishlist({ ...product, status: "available", quantity: 1 }));
+  };
+
+  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+  const shareText = `Check out ${product?.title} on Stuffsy!`;
+
+  const handleSocialShare = (platform) => {
+    const encodedUrl = encodeURIComponent(shareUrl);
+    const encodedText = encodeURIComponent(shareText);
+    let url = "";
+
+    switch (platform) {
+      case "twitter":
+        url = `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`;
+        break;
+      case "facebook":
+        url = `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`;
+        break;
+      case "instagram":
+        // Instagram doesn't support direct sharing, so we copy to clipboard instead
+        navigator.clipboard.writeText(shareUrl);
+        alert("Link copied to clipboard! Share it on Instagram.");
+        return;
+      case "pinterest":
+        url = `https://pinterest.com/pin/create/button/?url=${encodedUrl}&description=${encodedText}`;
+        break;
+      case "linkedin":
+        url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
+        break;
+      case "whatsapp":
+        url = `https://wa.me/?text=${encodedText}%20${encodedUrl}`;
+        break;
+    }
+
+    if (url) {
+      window.open(url, "_blank", "width=600,height=400");
+    }
   };
 
   if (!product?.title) {
@@ -229,6 +276,87 @@ const ProductPage = () => {
             >
               <span>♡</span> Add to Wishlist
             </button>
+
+            <div className="mt-6 pt-6 border-t border-[#e9e4f6]">
+              <p className="text-lg font-semibold text-[#29315a] mb-4">Share this product</p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleSocialShare("twitter")}
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-[#1DA1F2] text-white transition hover:opacity-80"
+                  aria-label="Share on Twitter"
+                  title="Share on Twitter"
+                >
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2s9 5 20 5a9.5 9.5 0 00-9-5.5c4.75 2.25 7-7 7-7" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSocialShare("facebook")}
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-[#1877F2] text-white transition hover:opacity-80"
+                  aria-label="Share on Facebook"
+                  title="Share on Facebook"
+                >
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <path d="M18 2h-3a6 6 0 00-6 6v3H7v4h2v8h4v-8h3l1-4h-4V8a1 1 0 011-1h3z" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSocialShare("instagram")}
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-[#E1306C] text-white transition hover:opacity-80"
+                  aria-label="Share on Instagram"
+                  title="Share on Instagram"
+                >
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                    <path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z" fill="#E1306C" />
+                    <circle cx="17.5" cy="6.5" r="1.5" fill="#E1306C" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSocialShare("pinterest")}
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-[#E60023] text-white transition hover:opacity-80"
+                  aria-label="Share on Pinterest"
+                  title="Share on Pinterest"
+                >
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" fill="#E60023" />
+                    <path d="M8 12c0 2.21 1.79 4 4 4s4-1.79 4-4-1.79-4-4-4-4 1.79-4 4zm6 0c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2z" fill="#E60023" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSocialShare("linkedin")}
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-[#0A66C2] text-white transition hover:opacity-80"
+                  aria-label="Share on LinkedIn"
+                  title="Share on LinkedIn"
+                >
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z" />
+                    <circle cx="4" cy="4" r="2" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSocialShare("whatsapp")}
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-[#25D366] text-white transition hover:opacity-80"
+                  aria-label="Share on WhatsApp"
+                  title="Share on WhatsApp"
+                >
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.67-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421-7.403h-.004a6.963 6.963 0 00-6.93 6.934c0 1.928.738 3.741 2.078 5.09L2.89 21.979l5.904-1.954a6.977 6.977 0 005.031 1.978h.005c3.865 0 7.01-3.145 7.01-7.010 0-1.873-.728-3.63-2.051-4.948a7.029 7.029 0 00-4.989-2.045" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -268,6 +396,19 @@ const ProductPage = () => {
             </button>
           )}
         </div>
+
+        {recommendedProducts.length > 0 && (
+          <div className="mt-12">
+            <h2 className="mb-8 text-3xl font-semibold text-[#161c35]">You might also like</h2>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {recommendedProducts.map((item) => (
+                <div key={item.id} onClick={() => dispatch(updateproductDetails(item))}>
+                  <ProductItem item={item} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
