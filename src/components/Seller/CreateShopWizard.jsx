@@ -71,7 +71,7 @@ const readStoredData = () => {
 };
 
 const CategoryIcon = ({ category }) => {
-  const iconClass = "h-8 w-8 text-[#7b37ff]";
+  const iconClass = "h-11 w-11 text-[#7b37ff]";
 
   if (category === "Home Decor") {
     return (
@@ -331,7 +331,7 @@ const CreateShopWizard = ({ stepKey }) => {
       />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(244,239,255,0.36),rgba(244,239,255,0.5))]" />
 
-      <div className="relative mx-auto max-w-[1420px] px-4 sm:px-6 xl:px-8">
+      <div className="relative mx-auto max-w-[1440px] px-4 sm:px-6 xl:px-12">
         <div className="mb-6 flex items-center justify-between gap-4 xl:mb-8">
           <Link
             href="/"
@@ -376,7 +376,7 @@ const CreateShopWizard = ({ stepKey }) => {
           </div>
         </div>
 
-        <div className="grid gap-5 xl:mx-auto xl:max-w-[1200px] xl:grid-cols-[290px_minmax(0,1fr)] xl:justify-center xl:gap-4">
+        <div className="grid gap-5 xl:mx-auto xl:grid-cols-[340px_1024px] xl:justify-center xl:gap-8">
           <aside className="rounded-[20px] border border-[#e4dbf7] bg-white/70 p-4 xl:bg-transparent xl:border-0 xl:p-1">
             <span className="inline-flex rounded-xl bg-[#e9ddff] px-4 py-2 text-sm font-semibold text-[#241651]">
               STEP 1 OF 3
@@ -402,7 +402,7 @@ const CreateShopWizard = ({ stepKey }) => {
             </div>
           </aside>
 
-          <div className="rounded-[26px] border border-[#e2d9f6] bg-white px-5 py-5 shadow-[0_10px_35px_rgba(66,40,130,0.08)] sm:px-6 sm:py-6 lg:px-7 xl:flex xl:w-full xl:max-w-[860px] xl:flex-col">
+          <div className="rounded-[32px] border border-[#e2d9f6] bg-white px-5 py-5 shadow-[0_10px_35px_rgba(66,40,130,0.08)] sm:px-6 sm:py-6 lg:px-7 xl:flex xl:h-[720px] xl:w-[1024px] xl:flex-col xl:px-[52px] xl:py-12">
             <h2 className="text-3xl font-semibold text-[#0f163a]">What are you interested in?</h2>
             <p className="mt-2 text-base text-[#5f6a93]">
               Select one or more categories that best match the products you want to sell.
@@ -414,7 +414,7 @@ const CreateShopWizard = ({ stepKey }) => {
               </p>
             )}
 
-            <div className="mt-6 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="mt-6 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:w-[760px] xl:grid-cols-[repeat(4,172px)] xl:gap-6">
               {categoryOptions.map((category) => {
                 const selected = form.categories.includes(category);
                 return (
@@ -422,21 +422,21 @@ const CreateShopWizard = ({ stepKey }) => {
                     key={category}
                     type="button"
                     onClick={() => handleCategoryToggle(category)}
-                    className={`relative flex aspect-square w-full flex-col items-center justify-center rounded-2xl border bg-white px-3 py-3 text-center transition ${
+                    className={`relative flex h-[148px] w-full flex-col items-center justify-center rounded-2xl bg-white px-3 py-3 text-center transition xl:w-[172px] ${
                       selected
-                        ? "border-[#7b37ff] bg-[#f8f3ff] shadow-[0_0_0_2px_rgba(123,55,255,0.08)]"
-                        : "border-[#e1e5f2] hover:border-[#8a50ff]"
+                        ? "border-2 border-[#7C3AED] bg-[#f8f3ff]"
+                        : "border border-[#e1e5f2] hover:border-[#8a50ff]"
                     }`}
                   >
                     {selected && (
-                      <span className="absolute right-2.5 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#6f30ff] text-white">
+                      <span className="absolute right-3 top-3 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#6f30ff] text-white">
                         <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
                           <path d="M6.5 12.5L10 16L17.5 8.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </span>
                     )}
                     <CategoryIcon category={category} />
-                    <span className="mt-2.5 text-lg font-semibold leading-tight text-[#121a40]">{category}</span>
+                    <span className="mt-2.5 text-lg font-medium leading-tight text-[#121a40]">{category}</span>
                   </button>
                 );
               })}
@@ -447,7 +447,7 @@ const CreateShopWizard = ({ stepKey }) => {
               <button
                 type="button"
                 onClick={handleStep1Next}
-                className="inline-flex h-12 min-w-[220px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6f30ff] to-[#7f49ff] px-7 text-lg font-semibold text-white transition hover:from-[#5f22eb] hover:to-[#7038f1]"
+                className="inline-flex h-16 w-[280px] items-center justify-center gap-2 rounded-[20px] bg-gradient-to-r from-[#6f30ff] to-[#7f49ff] px-7 text-xl font-semibold text-white transition hover:from-[#5f22eb] hover:to-[#7038f1]"
               >
                 Next
                 <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
