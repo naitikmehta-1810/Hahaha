@@ -8,6 +8,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { addItemToWishlist } from "@/redux/features/wishlist-slice";
 import { updateproductDetails } from "@/redux/features/product-details";
+import { generateProductSlug } from "@/utils/slugify";
 const SingleItem = ({ item }) => {
     var _a, _b, _c;
     const productImage = (_c = (_b = (_a = item.imgs) === null || _a === void 0 ? void 0 : _a.previews) === null || _b === void 0 ? void 0 : _b[0]) !== null && _c !== void 0 ? _c : "/images/products/product-1-bg-1.png";
@@ -43,8 +44,7 @@ const SingleItem = ({ item }) => {
           </div>
 
           <h3 className="font-medium text-dark ease-out duration-200 hover:text-blue mb-1.5">
-            <Link href="/product-page" onClick={handleProductDetails}> {item.title} </Link>
-          </h3>
+              <Link href={`/${generateProductSlug(item.title)}`} onClick={handleProductDetails}> {item.title} </Link>
 
           <span className="flex items-center justify-center gap-2 font-medium text-lg">
             <span className="text-dark">₹{item.discountedPrice}</span>

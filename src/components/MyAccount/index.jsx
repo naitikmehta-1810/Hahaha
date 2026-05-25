@@ -150,8 +150,8 @@ const MyAccount = () => {
       linkLabel: "View all orders",
       linkStyle: "text",
       onClick: () => setActiveTab("orders"),
-      iconBg: "bg-[#f2ecff]",
-      iconColor: "text-[#651fff]",
+      iconBg: "bg-blue-light-5",
+      iconColor: "text-blue",
       icon: (
         <SidebarIcon className="h-6 w-6">
           <path
@@ -167,8 +167,8 @@ const MyAccount = () => {
       linkLabel: "View wishlist",
       linkStyle: "text",
       href: "/wishlist",
-      iconBg: "bg-[#fceaf4]",
-      iconColor: "text-[#ec4899]",
+      iconBg: "bg-red-light-6",
+      iconColor: "text-red",
       icon: (
         <SidebarIcon className="h-6 w-6">
           <path
@@ -189,8 +189,8 @@ const MyAccount = () => {
       linkStyle: "text",
       alignActionRight: true,
       href: "/shop-with-sidebar",
-      iconBg: "bg-[#fff7e8]",
-      iconColor: "text-[#f59e0b]",
+      iconBg: "bg-yellow-light-4",
+      iconColor: "text-yellow-dark",
       icon: (
         <SidebarIcon className="h-6 w-6">
           <path
@@ -210,8 +210,8 @@ const MyAccount = () => {
       linkStyle: "text",
       alignActionRight: true,
       onClick: () => setActiveTab("account-details"),
-      iconBg: "bg-[#f2ecff]",
-      iconColor: "text-[#7c3aed]",
+      iconBg: "bg-blue-light-5",
+      iconColor: "text-blue",
       icon: (
         <SidebarIcon className="h-6 w-6">
           <path
@@ -417,7 +417,7 @@ const MyAccount = () => {
         <div className="max-w-[1470px] w-full mx-auto px-4 md:px-6 xl:px-8">
           <div className="grid gap-7 xl:grid-cols-[280px,1fr]">
             <div className="space-y-6">
-              <div className="rounded-xl border border-[#ece3f8] bg-white p-3">
+              <div className="rounded-xl border border-gray-3 bg-white p-3">
                 <div>
                   {sidebarItems.map((item) => {
                     if (item.type === "link") {
@@ -425,7 +425,7 @@ const MyAccount = () => {
                         <Link
                           key={item.label}
                           href={item.href}
-                          className="flex items-center gap-3 rounded-lg px-3 py-3 text-custom-sm text-dark-4 transition hover:bg-[#f8f2ff] hover:text-[#651fff]"
+                          className="flex items-center gap-3 rounded-lg px-3 py-3 text-custom-sm text-dark-4 transition hover:bg-gray-1 hover:text-blue"
                         >
                           {item.icon}
                           {item.label}
@@ -439,7 +439,7 @@ const MyAccount = () => {
                           type="button"
                           onClick={item.onClick}
                           disabled={item.disabled}
-                          className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-custom-sm text-dark-4 transition hover:bg-[#f8f2ff] hover:text-[#651fff] disabled:cursor-not-allowed disabled:opacity-70"
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-custom-sm text-dark-4 transition hover:bg-gray-1 hover:text-blue disabled:cursor-not-allowed disabled:opacity-70"
                         >
                           {item.icon}
                           {item.label}
@@ -453,8 +453,8 @@ const MyAccount = () => {
                         onClick={() => setActiveTab(item.value)}
                         className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-custom-sm transition ${
                           isActive
-                            ? "bg-[#f3edff] text-[#651fff] font-medium"
-                            : "text-dark-4 hover:bg-[#f8f2ff] hover:text-[#651fff]"
+                            ? "bg-blue-light-5 text-blue font-medium"
+                            : "text-dark-4 hover:bg-gray-1 hover:text-blue"
                         }`}
                       >
                         {item.icon}
@@ -466,14 +466,14 @@ const MyAccount = () => {
               </div>
 
               {!isSeller && (
-                <div className="rounded-xl border border-[#ece3f8] bg-white p-5">
-                  <h3 className="text-xl font-semibold text-[#4a1fb8]">Sell on Stuffsy</h3>
+                <div className="rounded-xl border border-gray-3 bg-white p-5">
+                  <h3 className="text-xl font-semibold text-dark">Sell on Stuffsy</h3>
                   <p className="mt-2 text-custom-sm text-dark-4">
                     Start your online store and grow your business with us.
                   </p>
                   <Link
                     href="/seller/create-shop/step_1"
-                    className="mt-5 inline-flex rounded-md bg-[#651fff] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#4d0fff]"
+                    className="mt-5 inline-flex rounded-md bg-blue px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-dark"
                   >
                     Start Selling
                   </Link>
@@ -488,12 +488,12 @@ const MyAccount = () => {
                 <div className="space-y-6">
                   <div>
                     <h1 className="text-3xl font-bold text-dark">My Account</h1>
-                    <p className="mt-2 text-lg text-[#344064]">
+                    <p className="mt-2 text-lg text-dark-4">
                       {isLoading ? "Loading account..." : `Welcome back, ${firstName || "there"}!`}
                     </p>
                   </div>
 
-                  <div className="overflow-hidden rounded-xl border border-[#ece3f8] bg-white">
+                  <div className="overflow-hidden rounded-xl border border-gray-3 bg-white">
                     <div className="p-6 sm:p-8 lg:p-9">
                       <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-center gap-4">
@@ -507,7 +507,7 @@ const MyAccount = () => {
                           <div>
                             <div className="flex flex-wrap items-center gap-3">
                               <p className="text-2xl font-semibold text-dark">{fullName || "My Account"}</p>
-                              <span className="rounded-[20px] bg-[#f3edff] px-3 py-1 text-custom-xs font-medium text-[#651fff]">
+                              <span className="rounded-[20px] bg-blue-light-5 px-3 py-1 text-custom-xs font-medium text-blue">
                                 Verified
                               </span>
                             </div>
@@ -519,7 +519,7 @@ const MyAccount = () => {
                         </div>
                         <button
                           onClick={() => setActiveTab("account-details")}
-                          className="inline-flex rounded-lg border border-[#dccdf8] px-5 py-2.5 text-custom-sm font-medium text-[#651fff] hover:border-[#651fff]"
+                          className="inline-flex rounded-lg border border-gray-3 px-5 py-2.5 text-custom-sm font-medium text-blue hover:border-blue"
                         >
                           Edit Profile
                         </button>
@@ -529,7 +529,7 @@ const MyAccount = () => {
 
                   <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
                     {statCards.map((card) => (
-                      <div key={card.title} className="rounded-xl border border-[#ece3f8] bg-white p-5">
+                      <div key={card.title} className="rounded-xl border border-gray-3 bg-white p-5">
                         <div className="flex items-center gap-4">
                           <div className={`flex h-16 w-16 items-center justify-center rounded-full ${card.iconBg} ${card.iconColor}`}>
                             {card.icon}
@@ -543,10 +543,10 @@ const MyAccount = () => {
                         {card.href ? (
                           <Link
                             href={card.href}
-                            className={`mt-4 inline-flex items-center text-sm font-semibold text-[#651fff] transition hover:text-[#4d0fff] ${
+                            className={`mt-4 inline-flex items-center text-sm font-semibold text-blue transition hover:text-blue-dark ${
                               card.linkStyle === "text"
                                 ? `gap-2 ${card.alignActionRight ? "ml-auto" : ""}`
-                                : "justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 hover:border-[#651fff] hover:bg-[#f3ecff]"
+                                : "justify-center rounded-md border border-gray-3 bg-gray-1 px-4 py-2 hover:border-blue hover:bg-gray-1"
                             }`}
                           >
                             {card.linkLabel}
@@ -555,10 +555,10 @@ const MyAccount = () => {
                         ) : (
                           <button
                             onClick={card.onClick}
-                            className={`mt-4 inline-flex items-center text-sm font-semibold text-[#651fff] transition hover:text-[#4d0fff] ${
+                            className={`mt-4 inline-flex items-center text-sm font-semibold text-blue transition hover:text-blue-dark ${
                               card.linkStyle === "text"
                                 ? `gap-2 ${card.alignActionRight ? "ml-auto" : ""}`
-                                : "justify-center rounded-md border border-[#dccdf8] bg-[#faf7ff] px-4 py-2 hover:border-[#651fff] hover:bg-[#f3ecff]"
+                                : "justify-center rounded-md border border-gray-3 bg-gray-1 px-4 py-2 hover:border-blue hover:bg-gray-1"
                             }`}
                           >
                             {card.linkLabel}
@@ -570,12 +570,12 @@ const MyAccount = () => {
                   </div>
 
                   <div className="grid gap-6 xl:grid-cols-2">
-                    <div className="rounded-xl border border-[#ece3f8] bg-white p-5">
-                      <div className="mb-4 flex items-center justify-between border-b border-[#f0ebf8] pb-4">
+                    <div className="rounded-xl border border-gray-3 bg-white p-5">
+                      <div className="mb-4 flex items-center justify-between border-b border-gray-3 pb-4">
                         <h3 className="text-2xl font-semibold text-dark">Recent Orders</h3>
                         <button
                           onClick={() => setActiveTab("orders")}
-                          className="inline-flex items-center gap-2 text-sm font-semibold text-[#651fff] transition hover:text-[#4d0fff]"
+                          className="inline-flex items-center gap-2 text-sm font-semibold text-blue transition hover:text-blue-dark"
                         >
                           View all orders
                           <span aria-hidden="true">&rarr;</span>
@@ -584,7 +584,7 @@ const MyAccount = () => {
 
                       <div className="space-y-4">
                         {recentOrders.slice(0, 3).map((order, index) => (
-                          <div key={order.orderId} className="flex gap-4 rounded-lg border border-[#f0ebf8] p-3">
+                          <div key={order.orderId} className="flex gap-4 rounded-lg border border-gray-3 p-3">
                             <Image
                               src={`/images/products/product-${(index % 4) + 1}-bg-1.png`}
                               alt={order.title}
@@ -615,12 +615,12 @@ const MyAccount = () => {
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-[#ece3f8] bg-white p-5">
-                      <div className="mb-4 border-b border-[#f0ebf8] pb-4">
+                    <div className="rounded-xl border border-gray-3 bg-white p-5">
+                      <div className="mb-4 border-b border-gray-3 pb-4">
                         <h3 className="text-2xl font-semibold text-dark">Account Overview</h3>
                       </div>
 
-                      <div className="divide-y divide-[#f0ebf8]">
+                      <div className="divide-y divide-gray-3">
                         {accountOverviewItems.map((item) => (
                           <div key={item.label} className="grid gap-2 py-4 sm:grid-cols-[220px,1fr]">
                             <p className="text-custom-sm text-dark-4">{item.label}</p>
@@ -633,12 +633,12 @@ const MyAccount = () => {
                 </div>
               )}
 
-              {activeTab === "orders" && (<div className="bg-white rounded-xl border border-[#ece3f8] shadow-1">
+              {activeTab === "orders" && (<div className="bg-white rounded-xl border border-gray-3 shadow-1">
                   <Orders />
                 </div>)}
 
               {activeTab === "downloads" && (
-                <div className="rounded-xl border border-[#ece3f8] bg-white p-6 sm:p-8">
+                <div className="rounded-xl border border-gray-3 bg-white p-6 sm:p-8">
                   <h3 className="text-xl font-semibold text-dark">Downloads</h3>
                   <p className="mt-3 text-custom-sm text-dark-4">
                     No downloadable products are available yet.
@@ -647,7 +647,7 @@ const MyAccount = () => {
               )}
 
               {activeTab === "addresses" && (
-                <div className="rounded-xl border border-[#ece3f8] bg-white p-6 sm:p-8">
+                <div className="rounded-xl border border-gray-3 bg-white p-6 sm:p-8">
                   <h3 className="text-xl font-semibold text-dark">Addresses</h3>
                   <p className="mt-3 text-custom-sm text-dark-4">
                     You can manage your primary address from your account details.
@@ -655,7 +655,7 @@ const MyAccount = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab("account-details")}
-                    className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#651fff] hover:text-[#4d0fff]"
+                    className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-blue hover:text-blue-dark"
                   >
                     Manage address
                     <span aria-hidden="true">&rarr;</span>
@@ -664,7 +664,7 @@ const MyAccount = () => {
               )}
 
               {activeTab === "payment-methods" && (
-                <div className="rounded-xl border border-[#ece3f8] bg-white p-6 sm:p-8">
+                <div className="rounded-xl border border-gray-3 bg-white p-6 sm:p-8">
                   <h3 className="text-xl font-semibold text-dark">Payment Methods</h3>
                   <p className="mt-3 text-custom-sm text-dark-4">
                     No saved payment methods are available for this account yet.
@@ -673,7 +673,7 @@ const MyAccount = () => {
               )}
 
               {activeTab === "reviews" && (
-                <div className="rounded-xl border border-[#ece3f8] bg-white p-6 sm:p-8">
+                <div className="rounded-xl border border-gray-3 bg-white p-6 sm:p-8">
                   <h3 className="text-xl font-semibold text-dark">Reviews</h3>
                   <p className="mt-3 text-custom-sm text-dark-4">
                     Your submitted product reviews will appear here.
@@ -682,7 +682,7 @@ const MyAccount = () => {
               )}
 
               {activeTab === "account-details" && (<div className="flex flex-col gap-6">
-                  <form onSubmit={handleProfileSubmit} className="bg-white rounded-xl border border-[#ece3f8] shadow-1 p-6 sm:p-8">
+                  <form onSubmit={handleProfileSubmit} className="bg-white rounded-xl border border-gray-3 shadow-1 p-6 sm:p-8">
                     <h3 className="font-medium text-dark text-xl mb-5">Profile Details</h3>
                     {profileMessage && <p className="mb-4 text-blue">{profileMessage}</p>}
                     <div className="grid sm:grid-cols-2 gap-5 mb-5">
@@ -710,7 +710,7 @@ const MyAccount = () => {
                     </button>
                   </form>
 
-                  <form onSubmit={handlePasswordSubmit} className="bg-white rounded-xl border border-[#ece3f8] shadow-1 p-6 sm:p-8">
+                  <form onSubmit={handlePasswordSubmit} className="bg-white rounded-xl border border-gray-3 shadow-1 p-6 sm:p-8">
                     <h3 className="font-medium text-dark text-xl mb-5">Password Change</h3>
                     {passwordMessage && <p className="mb-4 text-blue">{passwordMessage}</p>}
                     <div className="mb-5">

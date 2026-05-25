@@ -7,6 +7,7 @@ import { addItemToWishlist } from "@/redux/features/wishlist-slice";
 import { updateproductDetails } from "@/redux/features/product-details";
 import { useDispatch } from "react-redux";
 import Link from "next/link";
+import { generateProductSlug } from "@/utils/slugify";
 import Image from "next/image";
 const SingleGridItem = ({ item }) => {
     var _a, _b, _c;
@@ -67,7 +68,7 @@ const SingleGridItem = ({ item }) => {
       </div>
 
       <h3 className="font-medium text-dark ease-out duration-200 hover:text-blue mb-1.5">
-        <Link href="/product-page" onClick={handleProductDetails}> {item.title} </Link>
+        <Link href={`/${generateProductSlug(item.title)}`} onClick={handleProductDetails}> {item.title} </Link>
       </h3>
 
       <span className="flex items-center gap-2 font-medium text-lg">

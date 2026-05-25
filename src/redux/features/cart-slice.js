@@ -1,4 +1,11 @@
 import { createSelector, createSlice } from "@reduxjs/toolkit";
+
+const generateCartItemId = (id, selectedVariant) => {
+  if (!selectedVariant) return id;
+  const variantKey = Object.values(selectedVariant).filter(Boolean).join("_");
+  return variantKey ? `${id}_${variantKey}` : id;
+};
+
 const initialState = {
     items: [],
 };
@@ -7,29 +14,32 @@ export const cart = createSlice({
     initialState,
     reducers: {
         addItemToCart: (state, action) => {
-            const { id, title, price, quantity, discountedPrice, imgs } = action.payload;
-            const existingItem = state.items.find((item) => item.id === id);
+            const { id, title, price, quantity, discountedPrice, imgs, selectedVariant } = action.payload;
+            const cartItemId = generateCartItemId(id, selectedVariant);
+            const existingItem = state.items.find((item) => item.cartItemId === cartItemId);
             if (existingItem) {
                 existingItem.quantity += quantity;
             }
             else {
                 state.items.push({
+                    cartItemId,
                     id,
                     title,
                     price,
                     quantity,
                     discountedPrice,
                     imgs,
+                    selectedVariant: selectedVariant || null,
                 });
             }
         },
         removeItemFromCart: (state, action) => {
-            const itemId = action.payload;
-            state.items = state.items.filter((item) => item.id !== itemId);
+            const cartItemId = action.payload;
+            state.items = state.items.filter((item) => item.cartItemId !== cartItemId);
         },
         updateCartItemQuantity: (state, action) => {
-            const { id, quantity } = action.payload;
-            const existingItem = state.items.find((item) => item.id === id);
+            const { cartItemId, quantity } = action.payload;
+            const existingItem = state.items.find((item) => item.cartItemId === cartItemId);
             if (existingItem) {
                 existingItem.quantity = quantity;
             }

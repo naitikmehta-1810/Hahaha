@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Heart, ShoppingCart } from "lucide-react";
+import { Heart, ShoppingCart, Search, MapPin, ChevronDown, Menu, User, LogOut, ShoppingBag, Landmark } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAppSelector } from "@/redux/store";
 import { useCartModalContext } from "@/app/context/CartSidebarModalContext";
@@ -12,19 +12,6 @@ import {
   getCachedUserDisplayName,
   setCachedUserDisplayName,
 } from "@/utils/auth/user-cache";
-
-const HeaderIcon = ({ children, className = "" }) => (
-  <svg
-    className={className}
-    width="28"
-    height="28"
-    viewBox="0 0 24 24"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    {children}
-  </svg>
-);
 
 const Header = () => {
   const router = useRouter();
@@ -36,6 +23,8 @@ const Header = () => {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isCheckingAccount, setIsCheckingAccount] = useState(false);
+  const [selectedSearchCat, setSelectedSearchCat] = useState("All");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const loadCurrentUser = async () => {
     try {
@@ -72,11 +61,8 @@ const Header = () => {
     if (isCheckingAccount) return;
 
     if (signedInUserName) {
-      const nextOpenState = !accountMenuOpen;
-      setAccountMenuOpen(nextOpenState);
-      if (nextOpenState) {
-        void loadCurrentUser();
-      }
+      setAccountMenuOpen(!accountMenuOpen);
+      void loadCurrentUser();
       return;
     }
 
@@ -120,155 +106,254 @@ const Header = () => {
     return () => window.removeEventListener(USER_DISPLAY_NAME_CHANGED_EVENT, handleUserDisplayNameChanged);
   }, []);
 
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/shop-with-sidebar?search=${encodeURIComponent(searchQuery)}`);
+    } else {
+      router.push("/shop-with-sidebar");
+    }
+  };
+
   return (
-    <header className="z-9999 w-full border-b border-[#e6dff1] bg-white shadow-[0_12px_35px_rgba(45,36,76,0.08)]">
-      <div className="mx-auto w-full max-w-[1470px] px-4 md:px-6 xl:px-8">
-        <div className="flex min-h-[86px] items-center gap-4">
-          <Link
-            href="/"
-            className="flex shrink-0 items-center gap-3 text-[28px] font-bold tracking-tight text-black"
-            aria-label="Stuffsy home"
-          >
-            <Image
-              src="/images/logo/Stuffsy_logo.png"
-              alt="Stuffsy Logo"
-              width={44}
-              height={44}
-              className="h-10 w-10 object-contain"
-              priority
-            />
-            <span className="hidden xsm:block">Stuffsy</span>
-          </Link>
+    <header className="z-[999] w-full bg-slate-900 text-white shadow-md">
+      {/* Top Navbar */}
+      <div className="mx-auto w-full max-w-[1500px] px-4 py-2 flex items-center justify-between gap-4 md:gap-6">
+        
+         {/* Left Logo Section */}
+         <div className="flex items-center gap-6 shrink-0">
+           <Link
+             href="/"
+             className="flex items-center gap-2 text-2xl font-bold tracking-tight text-white hover:ring-1 hover:ring-white p-1 rounded-sm duration-150"
+             aria-label="Stuffsy home"
+           >
+             <Image
+               src="/images/logo/Stuffsy_logo.png"
+               alt="Stuffsy Logo"
+               width={34}
+               height={34}
+               className="h-9 w-9 object-contain brightness-110"
+               priority
+             />
+             <span className="hidden sm:inline-block font-extrabold text-white tracking-wide">stuffsy</span>
+           </Link>
 
-          <form
-            className="mx-auto hidden w-full max-w-[805px] md:block"
-            onSubmit={(event) => event.preventDefault()}
-          >
-            <label htmlFor="site-search" className="relative block">
-              <input
-                id="site-search"
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search for products, categories, shops..."
-                autoComplete="off"
-                className="h-13 w-full rounded-lg border border-[#ded3ef] bg-[#fdf9ff] py-2.5 pl-5 pr-12 text-custom-sm font-medium text-[#24304f] outline-none duration-200 placeholder:text-[#344064] focus:border-[#8b3dff] focus:ring-4 focus:ring-[#8b3dff]/10"
-              />
-              <button
-                type="submit"
-                aria-label="Search"
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#344064] transition hover:text-[#7418ff]"
-              >
-                <HeaderIcon className="h-5.5 w-5.5">
-                  <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M16 16L21 21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </HeaderIcon>
-              </button>
-            </label>
-          </form>
+           {/* Deliver to Location Box (Mock) */}
+           <div className="hidden lg:flex items-center gap-1.5 hover:ring-1 hover:ring-white p-1.5 rounded-sm cursor-pointer duration-150">
+             <MapPin className="h-5 w-5 text-slate-300 mt-2" />
+             <div className="text-left text-xs leading-none">
+               <span className="text-slate-400 block font-normal">Deliver to</span>
+               <span className="text-white font-bold block mt-0.5">Mumbai / 400001</span>
+             </div>
+           </div>
+         </div>
 
-          <div className="ml-auto flex shrink-0 items-center gap-4 sm:gap-7">
-            <Link
-              href="/wishlist"
-              aria-label="Wishlist"
-              className="hidden text-[#253050] transition hover:text-[#7418ff] sm:inline-flex"
+        {/* Center Search Bar */}
+        <form
+          className="flex-1 hidden md:flex items-center h-10 rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-amber-500 shadow-sm"
+          onSubmit={handleSearchSubmit}
+        >
+          <div className="relative h-full shrink-0">
+            <select
+              value={selectedSearchCat}
+              onChange={(e) => setSelectedSearchCat(e.target.value)}
+              className="h-full px-3 text-xs bg-slate-100 hover:bg-slate-200 border-r border-slate-300 text-slate-700 outline-none cursor-pointer font-medium rounded-l-lg"
             >
-              <Heart className="h-7 w-7" />
-            </Link>
+              <option>All</option>
+              <option>Home Decor</option>
+              <option>Jewelry</option>
+              <option>Clothing</option>
+              <option>Art & Collectibles</option>
+              <option>Beauty</option>
+            </select>
+          </div>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search for products, categories, creators..."
+            autoComplete="off"
+            className="w-full h-full px-4 py-2 text-sm text-slate-900 placeholder-slate-500 outline-none"
+          />
+          <button
+            type="submit"
+            aria-label="Search"
+            className="h-full px-6 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-900 transition font-bold flex items-center justify-center rounded-r-lg"
+          >
+            <Search className="h-5 w-5 text-slate-900 stroke-[2.5]" />
+          </button>
+        </form>
 
+        {/* Right Action Icons */}
+        <div className="flex items-center gap-2 sm:gap-4 md:gap-6 shrink-0">
+          
+          {/* Language Flag (Mock) */}
+          <div className="hidden md:flex items-center gap-1.5 hover:ring-1 hover:ring-white p-2 rounded-sm cursor-pointer duration-150 text-xs font-bold text-white">
+            <span className="text-base leading-none">🇮🇳</span>
+            <span>EN</span>
+            <ChevronDown className="h-3 w-3 text-slate-300" />
+          </div>
+
+          {/* Account Dropdown */}
+          <div className="relative">
             <button
               type="button"
-              onClick={openCartModal}
-              aria-label="Open cart"
-              className="relative text-[#253050] transition hover:text-[#7418ff]"
+              onClick={handleAccountClick}
+              disabled={isCheckingAccount}
+              className="flex items-center gap-1 text-left hover:ring-1 hover:ring-white p-1.5 rounded-sm duration-150 disabled:cursor-wait"
             >
-              <ShoppingCart className="h-8 w-8" />
-              <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#651fff] px-1 text-xs font-bold leading-none text-white">
-                {cartItems.length}
-              </span>
+              <div className="hidden sm:block text-xs leading-none">
+                <span className="text-slate-400 block font-normal">
+                  Hello, {signedInUserName ? signedInUserName.split(" ")[0] : "sign in"}
+                </span>
+                <span className="text-white font-bold block mt-0.5 flex items-center gap-0.5">
+                  Account & Lists
+                  <ChevronDown className="h-3 w-3 text-slate-300" />
+                </span>
+              </div>
+              <div className="sm:hidden flex items-center justify-center h-9 w-9 rounded-full bg-slate-700">
+                <User className="h-5 w-5 text-slate-300" />
+              </div>
             </button>
 
-            <div className="relative">
-              <button
-                type="button"
-                onClick={handleAccountClick}
-                aria-label={signedInUserName ? "Account menu" : "Sign in"}
-                disabled={isCheckingAccount}
-                className="flex items-center gap-2 disabled:cursor-wait disabled:opacity-70"
-              >
-                <Image
-                  src="/images/users/user-01.jpg"
-                  alt=""
-                  width={42}
-                  height={42}
-                  className="h-10.5 w-10.5 rounded-full object-cover ring-2 ring-[#eee8f6]"
-                />
-                {signedInUserName && (
-                  <span className="hidden max-w-[130px] text-left lg:block">
-                    <span className="block truncate text-custom-sm font-semibold text-black">
-                      {signedInUserName}
-                    </span>
-                    {isSeller && <span className="block text-2xs text-[#344064]">Seller</span>}
-                  </span>
-                )}
-              </button>
-
-              {signedInUserName && accountMenuOpen && (
-                <div className="absolute right-0 top-full z-99999 mt-3 w-48 rounded-lg border border-[#e7def4] bg-white py-2 shadow-[0_16px_40px_rgba(52,48,75,0.14)]">
-                  <Link
-                    href="/my-account"
-                    onClick={() => setAccountMenuOpen(false)}
-                    className="block px-4 py-2 text-custom-sm font-medium text-dark hover:bg-[#f8f2ff] hover:text-[#7418ff]"
-                  >
-                    My Account
-                  </Link>
-                  <Link
-                    href={isSeller ? "/seller" : "/seller/create-shop/step_1"}
-                    onClick={() => setAccountMenuOpen(false)}
-                    className="block px-4 py-2 text-custom-sm font-medium text-dark hover:bg-[#f8f2ff] hover:text-[#7418ff]"
-                  >
-                    {isSeller ? "Seller Page" : "Make Your Own Shop"}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    disabled={isLoggingOut}
-                    className="block w-full px-4 py-2 text-left text-custom-sm font-medium text-dark hover:bg-[#f8f2ff] hover:text-[#7418ff] disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {isLoggingOut ? "Logging out..." : "Logout"}
-                  </button>
+            {signedInUserName && accountMenuOpen && (
+              <div className="absolute right-0 top-full z-[1000] mt-1 w-52 rounded-md border border-slate-700 bg-slate-800 py-2 shadow-xl text-slate-100">
+                <div className="px-4 py-2 border-b border-slate-700 mb-1">
+                  <p className="text-xs text-slate-400">Signed in as</p>
+                  <p className="text-sm font-semibold truncate text-amber-400">{signedInUserName}</p>
+                  {isSeller && <span className="inline-block mt-1 text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">Seller Dashboard Active</span>}
                 </div>
-              )}
-            </div>
+                <Link
+                  href="/my-account"
+                  onClick={() => setAccountMenuOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-slate-700 hover:text-white"
+                >
+                  <User className="h-4 w-4 text-slate-400" />
+                  My Account
+                </Link>
+                <Link
+                  href={isSeller ? "/seller" : "/seller/create-shop/step_1"}
+                  onClick={() => setAccountMenuOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-slate-700 hover:text-white"
+                >
+                  <ShoppingBag className="h-4 w-4 text-slate-400" />
+                  {isSeller ? "Seller Panel" : "Become a Seller"}
+                </Link>
+                <Link
+                  href="/wishlist"
+                  onClick={() => setAccountMenuOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-slate-700 hover:text-white"
+                >
+                  <Heart className="h-4 w-4 text-slate-400" />
+                  My Wishlist
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-red-900/40 hover:text-red-200 border-t border-slate-700 mt-1 disabled:opacity-50"
+                >
+                  <LogOut className="h-4 w-4 text-red-400" />
+                  {isLoggingOut ? "Signing out..." : "Sign Out"}
+                </button>
+              </div>
+            )}
           </div>
-        </div>
 
-        <div className="border-t border-[#eee7f8] px-4 pb-4 md:hidden">
-          <form className="pt-4" onSubmit={(event) => event.preventDefault()}>
-            <label htmlFor="site-search-mobile" className="relative block">
-              <input
-                id="site-search-mobile"
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search for anything..."
-                autoComplete="off"
-                className="h-11 w-full rounded-lg border border-[#ded3ef] bg-[#fdf9ff] py-2.5 pl-4 pr-11 text-custom-sm font-medium text-[#24304f] outline-none placeholder:text-[#344064] focus:border-[#8b3dff] focus:ring-4 focus:ring-[#8b3dff]/10"
-              />
-              <button
-                type="submit"
-                aria-label="Search"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#344064]"
-              >
-                <HeaderIcon className="h-5 w-5">
-                  <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M16 16L21 21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </HeaderIcon>
-              </button>
-            </label>
-          </form>
+          {/* Returns & Orders Track */}
+          <Link
+            href="/my-account"
+            className="hidden sm:flex flex-col text-left hover:ring-1 hover:ring-white p-1.5 rounded-sm duration-150 text-xs leading-none"
+          >
+            <span className="text-slate-400 block font-normal">Returns</span>
+            <span className="text-white font-bold block mt-0.5">& Orders</span>
+          </Link>
+
+          {/* Cart Icon Section */}
+          <button
+            type="button"
+            onClick={openCartModal}
+            aria-label="Open cart"
+            className="flex items-center gap-1.5 hover:ring-1 hover:ring-white p-2 rounded-sm duration-150 relative text-white"
+          >
+            <div className="relative">
+              <ShoppingCart className="h-7 w-7 text-white stroke-[2]" />
+              <span className="absolute -right-2 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-xs font-bold leading-none text-slate-900 ring-2 ring-slate-900">
+                {cartItems.length}
+              </span>
+            </div>
+            <span className="hidden md:inline-block font-extrabold text-sm text-white mt-1.5">Cart</span>
+          </button>
+          
+          {/* Mobile Menu Trigger */}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-slate-800 text-white"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
         </div>
       </div>
+
+       {/* Sub-Header bar */}
+       <div className="bg-slate-800 text-white text-xs border-t border-slate-700/50 shadow-inner">
+         <div className="mx-auto w-full max-w-[1500px] px-4 py-2 flex items-center justify-between gap-6 overflow-x-auto whitespace-nowrap">
+           <div className="flex items-center gap-4 sm:gap-6 font-semibold">
+             <Link href="/shop-with-sidebar" className="flex items-center gap-1 text-slate-100 hover:text-white duration-150">
+               <Menu className="h-4 w-4" />
+               All Categories
+             </Link>
+             <Link href="/shop-with-sidebar?filter=bestseller" className="text-slate-300 hover:text-white duration-150">
+               Best Sellers
+             </Link>
+             <Link href="/shop-with-sidebar" className="text-slate-300 hover:text-white duration-150">
+               Deals
+             </Link>
+             <Link href="/shop-with-sidebar?filter=new" className="text-slate-300 hover:text-white duration-150">
+               New Arrivals
+             </Link>
+             <Link href="/seller/create-shop/step_1" className="text-slate-300 hover:text-white duration-150 flex items-center gap-1 text-amber-400">
+               <Landmark className="h-3.5 w-3.5" />
+               Sell on Stuffsy
+             </Link>
+             <Link href="/contact" className="text-slate-300 hover:text-white duration-150">
+               Customer Service
+             </Link>
+           </div>
+
+           <div className="hidden sm:block text-slate-400 text-[11px] font-medium italic">
+             🔥 Super Saver Deals Live: Free Shipping over ₹999!
+           </div>
+         </div>
+       </div>
+
+      {/* Mobile Search & Menu Overlay */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-slate-900 border-t border-slate-800 p-4 space-y-4 animate-fade-in">
+          {/* Mobile Search Bar */}
+          <form className="flex items-center h-10 rounded overflow-hidden bg-white" onSubmit={handleSearchSubmit}>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search products..."
+              className="w-full h-full px-4 text-sm text-slate-900 outline-none"
+            />
+            <button type="submit" className="h-full px-4 bg-amber-500 text-slate-900 flex items-center justify-center">
+              <Search className="h-4 w-4 stroke-[2.5]" />
+            </button>
+          </form>
+
+          {/* Quick links for mobile */}
+          <div className="grid grid-cols-2 gap-3 text-sm font-medium py-2">
+            <Link href="/shop-with-sidebar" className="text-slate-300 hover:text-white py-1">Shop Catalog</Link>
+            <Link href="/wishlist" className="text-slate-300 hover:text-white py-1 flex items-center gap-1.5"><Heart className="h-4 w-4 text-red-500" /> Wishlist</Link>
+            <Link href="/my-account" className="text-slate-300 hover:text-white py-1">My Orders</Link>
+            <Link href="/contact" className="text-slate-300 hover:text-white py-1">Support Help</Link>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
