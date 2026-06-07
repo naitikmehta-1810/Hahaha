@@ -1,0 +1,55 @@
+.text {
+  font-family: var(--font-family);
+  line-height: 1.5;
+}
+
+/* Sizes */
+.xs {
+  font-size: 0.75rem;
+}
+
+.sm {
+  font-size: 0.875rem;
+}
+
+.md {
+  font-size: 1rem;
+}
+
+.lg {
+  font-size: 1.125rem;
+}
+
+/* Weights */
+.normal {
+  font-weight: 400;
+}
+
+.medium {
+  font-weight: 500;
+}
+
+.semibold {
+  font-weight: 600;
+}
+
+.bold {
+  font-weight: 700;
+}
+
+/* Colors */
+.main {
+  color: var(--color-text-main);
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.light {
+  color: var(--color-text-light);
+}
+
+.primary {
+  color: var(--color-primary);
+}

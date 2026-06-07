@@ -1,5 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://stuffsy.app/sitemap.xml
-# Sitemap points to the production domain
