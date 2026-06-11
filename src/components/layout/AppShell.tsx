@@ -11,7 +11,7 @@ export default function AppShell({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname();
-  const isAuthRoute = pathname === "/login";
+  const isAuthRoute = pathname === "/login" || pathname === "/signup";
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", flexDirection: "column" }}>
