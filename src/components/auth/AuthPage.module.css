@@ -7,20 +7,22 @@
   gap: 24px;
 }
 
-.shell {
+.card {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(320px, 0.92fr) minmax(420px, 1.08fr);
-  gap: 18px;
+  grid-template-columns: minmax(320px, 0.92fr) 1px minmax(420px, 1.08fr);
+  gap: 0;
   width: 100%;
   max-width: 1500px;
   margin: 0 auto;
-}
-
-.panel {
   border: 1px solid #e9ddff;
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 20px 55px rgba(124, 58, 237, 0.08);
+  overflow: hidden;
+}
+
+.panel {
   min-height: 840px;
 }
 
@@ -40,6 +42,11 @@
   background:
     linear-gradient(180deg, rgba(248, 244, 255, 0.95), rgba(243, 234, 255, 0.65)),
     #fff;
+}
+
+.dividerLine {
+  width: 1px;
+  background: #ebe1ff;
 }
 
 .brandRow {
@@ -427,6 +434,12 @@
   font-weight: 600;
 }
 
+.googleIcon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 .facebookIcon {
   width: 18px;
   height: 18px;
@@ -478,8 +491,12 @@
 }
 
 @media (max-width: 1200px) {
-  .shell {
+  .card {
     grid-template-columns: 1fr;
+  }
+
+  .dividerLine {
+    display: none;
   }
 
   .panel {

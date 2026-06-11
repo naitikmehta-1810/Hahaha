@@ -47,7 +47,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
 
   return (
     <div className={styles.page}>
-      <div className={styles.shell}>
+      <div className={styles.card}>
         <section className={`${styles.panel} ${styles.leftPanel} ${isSignIn ? styles.signInTone : styles.signUpTone}`}>
           <div className={styles.brandRow}>
             <span className={styles.brandMark}>sj</span>
@@ -97,6 +97,8 @@ export default function AuthPage({ mode }: AuthPageProps) {
           </ul>
         </section>
 
+        <span className={styles.dividerLine} aria-hidden="true" />
+
         <section className={styles.panel}>
           <div className={styles.formWrap}>
             <div className={styles.formHeader}>
@@ -114,7 +116,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
                   <span>Full Name</span>
                   <div className={styles.inputWrap}>
                     <User className={styles.inputIcon} size={18} />
-                    <input type="text" placeholder="Enter your full name" className={styles.input} />
+                    <input required type="text" placeholder="Enter your full name" className={styles.input} />
                   </div>
                 </label>
               )}
@@ -123,25 +125,24 @@ export default function AuthPage({ mode }: AuthPageProps) {
                 <span>Email Address</span>
                 <div className={styles.inputWrap}>
                   <Mail className={styles.inputIcon} size={18} />
-                  <input type="email" placeholder="Enter your email address" className={styles.input} />
+                  <input required type="email" placeholder="Enter your email address" className={styles.input} />
                 </div>
               </label>
 
-              {!isSignIn && (
-                <label className={styles.field}>
-                  <span>Phone Number (Optional)</span>
-                  <div className={styles.inputWrap}>
-                    <Phone className={styles.inputIcon} size={18} />
-                    <input type="tel" placeholder="Enter your phone number" className={styles.input} />
-                  </div>
-                </label>
-              )}
+              <label className={styles.field}>
+                <span>Phone Number</span>
+                <div className={styles.inputWrap}>
+                  <Phone className={styles.inputIcon} size={18} />
+                  <input required type="tel" placeholder="Enter your phone number" className={styles.input} />
+                </div>
+              </label>
 
               <label className={styles.field}>
                 <span>{isSignIn ? "Password" : "Password"}</span>
                 <div className={styles.inputWrap}>
                   <Lock className={styles.inputIcon} size={18} />
                   <input
+                    required
                     type="password"
                     placeholder={isSignIn ? "Enter your password" : "Create a password"}
                     className={styles.input}
@@ -157,7 +158,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
                   <span>Confirm Password</span>
                   <div className={styles.inputWrap}>
                     <Lock className={styles.inputIcon} size={18} />
-                    <input type="password" placeholder="Confirm your password" className={styles.input} />
+                    <input required type="password" placeholder="Confirm your password" className={styles.input} />
                     <button type="button" className={styles.eyeButton} aria-label="Show confirm password">
                       <Eye size={18} />
                     </button>
@@ -177,7 +178,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
                 </div>
               ) : (
                 <label className={styles.terms}>
-                  <input type="checkbox" className={styles.checkbox} defaultChecked />
+                  <input required type="checkbox" className={styles.checkbox} defaultChecked />
                   <span>
                     I agree to the{" "}
                     <a href="#" className={styles.link}>
@@ -204,7 +205,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
 
               <div className={styles.socialRow}>
                 <button type="button" className={styles.socialButton}>
-                  <svg viewBox="0 0 48 48" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true" className={styles.googleIcon}>
                     <path fill="#FFC107" d="M43.6 20.4H42V20H24v8h11.3C34.9 31.9 30.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8.1 3.2l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.6z" />
                     <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16.1 19 12 24 12c3.1 0 5.9 1.2 8.1 3.2l5.7-5.7C34.1 6.1 29.3 4 24 4c-7.9 0-14.7 4.4-17.7 10.7z" />
                     <path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.3l-6.3-5.2C29.3 35.1 26.8 36 24 36c-6.1 0-11.2-3.9-13.1-9.3l-6.5 5C7.3 38.4 15 44 24 44z" />
