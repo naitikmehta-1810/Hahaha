@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Header from "@/components/layout/Header/Header";
-import Footer from "@/components/layout/Footer/Footer";
+import AppShell from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
   title: "Stuffsy - Discover Unique Handmade Treasures",
@@ -16,11 +15,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Header />
-        <main style={{ flex: 1, minHeight: "calc(100vh - 80px)" }}>{children}</main>
-        <Footer />
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
 }
-
