@@ -1,4 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import type { FormEvent } from "react";
 import {
   ArrowRight,
   Eye,
@@ -42,22 +47,97 @@ const features = [
   },
 ];
 
+const apiBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:4000";
+
 export default function AuthPage({ mode }: AuthPageProps) {
   const isSignIn = mode === "signin";
+  const router = useRouter();
+  const [status, setStatus] = useState<{ type: "error" | "success"; message: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatus(null);
+    setIsSubmitting(true);
+
+    const formData = new FormData(event.currentTarget);
+    const rememberMe = isSignIn ? formData.get("rememberMe") === "on" : false;
+    const payload = isSignIn
+      ? {
+          email: String(formData.get("email") ?? "").trim(),
+          phoneNumber: String(formData.get("phoneNumber") ?? "").trim(),
+          password: String(formData.get("password") ?? ""),
+          rememberMe,
+        }
+      : {
+          fullName: String(formData.get("fullName") ?? "").trim(),
+          email: String(formData.get("email") ?? "").trim(),
+          phoneNumber: String(formData.get("phoneNumber") ?? "").trim(),
+          password: String(formData.get("password") ?? ""),
+          confirmPassword: String(formData.get("confirmPassword") ?? ""),
+          termsAccepted: formData.get("termsAccepted") === "on",
+        };
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/auth/${isSignIn ? "login" : "signup"}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await response.json()) as {
+        message?: string;
+        token?: string;
+        user?: unknown;
+      };
+
+      if (!response.ok) {
+        setStatus({ type: "error", message: data.message ?? "Something went wrong." });
+        return;
+      }
+
+      const authStorage = rememberMe ? localStorage : sessionStorage;
+      authStorage.setItem(
+        "stuffsy-auth",
+        JSON.stringify({
+          token: data.token,
+          user: data.user,
+        })
+      );
+
+      setStatus({
+        type: "success",
+        message: data.message ?? (isSignIn ? "Signed in successfully." : "Account created successfully."),
+      });
+
+      router.push("/account");
+    } catch {
+      setStatus({
+        type: "error",
+        message: "Unable to connect to the backend server.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <section className={`${styles.panel} ${styles.leftPanel} ${isSignIn ? styles.signInTone : styles.signUpTone}`}>
+        <section
+          className={`${styles.panel} ${styles.leftPanel} ${
+            isSignIn ? styles.signInTone : styles.signUpTone
+          }`}
+        >
           <div className={styles.brandRow}>
             <span className={styles.brandMark}>sj</span>
             <span className={styles.brandName}>Stuffsy</span>
           </div>
 
           <div className={styles.leftCopy}>
-            <h2 className={styles.leftTitle}>
-              {isSignIn ? "Welcome Back! 👋" : "Create Account ✨"}
-            </h2>
+            <h2 className={styles.leftTitle}>{isSignIn ? "Welcome Back! 👋" : "Create Account ✨"}</h2>
             <p className={styles.leftText}>
               {isSignIn
                 ? "Sign in to continue shopping your favorite handmade products."
@@ -65,7 +145,11 @@ export default function AuthPage({ mode }: AuthPageProps) {
             </p>
           </div>
 
-          <div className={`${styles.illustration} ${isSignIn ? styles.signInIllustration : styles.signUpIllustration}`}>
+          <div
+            className={`${styles.illustration} ${
+              isSignIn ? styles.signInIllustration : styles.signUpIllustration
+            }`}
+          >
             {isSignIn ? (
               <>
                 <div className={styles.macrame} />
@@ -110,13 +194,30 @@ export default function AuthPage({ mode }: AuthPageProps) {
               </p>
             </div>
 
-            <form className={styles.form}>
+            {status && (
+              <p
+                className={`${styles.statusMessage} ${
+                  status.type === "error" ? styles.statusError : styles.statusSuccess
+                }`}
+                role="alert"
+              >
+                {status.message}
+              </p>
+            )}
+
+            <form className={styles.form} onSubmit={handleSubmit}>
               {!isSignIn && (
                 <label className={styles.field}>
                   <span>Full Name</span>
                   <div className={styles.inputWrap}>
                     <User className={styles.inputIcon} size={18} />
-                    <input required type="text" placeholder="Enter your full name" className={styles.input} />
+                    <input
+                      required
+                      name="fullName"
+                      type="text"
+                      placeholder="Enter your full name"
+                      className={styles.input}
+                    />
                   </div>
                 </label>
               )}
@@ -125,7 +226,13 @@ export default function AuthPage({ mode }: AuthPageProps) {
                 <span>Email Address</span>
                 <div className={styles.inputWrap}>
                   <Mail className={styles.inputIcon} size={18} />
-                  <input required type="email" placeholder="Enter your email address" className={styles.input} />
+                  <input
+                    required
+                    name="email"
+                    type="email"
+                    placeholder="Enter your email address"
+                    className={styles.input}
+                  />
                 </div>
               </label>
 
@@ -133,16 +240,23 @@ export default function AuthPage({ mode }: AuthPageProps) {
                 <span>Phone Number</span>
                 <div className={styles.inputWrap}>
                   <Phone className={styles.inputIcon} size={18} />
-                  <input required type="tel" placeholder="Enter your phone number" className={styles.input} />
+                  <input
+                    required
+                    name="phoneNumber"
+                    type="tel"
+                    placeholder="Enter your phone number"
+                    className={styles.input}
+                  />
                 </div>
               </label>
 
               <label className={styles.field}>
-                <span>{isSignIn ? "Password" : "Password"}</span>
+                <span>Password</span>
                 <div className={styles.inputWrap}>
                   <Lock className={styles.inputIcon} size={18} />
                   <input
                     required
+                    name="password"
                     type="password"
                     placeholder={isSignIn ? "Enter your password" : "Create a password"}
                     className={styles.input}
@@ -158,7 +272,13 @@ export default function AuthPage({ mode }: AuthPageProps) {
                   <span>Confirm Password</span>
                   <div className={styles.inputWrap}>
                     <Lock className={styles.inputIcon} size={18} />
-                    <input required type="password" placeholder="Confirm your password" className={styles.input} />
+                    <input
+                      required
+                      name="confirmPassword"
+                      type="password"
+                      placeholder="Confirm your password"
+                      className={styles.input}
+                    />
                     <button type="button" className={styles.eyeButton} aria-label="Show confirm password">
                       <Eye size={18} />
                     </button>
@@ -169,7 +289,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
               {isSignIn ? (
                 <div className={styles.inlineRow}>
                   <label className={styles.remember}>
-                    <input type="checkbox" className={styles.checkbox} defaultChecked />
+                    <input type="checkbox" name="rememberMe" className={styles.checkbox} />
                     Remember me
                   </label>
                   <button type="button" className={styles.textLink}>
@@ -178,7 +298,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
                 </div>
               ) : (
                 <label className={styles.terms}>
-                  <input required type="checkbox" className={styles.checkbox} defaultChecked />
+                  <input required type="checkbox" name="termsAccepted" className={styles.checkbox} />
                   <span>
                     I agree to the{" "}
                     <a href="#" className={styles.link}>
@@ -192,8 +312,8 @@ export default function AuthPage({ mode }: AuthPageProps) {
                 </label>
               )}
 
-              <button type="submit" className={styles.primaryButton}>
-                <span>{isSignIn ? "Sign In" : "Create Account"}</span>
+              <button type="submit" className={styles.primaryButton} disabled={isSubmitting}>
+                <span>{isSubmitting ? "Please wait..." : isSignIn ? "Sign In" : "Create Account"}</span>
                 <ArrowRight size={20} />
               </button>
 
@@ -205,23 +325,35 @@ export default function AuthPage({ mode }: AuthPageProps) {
 
               <div className={styles.socialRow}>
                 <button type="button" className={styles.socialButton}>
-                <svg viewBox="0 0 48 48" aria-hidden="true" className={styles.googleIcon}>
-                    <path fill="#FFC107" d="M43.6 20.4H42V20H24v8h11.3C34.9 31.9 30.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8.1 3.2l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.6z" />
-                    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16.1 19 12 24 12c3.1 0 5.9 1.2 8.1 3.2l5.7-5.7C34.1 6.1 29.3 4 24 4c-7.9 0-14.7 4.4-17.7 10.7z" />
-                    <path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.3l-6.3-5.2C29.3 35.1 26.8 36 24 36c-6.1 0-11.2-3.9-13.1-9.3l-6.5 5C7.3 38.4 15 44 24 44z" />
-                    <path fill="#1976D2" d="M43.6 20.4H42V20H24v8h11.3c-1.1 3.1-3.2 5.6-6 7.1l.1-.1 6.3 5.2C35.2 41.4 44 35 44 24c0-1.3-.1-2.4-.4-3.6z" />
+                  <svg viewBox="0 0 48 48" aria-hidden="true" className={styles.googleIcon}>
+                    <path
+                      fill="#FFC107"
+                      d="M43.6 20.4H42V20H24v8h11.3C34.9 31.9 30.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8.1 3.2l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.6z"
+                    />
+                    <path
+                      fill="#FF3D00"
+                      d="M6.3 14.7l6.6 4.8C14.6 16.1 19 12 24 12c3.1 0 5.9 1.2 8.1 3.2l5.7-5.7C34.1 6.1 29.3 4 24 4c-7.9 0-14.7 4.4-17.7 10.7z"
+                    />
+                    <path
+                      fill="#4CAF50"
+                      d="M24 44c5.2 0 10-2 13.6-5.3l-6.3-5.2C29.3 35.1 26.8 36 24 36c-6.1 0-11.2-3.9-13.1-9.3l-6.5 5C7.3 38.4 15 44 24 44z"
+                    />
+                    <path
+                      fill="#1976D2"
+                      d="M43.6 20.4H42V20H24v8h11.3c-1.1 3.1-3.2 5.6-6 7.1l.1-.1 6.3 5.2C35.2 41.4 44 35 44 24c0-1.3-.1-2.4-.4-3.6z"
+                    />
                   </svg>
                   Google
                 </button>
                 <button type="button" className={styles.socialButton}>
-                    <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.facebookIcon}>
-                      <path
-                        fill="currentColor"
-                        d="M13.5 22v-8.1h2.7l.4-3.1h-3.1V9c0-.9.2-1.5 1.5-1.5H17V4.8c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.6v1.6H7.1v3.1H10V22h3.5Z"
-                      />
-                    </svg>
-                    Facebook
-                  </button>
+                  <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.facebookIcon}>
+                    <path
+                      fill="currentColor"
+                      d="M13.5 22v-8.1h2.7l.4-3.1h-3.1V9c0-.9.2-1.5 1.5-1.5H17V4.8c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.6v1.6H7.1v3.1H10V22h3.5Z"
+                    />
+                  </svg>
+                  Facebook
+                </button>
               </div>
 
               <p className={styles.switchText}>

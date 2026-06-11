@@ -64,6 +64,10 @@
   line-height: 1;
 }
 
+.brandName {
+  font-size: 1.25rem;
+}
+
 .leftCopy {
   margin-top: 82px;
 }
@@ -302,6 +306,26 @@
   gap: 20px;
 }
 
+.statusMessage {
+  margin-top: 18px;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.statusError {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.statusSuccess {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
 .field {
   display: grid;
   gap: 10px;
@@ -395,6 +419,11 @@
   justify-content: center;
   gap: 10px;
   box-shadow: 0 12px 20px rgba(109, 40, 217, 0.18);
+}
+
+.primaryButton:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .divider {

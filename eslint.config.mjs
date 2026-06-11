@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 
 const require = createRequire(import.meta.url);
-const nextConfigRoot = dirname(require.resolve("eslint-config-next/package.json"));
+const nextConfigRoot = dirname(require.resolve("eslint-config-next"));
 
 const compat = new FlatCompat({
   baseDirectory: nextConfigRoot,
@@ -12,7 +12,6 @@ const compat = new FlatCompat({
 
 export default defineConfig([
   ...compat.extends(
-    "plugin:@next/next/recommended",
     "plugin:react/recommended",
     "plugin:react-hooks/recommended",
     "plugin:@typescript-eslint/recommended"
@@ -34,5 +33,6 @@ export default defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "backend/**",
   ]),
 ]);
