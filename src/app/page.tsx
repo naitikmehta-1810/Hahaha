@@ -20,6 +20,9 @@ import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
 import ProductCard from "@/components/ui/ProductCard/ProductCard";
 
+const backendHealthUrl =
+  process.env.NEXT_PUBLIC_BACKEND_HEALTH_URL ?? "https://backend-stuffsy.onrender.com/api/health";
+
 export default function Home() {
   const [activePopularTab, setActivePopularTab] = useState("popular");
   const [activeRecommendTab, setActiveRecommendTab] = useState("for-you");
@@ -125,6 +128,30 @@ export default function Home() {
     },
   ];
 
+  const testBackend = async () => {
+    try {
+      const res = await fetch(backendHealthUrl);
+      const contentType = res.headers.get("content-type") ?? "";
+
+      if (!res.ok) {
+        const errorBody = contentType.includes("application/json") ? await res.json() : await res.text();
+        throw new Error(typeof errorBody === "string" ? errorBody : "Backend health check failed");
+      }
+
+      if (!contentType.includes("application/json")) {
+        throw new Error("Backend returned HTML instead of JSON.");
+      }
+
+      const data = (await res.json()) as { ok?: boolean };
+
+      console.log(data);
+      alert(data.ok ? "Backend connection successful" : "Backend responded unexpectedly");
+    } catch (err) {
+      console.error(err);
+      alert("Backend connection failed");
+    }
+  };
+
   return (
     <div className={styles.container}>
       {/* Hero Section */}
@@ -169,7 +196,7 @@ export default function Home() {
             <Button
               variant="secondary"
               size="lg"
-              onClick={() => (window.location.href = "/shop")}
+              onClick={testBackend}
             >
               Shop Now
             </Button>
