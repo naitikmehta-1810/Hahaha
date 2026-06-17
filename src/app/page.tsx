@@ -125,21 +125,18 @@ export default function Home() {
     },
   ];
 
-  const checkBackend = async () => {
-    try {
-      const response = await fetch(
-        'https://backend-stuffsy.onrender.com/api/health'
-      );
+  const testBackend = async () => {
+  try {
+    const res = await fetch("https://your-backend-domain.com/");
+    const data = await res.json();
 
-      const data = await response.json();
-
-      console.log('Backend response:', data);
-      alert(`Backend status: ${JSON.stringify(data)}`);
-    } catch (error) {
-      console.error('Error connecting to backend:', error);
-      alert('Failed to connect to backend');
-    }
-  };
+    console.log(data);
+    alert(JSON.stringify(data));
+  } catch (err) {
+    console.error(err);
+    alert("Backend connection failed");
+  }
+};
 
   return (
     <div className={styles.container}>
@@ -185,7 +182,7 @@ export default function Home() {
             <Button
               variant="secondary"
               size="lg"
-              onClick={() => (checkBackend)}
+              onClick={() => (testBackend)}
             >
               Shop Now
             </Button>
