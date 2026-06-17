@@ -127,7 +127,7 @@ export default function Home() {
 
   const testBackend = async () => {
   try {
-    const res = await fetch("https://your-backend-domain.com/");
+    const res = await fetch("https://backend-stuffsy.onrender.com/api/health/");
     const data = await res.json();
 
     console.log(data);
