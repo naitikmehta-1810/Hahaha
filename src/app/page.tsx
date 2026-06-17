@@ -125,6 +125,22 @@ export default function Home() {
     },
   ];
 
+  const checkBackend = async () => {
+    try {
+      const response = await fetch(
+        'https://backend-stuffsy.onrender.com/api/health'
+      );
+
+      const data = await response.json();
+
+      console.log('Backend response:', data);
+      alert(`Backend status: ${JSON.stringify(data)}`);
+    } catch (error) {
+      console.error('Error connecting to backend:', error);
+      alert('Failed to connect to backend');
+    }
+  };
+
   return (
     <div className={styles.container}>
       {/* Hero Section */}
@@ -169,7 +185,7 @@ export default function Home() {
             <Button
               variant="secondary"
               size="lg"
-              onClick={() => (window.location.href = "/shop")}
+              onClick={() => (checkBackend)}
             >
               Shop Now
             </Button>
