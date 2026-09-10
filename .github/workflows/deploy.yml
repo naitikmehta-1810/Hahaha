@@ -1,0 +1,56 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      promote_production:
+        description: "Also run production deploy (requires Environment approval)"
+        type: boolean
+        default: false
+
+# Staging auto-deploys on every push to main.
+# Production requires: workflow_dispatch + promote_production + GitHub Environment
+# `production` with required reviewers configured under
+# Settings → Environments → production → Required reviewers.
+
+jobs:
+  staging:
+    name: Deploy staging
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Staging deploy
+        env:
+          STAGING_DEPLOY_HOOK: ${{ secrets.STAGING_DEPLOY_HOOK }}
+        run: |
+          echo "Staging auto-deploy for ${{ github.sha }}"
+          if [ -n "$STAGING_DEPLOY_HOOK" ]; then
+            curl -fsSL -X POST "$STAGING_DEPLOY_HOOK"
+            echo "Triggered STAGING_DEPLOY_HOOK"
+          else
+            echo "Configure STAGING_DEPLOY_HOOK secret"
+          fi
+
+  production:
+    name: Deploy production
+    needs: staging
+    if: github.event_name == 'workflow_dispatch' && inputs.promote_production == true
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Production deploy
+        env:
+          PRODUCTION_DEPLOY_HOOK: ${{ secrets.PRODUCTION_DEPLOY_HOOK }}
+        run: |
+          echo "Production deploy for ${{ github.sha }}"
+          echo "This job waits on GitHub Environment protection rules (required reviewers)."
+          if [ -n "$PRODUCTION_DEPLOY_HOOK" ]; then
+            curl -fsSL -X POST "$PRODUCTION_DEPLOY_HOOK"
+            echo "Triggered PRODUCTION_DEPLOY_HOOK"
+          else
+            echo "Configure PRODUCTION_DEPLOY_HOOK secret"
+          fi

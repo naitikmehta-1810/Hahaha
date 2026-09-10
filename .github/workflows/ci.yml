@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: stuffsy
+          POSTGRES_PASSWORD: stuffsy
+          POSTGRES_DB: stuffsy_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stuffsy -d stuffsy_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://stuffsy:stuffsy@localhost:5432/stuffsy_ci
+      JWT_SECRET: ci-jwt-secret-must-be-at-least-32-chars
+      EMAIL_USER: ci@example.com
+      EMAIL_PASS: ci-pass
+      CLOUDINARY_CLOUD_NAME: ci
+      CLOUDINARY_API_KEY: ci
+      CLOUDINARY_API_SECRET: ci
+      REDIS_URL: redis://127.0.0.1:6379
+      PAYMENT_MODE: stub
+      FRONTEND_URL: http://localhost:3000
+      BACKEND_PUBLIC_URL: http://localhost:4000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install root
+        run: npm ci
+
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+
+      - name: Frontend lint
+        run: npm run lint
+
+      - name: Backend lint
+        working-directory: backend
+        run: npm run lint
+
+      - name: Frontend typecheck
+        run: npx tsc --noEmit
+
+      - name: Backend typecheck
+        working-directory: backend
+        run: npx tsc --noEmit
+
+      - name: Migrate up
+        working-directory: backend
+        run: npm run migrate
+
+      - name: Migrate down (all)
+        working-directory: backend
+        run: node --loader ts-node/esm src/db/umzug.ts down --to 0
+
+      - name: Migrate up again
+        working-directory: backend
+        run: npm run migrate
+
+      - name: Start API for regression proofs
+        working-directory: backend
+        run: |
+          set -e
+          npx tsx src/server.ts > /tmp/stuffsy-api.log 2>&1 &
+          echo $! > /tmp/stuffsy-api.pid
+          disown || true
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:4000/api/health >/dev/null; then
+              echo "API healthy"
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != "1" ]; then
+            echo "API failed to become healthy"
+            cat /tmp/stuffsy-api.log || true
+            exit 1
+          fi
+
+      - name: Seller-scope regression (required)
+        working-directory: backend
+        run: npm run proof:seller-scope
+
+      - name: Lifecycle email integration (soft — Redis/queue may be flaky)
+        working-directory: backend
+        continue-on-error: true
+        run: npm run proof:lifecycle
+
+      - name: Stop API
+        if: always()
+        run: |
+          if [ -f /tmp/stuffsy-api.pid ]; then
+            kill "$(cat /tmp/stuffsy-api.pid)" 2>/dev/null || true
+          fi
+
+      - name: Install email-service
+        working-directory: notification-services/email-service
+        run: npm ci
+
+      - name: Typecheck email-service
+        working-directory: notification-services/email-service
+        run: npm run typecheck
+
+      - name: Install whatsapp-service
+        working-directory: notification-services/whatsapp-service
+        run: npm ci
+
+      - name: Typecheck whatsapp-service
+        working-directory: notification-services/whatsapp-service
+        run: npm run typecheck

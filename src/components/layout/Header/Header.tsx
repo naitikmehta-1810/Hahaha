@@ -1,16 +1,29 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Heart, ShoppingCart, Store, ChevronDown } from "lucide-react";
+import { Search, Heart, ShoppingCart, Store, ChevronDown, UserRound } from "lucide-react";
 import styles from "./Header.module.css";
-import { getCart } from "@/utils/cart";
+import { getCart, refreshCart } from "@/utils/cart";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { apiRequest } from "@/utils/api-client";
+
+type SuggestProduct = { id: string; slug: string; title: string };
+type SuggestCategory = { id: string; slug: string; name: string };
 
 export const Header = () => {
   const router = useRouter();
+  const { user, status, isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [cartCount, setCartCount] = useState(0);
+  const [suggestions, setSuggestions] = useState<{
+    products: SuggestProduct[];
+    categories: SuggestCategory[];
+  } | null>(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     const updateCartCount = () => {
@@ -19,14 +32,53 @@ export const Header = () => {
       setCartCount(count);
     };
 
-    updateCartCount(); // initial load
+    void refreshCart().then(updateCartCount);
+    updateCartCount();
 
     window.addEventListener("cart-updated", updateCartCount);
     return () => window.removeEventListener("cart-updated", updateCartCount);
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSuggestions(null);
+      setSuggestOpen(false);
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      void (async () => {
+        const result = await apiRequest<{
+          products: SuggestProduct[];
+          categories: SuggestCategory[];
+        }>("GET", `/api/search/suggest?q=${encodeURIComponent(q)}`, { skipRefresh: true });
+        if (result.data) {
+          setSuggestions(result.data);
+          setSuggestOpen(
+            result.data.products.length > 0 || result.data.categories.length > 0
+          );
+        }
+      })();
+    }, 220);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!formRef.current?.contains(e.target as Node)) {
+        setSuggestOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSuggestOpen(false);
     if (searchQuery.trim()) {
       router.push(`/shop?search=${encodeURIComponent(searchQuery)}`);
     } else {
@@ -37,10 +89,8 @@ export const Header = () => {
   return (
     <header className={styles.headerWrapper}>
       <div className={styles.header}>
-        {/* Logo */}
         <Link href="/" className={styles.logoArea}>
           <span className={styles.logoIcon}>
-            {/* Custom SVG Logo matching Stuffsy's purple "Si" badge */}
             <svg
               width="36"
               height="36"
@@ -61,19 +111,73 @@ export const Header = () => {
           Stuffsy
         </Link>
 
-        {/* Search */}
-        <form onSubmit={handleSearchSubmit} className={styles.searchForm}>
+        <form
+          ref={formRef}
+          onSubmit={handleSearchSubmit}
+          className={styles.searchForm}
+          role="search"
+        >
           <input
             type="text"
             placeholder="Search for products, categories, shops..."
             className={styles.searchInput}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => {
+              if (suggestions && (suggestions.products.length || suggestions.categories.length)) {
+                setSuggestOpen(true);
+              }
+            }}
+            autoComplete="off"
+            aria-autocomplete="list"
+            aria-expanded={suggestOpen}
           />
           <Search size={18} className={styles.searchIcon} />
+          {suggestOpen && suggestions ? (
+            <div className={styles.suggestPanel} role="listbox">
+              {suggestions.products.length > 0 ? (
+                <div className={styles.suggestGroup}>
+                  <p className={styles.suggestLabel}>Products</p>
+                  {suggestions.products.map((p) => (
+                    <Link
+                      key={p.id}
+                      href={`/products/${p.slug || p.id}`}
+                      className={styles.suggestItem}
+                      role="option"
+                      onClick={() => setSuggestOpen(false)}
+                    >
+                      {p.title}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+              {suggestions.categories.length > 0 ? (
+                <div className={styles.suggestGroup}>
+                  <p className={styles.suggestLabel}>Categories</p>
+                  {suggestions.categories.map((c) => (
+                    <Link
+                      key={c.id}
+                      href={`/shop?category=${encodeURIComponent(c.slug)}`}
+                      className={styles.suggestItem}
+                      role="option"
+                      onClick={() => setSuggestOpen(false)}
+                    >
+                      {c.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+              <button
+                type="submit"
+                className={styles.suggestAll}
+                onClick={() => setSuggestOpen(false)}
+              >
+                See all results for “{searchQuery.trim()}”
+              </button>
+            </div>
+          ) : null}
         </form>
 
-        {/* Navigation / Actions */}
         <div className={styles.navActions}>
           <Link href="/sell" className={styles.sellLink}>
             <Store size={18} />
@@ -81,36 +185,37 @@ export const Header = () => {
           </Link>
 
           <Link
-            href="/account?tab=wishlist"
+            href={isAuthenticated ? "/account?tab=wishlist" : "/login?next=/account?tab=wishlist"}
             className={styles.iconBtn}
             aria-label="Wishlist"
           >
             <Heart size={20} />
           </Link>
 
-          <Link
-            href="/cart"
-            className={styles.iconBtn}
-            aria-label="Shopping Cart"
-          >
+          <Link href="/cart" className={styles.iconBtn} aria-label="Shopping Cart">
             <ShoppingCart size={20} />
             <span className={styles.badge}>{cartCount}</span>
           </Link>
 
-          {/* User Avatar */}
-          <Link href="/account" className={styles.userMenu}>
-            <img
-              src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS_nZ1bL9Vcq6_iyx6xBOSL2oaaTepkAAFPaw&s"
-              alt="Nandita Sharma"
-              className={styles.avatar}
-              onError={(e) => {
-                // Fallback avatar if not loaded
-                (e.target as HTMLImageElement).src =
-                  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=120";
-              }}
-            />
-            <ChevronDown size={14} className={styles.chevron} />
-          </Link>
+          {status === "loading" ? (
+            <span className={styles.authPlaceholder} aria-hidden="true" />
+          ) : isAuthenticated && user ? (
+            <Link href="/account" className={styles.userMenu} aria-label="My account">
+              <span className={styles.avatarFallback} title={user.fullName}>
+                <UserRound size={18} />
+              </span>
+              <ChevronDown size={14} className={styles.chevron} />
+            </Link>
+          ) : (
+            <div className={styles.authLinks}>
+              <Link href="/login" className={styles.signInLink}>
+                Sign in
+              </Link>
+              <Link href="/signup" className={styles.signUpLink}>
+                Sign up
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </header>

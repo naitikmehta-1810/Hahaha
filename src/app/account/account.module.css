@@ -315,6 +315,31 @@
   color: var(--color-warning);
 }
 
+.outForDelivery {
+  background-color: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+.processing {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.cancelled {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.pendingPaymentNotice {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--color-border);
+}
+
 /* Account Overview */
 .overviewList {
   display: flex;

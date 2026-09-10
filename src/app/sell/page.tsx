@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -19,6 +19,8 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import styles from "./sell.module.css";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { apiRequest, redirectToLogin } from "@/utils/api-client";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3;
@@ -198,12 +200,45 @@ const ILLUSTRATIONS = [
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SellPage() {
+  const { isAuthenticated, status: authStatus } = useAuth();
   const [step,            setStep]            = useState<Step>(1);
   const [selectedCats,    setSelectedCats]    = useState<string[]>([]);
   const [shopName,        setShopName]        = useState("");
   const [phone,           setPhone]           = useState("");
   const [agreed,          setAgreed]          = useState(false);
   const [showSuccess,     setShowSuccess]     = useState(false);
+  const [sellerStatus,    setSellerStatus]    = useState("pending");
+  const [submitting,      setSubmitting]      = useState(false);
+  const [error,           setError]           = useState<string | null>(null);
+  const [authBanner,      setAuthBanner]      = useState(false);
+  const autoSubmitRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("stuffsy-sell-draft");
+      if (!raw) return;
+      const draft = JSON.parse(raw) as {
+        step?: Step;
+        selectedCats?: string[];
+        shopName?: string;
+        phone?: string;
+        agreed?: boolean;
+      };
+      if (draft.selectedCats?.length) setSelectedCats(draft.selectedCats);
+      if (draft.shopName) setShopName(draft.shopName);
+      if (draft.phone) setPhone(draft.phone);
+      if (typeof draft.agreed === "boolean") setAgreed(draft.agreed);
+      if (draft.step === 1 || draft.step === 2 || draft.step === 3) setStep(draft.step);
+    } catch {
+      // ignore corrupt draft
+    }
+  }, []);
+
+  useEffect(() => {
+    if (authStatus === "ready") {
+      setAuthBanner(!isAuthenticated);
+    }
+  }, [authStatus, isAuthenticated]);
 
   // ── Step 1 helpers ────────────────────────────────────────────────────────
   const toggleCategory = (id: string) => {
@@ -222,14 +257,77 @@ export default function SellPage() {
 
   const handleNext = () => {
     if (step < 3) setStep((s) => (s + 1) as Step);
-    else handleCreateShop();
+    else void handleCreateShop();
   };
 
   const handleBack = () => {
     if (step > 1) setStep((s) => (s - 1) as Step);
   };
 
-  const handleCreateShop = () => setShowSuccess(true);
+  const persistDraft = (pendingSubmit = false) => {
+    const draft = {
+      step,
+      selectedCats,
+      shopName,
+      phone,
+      agreed,
+    };
+    sessionStorage.setItem("stuffsy-sell-draft", JSON.stringify(draft));
+    if (pendingSubmit) {
+      sessionStorage.setItem("stuffsy-sell-pending-submit", "1");
+    }
+  };
+
+  const handleCreateShop = async () => {
+    setError(null);
+    if (authStatus === "loading") return;
+
+    persistDraft(true);
+
+    if (!isAuthenticated) {
+      redirectToLogin("/sell");
+      return;
+    }
+    setSubmitting(true);
+    const result = await apiRequest<{
+      seller: { id: string; shopName: string; shopSlug: string; status: string };
+    }>("POST", "/api/seller/onboarding", {
+      body: {
+        shopName: shopName.trim(),
+        contactPhone: phone.trim(),
+        phoneCountryCode: "+91",
+        categories: selectedCats,
+        termsAccepted: true,
+      },
+    });
+    setSubmitting(false);
+    if (result.status === 401) {
+      setError("Your session expired. Sign in again to create your shop — your answers are saved.");
+      persistDraft(true);
+      redirectToLogin("/sell");
+      return;
+    }
+    if (result.error || !result.data?.seller) {
+      setError(result.error ?? "Could not create shop.");
+      sessionStorage.removeItem("stuffsy-sell-pending-submit");
+      return;
+    }
+    sessionStorage.removeItem("stuffsy-sell-draft");
+    sessionStorage.removeItem("stuffsy-sell-pending-submit");
+    setSellerStatus(result.data.seller.status);
+    setShowSuccess(true);
+  };
+
+  // Resume Create Shop only when we redirected away for login with a pending submit.
+  useEffect(() => {
+    if (authStatus !== "ready" || !isAuthenticated) return;
+    if (autoSubmitRef.current || submitting || showSuccess) return;
+    if (sessionStorage.getItem("stuffsy-sell-pending-submit") !== "1") return;
+    if (!agreed || selectedCats.length === 0 || shopName.trim().length < 2) return;
+    autoSubmitRef.current = true;
+    void handleCreateShop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus, isAuthenticated, agreed, selectedCats, shopName, phone, submitting, showSuccess]);
 
   // ── Sidebar data for current step ─────────────────────────────────────────
   const sidebar = SIDEBAR_DATA[step - 1];
@@ -238,19 +336,35 @@ export default function SellPage() {
   // SUCCESS OVERLAY
   // ═══════════════════════════════════════════════════════════════
   if (showSuccess) {
+    const isPending = sellerStatus === "pending";
     return (
       <div className={styles.successOverlay}>
         <div className={styles.successIcon}>
           <CheckCircle2 size={44} color="#fff" />
         </div>
-        <h1 className={styles.successTitle}>Your shop is live! 🎉</h1>
+        <h1 className={styles.successTitle}>
+          {isPending ? "Shop application submitted!" : "Your shop is live! 🎉"}
+        </h1>
         <p className={styles.successSubtitle}>
-          Congratulations! <strong>{shopName}</strong> has been created successfully.
-          Start adding your first products now.
+          {isPending ? (
+            <>
+              <strong>{shopName}</strong> is registered with status{" "}
+              <strong>pending</strong>. Finish Shop Setup now; selling unlocks once the
+              shop is activated.
+            </>
+          ) : (
+            <>
+              Congratulations! <strong>{shopName}</strong> has been created successfully.
+              Start adding your first products now.
+            </>
+          )}
         </p>
-        <Link href="/account" className={styles.successBtn}>
+        <Link
+          href={isPending ? "/seller/shop-setup" : "/seller"}
+          className={styles.successBtn}
+        >
           <ShoppingBag size={18} />
-          Go to Seller Dashboard
+          {isPending ? "Go to Shop Setup" : "Go to Seller Dashboard"}
         </Link>
       </div>
     );
@@ -299,6 +413,57 @@ export default function SellPage() {
         <div className={styles.mainPanel}>
           {/* Content card */}
           <div className={styles.contentCard}>
+            {authBanner ? (
+              <div
+                role="status"
+                style={{
+                  marginBottom: 16,
+                  padding: "12px 14px",
+                  borderRadius: 8,
+                  background: "#fffbeb",
+                  color: "#92400e",
+                  fontSize: "0.875rem",
+                }}
+              >
+                Sign in to create your shop. Your progress on this form is saved when you
+                continue.{" "}
+                <button
+                  type="button"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--color-primary)",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                  }}
+                  onClick={() => {
+                    sessionStorage.setItem(
+                      "stuffsy-sell-draft",
+                      JSON.stringify({ step, selectedCats, shopName, phone, agreed })
+                    );
+                    redirectToLogin("/sell");
+                  }}
+                >
+                  Sign in
+                </button>
+              </div>
+            ) : null}
+            {error ? (
+              <div
+                role="alert"
+                style={{
+                  marginBottom: 16,
+                  padding: "12px 14px",
+                  borderRadius: 8,
+                  background: "#fef2f2",
+                  color: "#b91c1c",
+                  fontSize: "0.875rem",
+                }}
+              >
+                {error}
+              </div>
+            ) : null}
             {/* ──── STEP 1: Categories ───────────────────────── */}
             {step === 1 && (
               <>
@@ -468,9 +633,9 @@ export default function SellPage() {
                     id="btn-create-shop"
                     className={styles.btnNext}
                     onClick={handleNext}
-                    disabled={!canNext()}
+                    disabled={!canNext() || submitting}
                   >
-                    <ShoppingBag size={18} /> Create Shop
+                    <ShoppingBag size={18} /> {submitting ? "Creating…" : "Create Shop"}
                   </button>
                 </div>
               </>

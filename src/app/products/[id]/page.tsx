@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   Heart,
@@ -21,81 +22,186 @@ import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
 import { addToCart } from "@/utils/cart";
+import {
+  asSpecLines,
+  fetchProductBySlug,
+  shopHref,
+  type ProductDetail,
+} from "@/utils/catalog";
+import { isWished, toggleWishlist } from "@/utils/wishlist";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { apiRequest, redirectToLogin } from "@/utils/api-client";
+
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=500";
 
 export default function ProductDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const { isAuthenticated, status: authStatus } = useAuth();
+  const slug = typeof params.id === "string" ? params.id : "";
+
+  const [product, setProduct] = useState<ProductDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeThumbnail, setActiveThumbnail] = useState(0);
   const [qty, setQty] = useState(1);
   const [liked, setLiked] = useState(false);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [showFullDescription, setShowFullDescription] = useState(false);
+  const [notifyBusy, setNotifyBusy] = useState(false);
+  const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
 
-  // Example product details matching Macrame Woven Hanging
-  const product = {
-    id: typeof params.id === "string" ? params.id : "boho-woven",
-    title: "Boho Woven Wall Hanging",
-    maker: "Macrame Magic",
-    rating: 4.8,
-    reviews: 102,
-    price: 1599,
-    originalPrice: 2199,
-    discount: 27,
-    bullets: [
-      "Handmade item",
-      "Material: Cotton, Wooden dowel",
-      "Height: 24 inches, Width: 16 inches",
-      "Perfect for boho and modern decor",
-    ],
-    description:
-      "Handwoven with care using 100% natural cotton cord and a solid wooden dowel. A beautiful piece to add warmth and texture to your space. Perfect for bedrooms, nurseries, or living rooms.",
-    images: [
-      "/images/product-woven-hanging.jpg",
-      "/images/product-woven-hanging.jpg", // multiple angles placeholders
-      "/images/product-woven-hanging.jpg",
-      "/images/product-woven-hanging.jpg",
-      "/images/product-woven-hanging.jpg",
-    ],
-  };
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+    setLoading(true);
+    void fetchProductBySlug(slug).then((result) => {
+      if (cancelled) return;
+      setProduct(result.product);
+      setError(result.error);
+      setSelectedVariantId(result.product?.variants[0]?.id ?? null);
+      setActiveThumbnail(0);
+      setLoading(false);
+      if (result.product?.id) {
+        void isWished(result.product.id).then((wished) => {
+          if (!cancelled) setLiked(wished);
+        });
+        const params = new URLSearchParams(
+          typeof window !== "undefined" ? window.location.search : ""
+        );
+        void apiRequest("POST", "/api/analytics/track-view", {
+          body: {
+            productId: result.product.id,
+            utmSource: params.get("utm_source"),
+            utmMedium: params.get("utm_medium"),
+          },
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
-  const handleQtyChange = (type: "inc" | "dec") => {
-    if (type === "dec" && qty > 1) {
-      setQty(qty - 1);
-    } else if (type === "inc") {
-      setQty(qty + 1);
+  const handleWishlistToggle = async () => {
+    if (!product) return;
+    if (authStatus === "loading") return;
+    if (!isAuthenticated) {
+      redirectToLogin(`/products/${product.slug}`);
+      return;
+    }
+    const next = !liked;
+    setLiked(next);
+    const result = await toggleWishlist(product.id, liked);
+    if (result.error) {
+      setLiked(liked);
+      setActionError(result.error);
     }
   };
 
-  const handleAddToCart = () => {
-    addToCart(
+  const selectedVariant = useMemo(() => {
+    if (!product) return null;
+    return product.variants.find((v) => v.id === selectedVariantId) ?? product.variants[0] ?? null;
+  }, [product, selectedVariantId]);
+
+  const images = product?.images?.length
+    ? product.images.map((img) => img.url)
+    : product?.thumbnailUrl
+      ? [product.thumbnailUrl]
+      : [FALLBACK_IMAGE];
+
+  const bullets = product ? asSpecLines(product.specs) : [];
+  const price = selectedVariant?.price ?? product?.price ?? 0;
+  const inStock = selectedVariant?.inStock ?? product?.inStock ?? false;
+
+  const handleQtyChange = (type: "inc" | "dec") => {
+    if (type === "dec" && qty > 1) setQty(qty - 1);
+    else if (type === "inc") setQty(qty + 1);
+  };
+
+  const addCurrentVariant = async () => {
+    if (!product || !selectedVariant) {
+      throw new Error("No variant selected");
+    }
+    await addToCart(
       {
-        id: product.id,
+        id: selectedVariant.id,
+        variantId: selectedVariant.id,
         title: product.title,
-        subtitle: product.maker,
-        price: product.price,
-        image: product.images[0],
+        subtitle: product.makerName || product.shopName,
+        price,
+        image: images[0] || FALLBACK_IMAGE,
       },
       qty
     );
-    router.push("/cart");
   };
+
+  const handleAddToCart = () => {
+    setActionError(null);
+    setBusy(true);
+    void addCurrentVariant()
+      .then(() => router.push("/cart"))
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "Could not add to cart";
+        setActionError(message);
+      })
+      .finally(() => setBusy(false));
+  };
+
+  /** Buy Now adds to cart and goes straight into the checkout flow (Section E7). */
+  const handleBuyNow = () => {
+    setActionError(null);
+    setBusy(true);
+    void addCurrentVariant()
+      .then(() => router.push("/checkout"))
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "Could not start checkout";
+        setActionError(message);
+      })
+      .finally(() => setBusy(false));
+  };
+
+  if (loading) {
+    return (
+      <div className={styles.container}>
+        <Text color="muted">Loading product…</Text>
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className={styles.container}>
+        <Heading level={2}>Product not found</Heading>
+        <Text color="muted">{error ?? "This product is unavailable."}</Text>
+        <Button variant="outline" onClick={() => router.push("/shop")} style={{ marginTop: 16 }}>
+          Back to shop
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.container}>
-      {/* Breadcrumbs */}
       <Breadcrumbs>
         <Breadcrumbs.Item href="/">Home</Breadcrumbs.Item>
-        <Breadcrumbs.Item href="/shop?category=home-living">Home &amp; Living</Breadcrumbs.Item>
-        <Breadcrumbs.Item href="/shop?category=wall-decor">Wall Decor</Breadcrumbs.Item>
+        {product.breadcrumb.map((crumb) => (
+          <Breadcrumbs.Item key={crumb.id} href={`/shop?category=${encodeURIComponent(crumb.slug)}`}>
+            {crumb.name}
+          </Breadcrumbs.Item>
+        ))}
         <Breadcrumbs.Item active>{product.title}</Breadcrumbs.Item>
       </Breadcrumbs>
 
-      {/* Main layout */}
       <div className={styles.productLayout}>
-        {/* Gallery */}
         <div className={styles.gallerySection}>
           <div className={styles.thumbnailsList}>
-            {product.images.map((img, idx) => (
+            {images.map((img, idx) => (
               <button
-                key={idx}
+                key={`${img}-${idx}`}
                 type="button"
                 className={`${styles.thumbnailBtn} ${
                   activeThumbnail === idx ? styles.activeThumbnailBtn : ""
@@ -108,8 +214,7 @@ export default function ProductDetailsPage() {
                   alt={`Angle ${idx + 1}`}
                   className={styles.thumbnailImg}
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src =
-                      "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=150";
+                    (e.target as HTMLImageElement).src = FALLBACK_IMAGE;
                   }}
                 />
               </button>
@@ -118,37 +223,38 @@ export default function ProductDetailsPage() {
           <div className={styles.mainImageWrapper}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={product.images[activeThumbnail]}
+              src={images[activeThumbnail] ?? FALLBACK_IMAGE}
               alt={product.title}
               className={styles.mainImage}
               onError={(e) => {
-                (e.target as HTMLImageElement).src =
-                  "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=500";
+                (e.target as HTMLImageElement).src = FALLBACK_IMAGE;
               }}
             />
-            <button className={styles.expandBtn} aria-label="Expand image">
+            <button type="button" className={styles.expandBtn} aria-label="Expand image">
               <Maximize2 size={18} />
             </button>
             <button
-              onClick={() => setLiked(!liked)}
+              type="button"
+              onClick={() => void handleWishlistToggle()}
               className={`${styles.likeBtn} ${liked ? styles.liked : ""}`}
-              aria-label="Add to wishlist"
+              aria-label={liked ? "Remove from wishlist" : "Add to wishlist"}
             >
               <Heart size={18} fill={liked ? "currentColor" : "none"} />
             </button>
           </div>
         </div>
 
-        {/* Details panel */}
         <div className={styles.detailsSection}>
           <div className={styles.titleArea}>
             <Heading level={2}>{product.title}</Heading>
             <span className={styles.makerLink}>
-              Handmade by <strong>{product.maker}</strong>
+              Handmade by{" "}
+              <Link href={shopHref(product.shopSlug)}>
+                <strong>{product.makerName || product.shopName}</strong>
+              </Link>
             </span>
           </div>
 
-          {/* Rating */}
           <div className={styles.metaRow}>
             <div className={styles.ratingRow}>
               <span className={styles.stars}>
@@ -156,53 +262,80 @@ export default function ProductDetailsPage() {
                   <Star
                     key={i}
                     size={16}
-                    className={i < Math.floor(product.rating) ? styles.starFilled : ""}
+                    className={i < Math.floor(product.avgRating) ? styles.starFilled : ""}
                   />
                 ))}
               </span>
-              <span>{product.rating}</span>
+              <span>{product.avgRating.toFixed(1)}</span>
             </div>
             <span style={{ color: "var(--color-text-light)" }}>|</span>
             <Text size="sm" color="muted">
-              {product.reviews} reviews
+              {product.reviewCount} reviews
             </Text>
-            <div className={styles.bestsellerBadge}>
-              <Sparkles size={14} />
-              <span>Bestseller</span>
-            </div>
+            {product.isBestseller ? (
+              <div className={styles.bestsellerBadge}>
+                <Sparkles size={14} />
+                <span>Bestseller</span>
+              </div>
+            ) : null}
           </div>
 
-          {/* Price */}
           <div className={styles.priceArea}>
             <div className={styles.priceRow}>
-              <span className={styles.price}>
-                ₹{product.price.toLocaleString("en-IN")}
-              </span>
-              <span className={styles.originalPrice}>
-                ₹{product.originalPrice.toLocaleString("en-IN")}
-              </span>
-              <span className={styles.discount}>-{product.discount}%</span>
+              <span className={styles.price}>₹{price.toLocaleString("en-IN")}</span>
+              {product.compareAtPrice ? (
+                <span className={styles.originalPrice}>
+                  ₹{product.compareAtPrice.toLocaleString("en-IN")}
+                </span>
+              ) : null}
+              {product.discountPercent ? (
+                <span className={styles.discount}>-{product.discountPercent}%</span>
+              ) : null}
             </div>
             <span className={styles.priceTax}>Inclusive of all taxes</span>
           </div>
 
-          {/* Bullets */}
-          <ul className={styles.bullets}>
-            {product.bullets.map((bullet, idx) => (
-              <li key={idx} className={styles.bulletItem}>
-                <Check size={16} className={styles.bulletIcon} strokeWidth={3} />
-                <span>{bullet}</span>
-              </li>
-            ))}
-          </ul>
+          {bullets.length > 0 ? (
+            <ul className={styles.bullets}>
+              {bullets.map((bullet, idx) => (
+                <li key={idx} className={styles.bulletItem}>
+                  <Check size={16} className={styles.bulletIcon} strokeWidth={3} />
+                  <span>{bullet}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
-          {/* Stock */}
           <div className={styles.stockRow}>
             <span className={styles.stockDot}></span>
-            <span>In stock</span>
+            <span>
+              {inStock
+                ? `In stock · Ships in ${product.processingDays}-${product.processingDays + 1} days`
+                : "Out of stock"}
+            </span>
           </div>
 
-          {/* Quantity */}
+          {product.variants.length > 1 ? (
+            <div className={styles.quantityGroup}>
+              <span className={styles.quantityLabel}>Variant</span>
+              <select
+                className={styles.qtyVal}
+                value={selectedVariant?.id}
+                onChange={(e) => setSelectedVariantId(e.target.value)}
+                style={{ padding: "8px 12px", borderRadius: 8 }}
+              >
+                {product.variants.map((variant) => {
+                  const label = Object.values(variant.optionValues).join(" · ") || variant.sku;
+                  return (
+                    <option key={variant.id} value={variant.id}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          ) : null}
+
           <div className={styles.quantityGroup}>
             <span className={styles.quantityLabel}>Quantity</span>
             <div className={styles.quantitySelector}>
@@ -210,6 +343,7 @@ export default function ProductDetailsPage() {
                 type="button"
                 className={styles.qtyBtn}
                 onClick={() => handleQtyChange("dec")}
+                disabled={busy}
               >
                 -
               </button>
@@ -218,13 +352,19 @@ export default function ProductDetailsPage() {
                 type="button"
                 className={styles.qtyBtn}
                 onClick={() => handleQtyChange("inc")}
+                disabled={busy}
               >
                 +
               </button>
             </div>
           </div>
 
-          {/* Actions */}
+          {actionError ? (
+            <Text size="sm" style={{ color: "var(--color-danger)", marginBottom: 8 }}>
+              {actionError}
+            </Text>
+          ) : null}
+
           <div className={styles.actionsRow}>
             <Button
               variant="primary"
@@ -232,6 +372,7 @@ export default function ProductDetailsPage() {
               leftIcon={<ShoppingCart size={18} />}
               style={{ flex: 1 }}
               onClick={handleAddToCart}
+              disabled={busy || !inStock}
             >
               Add to Cart
             </Button>
@@ -239,20 +380,71 @@ export default function ProductDetailsPage() {
               variant="outline"
               size="lg"
               style={{ flex: 1 }}
-              onClick={handleAddToCart}
+              onClick={handleBuyNow}
+              disabled={busy || !inStock}
             >
               Buy Now
             </Button>
           </div>
 
-          <button onClick={() => setLiked(!liked)} className={styles.wishlistBtn}>
+          {!inStock && selectedVariant ? (
+            <div style={{ marginTop: 12 }}>
+              <Button
+                variant="outline"
+                size="lg"
+                style={{ width: "100%" }}
+                disabled={notifyBusy}
+                onClick={() => {
+                  void (async () => {
+                    if (!product || !selectedVariant) return;
+                    if (authStatus === "loading") return;
+                    if (!isAuthenticated) {
+                      redirectToLogin(`/products/${product.slug}`);
+                      return;
+                    }
+                    setNotifyBusy(true);
+                    setNotifyMessage(null);
+                    setActionError(null);
+                    const result = await apiRequest("POST", `/api/products/${product.id}/notify-stock`, {
+                      body: { variantId: selectedVariant.id },
+                    });
+                    setNotifyBusy(false);
+                    if (result.error) {
+                      setActionError(result.error);
+                      return;
+                    }
+                    setNotifyMessage("We'll email you when this is back in stock.");
+                  })();
+                }}
+              >
+                {notifyBusy ? "Saving…" : "Notify Me"}
+              </Button>
+              {notifyMessage ? (
+                <Text size="sm" color="muted" style={{ marginTop: 8 }}>
+                  {notifyMessage}
+                </Text>
+              ) : null}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => setLiked(!liked)}
+            className={styles.wishlistBtn}
+          >
             <Heart size={16} fill={liked ? "var(--color-danger)" : "none"} />
             <span>Add to Wishlist</span>
           </button>
+
+          <div style={{ marginTop: 16 }}>
+            <Link href={shopHref(product.shopSlug)} style={{ color: "var(--color-primary)" }}>
+              View shop · {product.seller.shopName}
+              {product.seller.badge ? ` · ${product.seller.badge}` : ""}
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Propositions */}
       <section className={styles.valueProps}>
         <div className={styles.propItem}>
           <Truck size={20} className={styles.propIcon} />
@@ -284,14 +476,25 @@ export default function ProductDetailsPage() {
         </div>
       </section>
 
-      {/* Product Details Box */}
       <section className={styles.detailsBox}>
         <h3 className={styles.boxTitle}>Product Details</h3>
-        <p className={styles.boxDesc}>{product.description}</p>
-        <span className={styles.showMoreBtn}>
-          <span>Show more</span>
+        <p className={styles.boxDesc}>
+          {showFullDescription
+            ? product.description || product.shortDescription
+            : (product.shortDescription || product.description || "").slice(0, 220)}
+          {!showFullDescription &&
+          (product.description || product.shortDescription || "").length > 220
+            ? "…"
+            : ""}
+        </p>
+        <button
+          type="button"
+          className={styles.showMoreBtn}
+          onClick={() => setShowFullDescription((v) => !v)}
+        >
+          <span>{showFullDescription ? "Show less" : "Show more"}</span>
           <ChevronDown size={14} />
-        </span>
+        </button>
       </section>
     </div>
   );

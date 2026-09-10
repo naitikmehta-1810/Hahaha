@@ -63,6 +63,7 @@
   background-color: var(--color-bg);
   flex-shrink: 0;
   border: 1px solid var(--color-border);
+  position: relative;
 }
 
 .itemImg {
@@ -128,6 +129,16 @@
 .qtyBtn:hover {
   background-color: var(--color-bg);
   color: var(--color-text-main);
+}
+
+.qtyBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.qtyBtn:disabled:hover {
+  background-color: transparent;
+  color: var(--color-text-muted);
 }
 
 .qtyVal {
@@ -392,4 +403,60 @@
   .productsGrid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+.shippingBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--color-primary-light);
+  border: 1px solid #ddd6fe;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--color-text-main);
+}
+
+.shippingBannerIcon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* Auth-style status banner + ProductCard.Badge colors for unavailable lines */
+.statusMessage {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.statusError {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.statusSuccess {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+.cartItemUnavailable {
+  opacity: 0.72;
+  background-color: var(--color-bg);
+}
+
+.unavailableBadge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background-color: #ffebe6;
+  color: #ff5630;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  z-index: 2;
 }
