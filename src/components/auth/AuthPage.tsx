@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import {
   ArrowRight,
@@ -16,6 +16,9 @@ import {
   Truck,
   User,
 } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { apiBaseUrl, apiRequest, type AuthUser } from "@/utils/api-client";
+import { refreshCart } from "@/utils/cart";
 import styles from "./AuthPage.module.css";
 
 type AuthMode = "signin" | "signup";
@@ -47,13 +50,61 @@ const features = [
   },
 ];
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:4000";
-
 export default function AuthPage({ mode }: AuthPageProps) {
+  return (
+    <Suspense fallback={null}>
+      <AuthPageInner mode={mode} />
+    </Suspense>
+  );
+}
+
+function AuthPageInner({ mode }: AuthPageProps) {
   const isSignIn = mode === "signin";
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { setUser } = useAuth();
   const [status, setStatus] = useState<{ type: "error" | "success"; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [providers, setProviders] = useState<{ google: boolean; facebook: boolean }>({
+    google: false,
+    facebook: false,
+  });
+
+  useEffect(() => {
+    const oauthError = searchParams.get("error");
+    if (oauthError === "oauth_google") {
+      setStatus({ type: "error", message: "Google sign-in failed. Please try again." });
+    } else if (oauthError === "oauth_facebook") {
+      setStatus({ type: "error", message: "Facebook sign-in failed. Please try again." });
+    } else if (oauthError === "oauth_state") {
+      setStatus({ type: "error", message: "Social sign-in expired. Please try again." });
+    }
+
+    void apiRequest<{ providers: { google: boolean; facebook: boolean } }>(
+      "GET",
+      "/api/auth/providers",
+      { skipRefresh: true }
+    ).then((result) => {
+      if (result.data?.providers) {
+        setProviders(result.data.providers);
+      }
+    });
+  }, [searchParams]);
+
+  const startOAuth = (provider: "google" | "facebook") => {
+    if (!providers[provider]) {
+      setStatus({
+        type: "error",
+        message: `${provider === "google" ? "Google" : "Facebook"} login is not configured yet. Add the OAuth credentials to backend/.env.`,
+      });
+      return;
+    }
+    const next = searchParams.get("next");
+    const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/account";
+    window.location.assign(
+      `${apiBaseUrl}/api/auth/${provider}?next=${encodeURIComponent(safeNext)}`
+    );
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -78,49 +129,39 @@ export default function AuthPage({ mode }: AuthPageProps) {
           termsAccepted: formData.get("termsAccepted") === "on",
         };
 
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/auth/${isSignIn ? "login" : "signup"}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+    const result = await apiRequest<{ message?: string; user?: AuthUser }>(
+      "POST",
+      `/api/auth/${isSignIn ? "login" : "signup"}`,
+      { body: payload, skipRefresh: true }
+    );
 
-      const data = (await response.json()) as {
-        message?: string;
-        token?: string;
-        user?: unknown;
-      };
-
-      if (!response.ok) {
-        setStatus({ type: "error", message: data.message ?? "Something went wrong." });
-        return;
-      }
-
-      const authStorage = rememberMe ? localStorage : sessionStorage;
-      authStorage.setItem(
-        "stuffsy-auth",
-        JSON.stringify({
-          token: data.token,
-          user: data.user,
-        })
-      );
-
-      setStatus({
-        type: "success",
-        message: data.message ?? (isSignIn ? "Signed in successfully." : "Account created successfully."),
-      });
-
-      router.push("/account");
-    } catch {
-      setStatus({
-        type: "error",
-        message: "Unable to connect to the backend server.",
-      });
-    } finally {
+    if (result.error || !result.data) {
+      setStatus({ type: "error", message: result.error ?? "Something went wrong." });
       setIsSubmitting(false);
+      return;
     }
+
+    if (result.data.user) {
+      setUser(result.data.user);
+    }
+
+    // Guest cart may have merged into the user cart on the server — refresh badge/cache.
+    await refreshCart();
+
+    const fallbackMessage = isSignIn ? "Signed in successfully." : "Account created successfully.";
+    const unverified = !isSignIn && result.data.user && !result.data.user.emailVerifiedAt;
+    setStatus({
+      type: "success",
+      message: unverified
+        ? `${result.data.message ?? fallbackMessage} Check your email to verify.`
+        : (result.data.message ?? fallbackMessage),
+    });
+
+    const next = searchParams.get("next");
+    const safeNext =
+      next && next.startsWith("/") && !next.startsWith("//") ? next : "/account";
+    router.replace(safeNext);
+    setIsSubmitting(false);
   };
 
   return (
@@ -232,6 +273,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
                     type="email"
                     placeholder="Enter your email address"
                     className={styles.input}
+                    suppressHydrationWarning
                   />
                 </div>
               </label>
@@ -292,9 +334,9 @@ export default function AuthPage({ mode }: AuthPageProps) {
                     <input type="checkbox" name="rememberMe" className={styles.checkbox} />
                     Remember me
                   </label>
-                  <button type="button" className={styles.textLink}>
+                  <Link href="/forgot-password" className={styles.textLink}>
                     Forgot Password?
-                  </button>
+                  </Link>
                 </div>
               ) : (
                 <label className={styles.terms}>
@@ -324,7 +366,11 @@ export default function AuthPage({ mode }: AuthPageProps) {
               </div>
 
               <div className={styles.socialRow}>
-                <button type="button" className={styles.socialButton}>
+                <button
+                  type="button"
+                  className={styles.socialButton}
+                  onClick={() => startOAuth("google")}
+                >
                   <svg viewBox="0 0 48 48" aria-hidden="true" className={styles.googleIcon}>
                     <path
                       fill="#FFC107"
@@ -345,7 +391,11 @@ export default function AuthPage({ mode }: AuthPageProps) {
                   </svg>
                   Google
                 </button>
-                <button type="button" className={styles.socialButton}>
+                <button
+                  type="button"
+                  className={styles.socialButton}
+                  onClick={() => startOAuth("facebook")}
+                >
                   <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.facebookIcon}>
                     <path
                       fill="currentColor"

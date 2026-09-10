@@ -1,10 +1,13 @@
+export type UserRole = "customer" | "seller" | "admin";
+
 export type UserRecord = {
   id: string;
   full_name: string;
   email: string;
-  phone_number: string;
+  phone_number: string | null;
   role: string;
   status: string;
+  email_verified_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -13,9 +16,10 @@ export type AuthUser = {
   id: string;
   fullName: string;
   email: string;
-  phoneNumber: string;
+  phoneNumber: string | null;
   role: string;
   status: string;
+  emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -28,6 +32,7 @@ export function toAuthUser(row: UserRecord): AuthUser {
     phoneNumber: row.phone_number,
     role: row.role,
     status: row.status,
+    emailVerifiedAt: row.email_verified_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

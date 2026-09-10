@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Trash2,
   Lock,
@@ -18,89 +19,170 @@ import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
 import ProductCard from "@/components/ui/ProductCard/ProductCard";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
-import { getCart, saveCart, CartItem } from "@/utils/cart";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { redirectToLogin } from "@/utils/api-client";
+import {
+  CartItem,
+  applyCoupon,
+  getCachedCouponCode,
+  getCachedDiscountAmount,
+  getCachedFreeShipping,
+  getCart,
+  refreshCart,
+  removeCartItem,
+  removeCoupon,
+  updateCartItemQty,
+} from "@/utils/cart";
+import {
+  fetchProducts,
+  productHref,
+  productImageUrl,
+  type ProductCard as CatalogProduct,
+} from "@/utils/catalog";
 
 export default function CartPage() {
+  const router = useRouter();
+  const { isAuthenticated, status: authStatus } = useAuth();
   const [selectedMethod, setSelectedMethod] = useState("card");
-
-  const [cartItems, setCartItems] = useState<CartItem[]>(() => getCart());
-
-  // Recommendations
-  const recommendations = [
-    {
-      id: "potted-plant",
-      title: "Potted Plant",
-      subtitle: "Green Oasis",
-      price: 349,
-      rating: 4.6,
-      reviews: 76,
-      image: "https://images.unsplash.com/photo-1614613535308-eb5fbd8d2c17?w=400&q=80",
-    },
-    {
-      id: "gold-necklace",
-      title: "Gold Plated Necklace",
-      subtitle: "Gold & Gold",
-      price: 1299,
-      rating: 4.8,
-      reviews: 200,
-      image: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80",
-    },
-    {
-      id: "line-art",
-      title: "Abstract Line Art Print",
-      subtitle: "Studio Minimalist",
-      price: 899,
-      rating: 4.7,
-      reviews: 80,
-      image: "https://images.unsplash.com/photo-1561214115-6d2f1b0609fa?w=400&q=80",
-    },
-    {
-      id: "boho-woven",
-      title: "Boho Woven Wall Hanging",
-      subtitle: "Macrame Magic",
-      price: 1599,
-      rating: 4.8,
-      reviews: 102,
-      image: "https://images.unsplash.com/photo-1604995614969-f28bdfc35d4c?w=400&q=80",
-    },
-    {
-      id: "bubble-candle",
-      title: "Bubble Cube Candle",
-      subtitle: "Vanilla Bean",
-      price: 499,
-      rating: 4.7,
-      reviews: 98,
-      image: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=400&q=80",
-    },
-  ];
-
-  const handleQtyChange = (id: string, type: "inc" | "dec") => {
-    const updated = cartItems.map((item) => {
-      if (item.id === id) {
-        const newQty =
-          type === "dec" ? Math.max(1, item.qty - 1) : item.qty + 1;
-        return { ...item, qty: newQty };
-      }
-      return item;
-    });
-    setCartItems(updated);
-    saveCart(updated);
-  };
-
-  const handleRemoveItem = (id: string) => {
-    const updated = cartItems.filter((item) => item.id !== id);
-    setCartItems(updated);
-    saveCart(updated);
-  };
-
-  // Calculations
-  const subtotal = cartItems.reduce(
-    (acc, item) => acc + item.price * item.qty,
-    0,
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartLoading, setCartLoading] = useState(true);
+  const [status, setStatus] = useState<{ type: "error" | "success"; message: string } | null>(
+    null
   );
-  const shipping = subtotal > 999 ? 0 : 99;
-  const tax = Math.round(subtotal * 0.045);
-  const total = subtotal + shipping + tax;
+  const [recommendations, setRecommendations] = useState<CatalogProduct[]>([]);
+  const [freeShipping, setFreeShipping] = useState(getCachedFreeShipping());
+  const [couponInput, setCouponInput] = useState("");
+  const [couponCode, setCouponCode] = useState<string | null>(getCachedCouponCode());
+  const [discountAmount, setDiscountAmount] = useState(getCachedDiscountAmount());
+  const [couponBusy, setCouponBusy] = useState(false);
+
+  const syncFromCache = useCallback(() => {
+    setCartItems(getCart());
+    setFreeShipping(getCachedFreeShipping());
+    setCouponCode(getCachedCouponCode());
+    setDiscountAmount(getCachedDiscountAmount());
+  }, []);
+
+  const loadCart = useCallback(async () => {
+    setCartLoading(true);
+    await refreshCart();
+    syncFromCache();
+    setCartLoading(false);
+  }, [syncFromCache]);
+
+  useEffect(() => {
+    void loadCart();
+  }, [loadCart]);
+
+  useEffect(() => {
+    const onUpdated = () => syncFromCache();
+    window.addEventListener("cart-updated", onUpdated);
+    return () => window.removeEventListener("cart-updated", onUpdated);
+  }, [syncFromCache]);
+
+  useEffect(() => {
+    void fetchProducts({ sort: "bestsellers", pageSize: 5 }).then((result) => {
+      const cartTitles = new Set(getCart().map((item) => item.title));
+      setRecommendations(
+        result.products.filter((product) => !cartTitles.has(product.title)).slice(0, 5)
+      );
+    });
+  }, [cartItems.length]);
+
+  const handleQtyChange = async (id: string, type: "inc" | "dec") => {
+    const item = cartItems.find((entry) => entry.id === id);
+    if (!item || !item.available) return;
+
+    const newQty = type === "dec" ? Math.max(1, item.qty - 1) : item.qty + 1;
+    if (newQty === item.qty) return;
+
+    setStatus(null);
+    try {
+      await updateCartItemQty(id, newQty);
+      syncFromCache();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update quantity.";
+      setStatus({ type: "error", message });
+      await loadCart();
+    }
+  };
+
+  const handleRemoveItem = async (id: string) => {
+    setStatus(null);
+    try {
+      await removeCartItem(id);
+      syncFromCache();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not remove item.";
+      setStatus({ type: "error", message });
+      await loadCart();
+    }
+  };
+
+  const handleApplyCoupon = async () => {
+    const code = couponInput.trim();
+    if (!code) return;
+    setCouponBusy(true);
+    setStatus(null);
+    try {
+      await applyCoupon(code);
+      syncFromCache();
+      setCouponInput("");
+      setStatus({ type: "success", message: `Coupon ${getCachedCouponCode()} applied.` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not apply coupon.";
+      setStatus({ type: "error", message });
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
+  const handleRemoveCoupon = async () => {
+    setCouponBusy(true);
+    setStatus(null);
+    try {
+      await removeCoupon();
+      syncFromCache();
+      setStatus({ type: "success", message: "Coupon removed." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not remove coupon.";
+      setStatus({ type: "error", message });
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
+  const availableItems = cartItems.filter((item) => item.available);
+  const subtotal = availableItems.reduce((acc, item) => acc + item.price * item.qty, 0);
+  const shipping =
+    freeShipping.qualifies || subtotal >= freeShipping.threshold ? 0 : availableItems.length > 0 ? 49 : 0;
+  const taxable = Math.max(subtotal - discountAmount, 0);
+  const tax = Math.round(taxable * 0.18);
+  const total = taxable + shipping + tax;
+
+  /** Cart payment radio pre-selects method on the dedicated checkout page. */
+  const handleProceedToCheckout = () => {
+    setStatus(null);
+    if (authStatus === "loading") return;
+    if (!isAuthenticated) {
+      redirectToLogin("/checkout");
+      return;
+    }
+    if (availableItems.length === 0) {
+      setStatus({
+        type: "error",
+        message: "Your cart has no available items to checkout.",
+      });
+      return;
+    }
+    const payment =
+      selectedMethod === "wallets"
+        ? "wallet"
+        : selectedMethod === "netbanking"
+          ? "netbanking"
+          : selectedMethod;
+    router.push(`/checkout?payment=${encodeURIComponent(payment)}`);
+  };
 
   return (
     <div className={styles.container}>
@@ -136,13 +218,53 @@ export default function CartPage() {
         </Link>
       </div>
 
+      {status && (
+        <div
+          className={`${styles.statusMessage} ${
+            status.type === "error" ? styles.statusError : styles.statusSuccess
+          }`}
+          role="alert"
+        >
+          {status.message}
+        </div>
+      )}
+
+      {/* Free-shipping progress — threshold from cart API */}
+      {availableItems.length > 0 && (
+        <div className={styles.shippingBanner}>
+          <Truck size={18} className={styles.shippingBannerIcon} />
+          {freeShipping.qualifies || freeShipping.remaining <= 0 ? (
+            <span>
+              You&apos;ve unlocked <strong>FREE Shipping</strong>!
+            </span>
+          ) : (
+            <span>
+              Add items worth <strong>₹{Math.ceil(freeShipping.remaining)}</strong> more for{" "}
+              <strong>FREE Shipping</strong>
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Cart Layout */}
       <div className={styles.cartLayout}>
         {/* Left Side: Items list */}
         <div className={styles.itemsSection}>
           <div className={styles.itemsList}>
+            {cartLoading && cartItems.length === 0 && (
+              <div style={{ padding: "48px 24px", textAlign: "center" }}>
+                <Text size="md" color="muted">
+                  Loading your cart…
+                </Text>
+              </div>
+            )}
             {cartItems.map((item) => (
-              <div key={item.id} className={styles.cartItem}>
+              <div
+                key={item.id}
+                className={`${styles.cartItem} ${
+                  !item.available ? styles.cartItemUnavailable : ""
+                }`}
+              >
                 <div className={styles.itemImgWrapper}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -163,13 +285,16 @@ export default function CartPage() {
                       }
                     }}
                   />
+                  {!item.available && (
+                    <span className={styles.unavailableBadge}>Unavailable</span>
+                  )}
                 </div>
                 <div className={styles.itemDetails}>
                   <h4 className={styles.itemTitle}>{item.title}</h4>
                   <span className={styles.itemSubtitle}>{item.subtitle}</span>
                   <button
                     type="button"
-                    onClick={() => handleRemoveItem(item.id)}
+                    onClick={() => void handleRemoveItem(item.id)}
                     className={styles.deleteBtn}
                     aria-label="Remove item"
                   >
@@ -180,7 +305,8 @@ export default function CartPage() {
                   <button
                     type="button"
                     className={styles.qtyBtn}
-                    onClick={() => handleQtyChange(item.id, "dec")}
+                    disabled={!item.available}
+                    onClick={() => void handleQtyChange(item.id, "dec")}
                   >
                     -
                   </button>
@@ -188,17 +314,20 @@ export default function CartPage() {
                   <button
                     type="button"
                     className={styles.qtyBtn}
-                    onClick={() => handleQtyChange(item.id, "inc")}
+                    disabled={!item.available}
+                    onClick={() => void handleQtyChange(item.id, "inc")}
                   >
                     +
                   </button>
                 </div>
                 <span className={styles.itemPrice}>
-                  ₹{(item.price * item.qty).toLocaleString("en-IN")}
+                  {item.available
+                    ? `₹${(item.price * item.qty).toLocaleString("en-IN")}`
+                    : "—"}
                 </span>
               </div>
             ))}
-            {cartItems.length === 0 && (
+            {!cartLoading && cartItems.length === 0 && (
               <div style={{ padding: "48px 24px", textAlign: "center" }}>
                 <Text size="md" color="muted">
                   Your cart is empty.
@@ -255,6 +384,14 @@ export default function CartPage() {
               <span>Subtotal</span>
               <span>₹{subtotal.toLocaleString("en-IN")}</span>
             </div>
+            {discountAmount > 0 ? (
+              <div className={styles.row}>
+                <span>Discount{couponCode ? ` (${couponCode})` : ""}</span>
+                <span className={styles.shippingFree}>
+                  −₹{discountAmount.toLocaleString("en-IN")}
+                </span>
+              </div>
+            ) : null}
             <div className={styles.row}>
               <span>Shipping</span>
               {shipping === 0 ? (
@@ -272,19 +409,94 @@ export default function CartPage() {
               <span>₹{total.toLocaleString("en-IN")}</span>
             </div>
 
+            <div style={{ margin: "12px 0 16px" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  marginBottom: 6,
+                }}
+              >
+                Coupon code
+              </label>
+              {couponCode ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    padding: "10px 12px",
+                    border: "1px solid var(--color-border-dark)",
+                    borderRadius: 8,
+                    fontSize: "0.875rem",
+                  }}
+                >
+                  <span>
+                    Applied: <strong>{couponCode}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    disabled={couponBusy}
+                    onClick={() => void handleRemoveCoupon()}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "var(--color-danger)",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value)}
+                    placeholder="e.g. WELCOME10"
+                    disabled={couponBusy || availableItems.length === 0}
+                    style={{
+                      flex: 1,
+                      padding: "10px 12px",
+                      border: "1px solid var(--color-border-dark)",
+                      borderRadius: 8,
+                      fontSize: "0.875rem",
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleApplyCoupon();
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={couponBusy || !couponInput.trim() || availableItems.length === 0}
+                    onClick={() => void handleApplyCoupon()}
+                  >
+                    {couponBusy ? "…" : "Apply"}
+                  </Button>
+                </div>
+              )}
+            </div>
+
             <Button
               variant="primary"
               fullWidth
               size="lg"
-              disabled={cartItems.length === 0}
+              disabled={availableItems.length === 0 || cartLoading}
+              onClick={handleProceedToCheckout}
             >
-              Place Order
+              Proceed to Checkout
             </Button>
 
             <p className={styles.termsText}>
-              By placing this order, you agree to our{" "}
-              <Link href="/terms">Terms &amp; Conditions</Link> and{" "}
-              <Link href="/privacy">Privacy Policy</Link>.
+              Payment method below pre-selects on checkout. You&apos;ll confirm shipping
+              and place the order on the next page.
             </p>
 
             <div className={styles.acceptRow}>
@@ -408,16 +620,16 @@ export default function CartPage() {
 
             <label
               className={`${styles.radioItem} ${
-                selectedMethod === "net" ? styles.radioItemActive : ""
+                selectedMethod === "netbanking" ? styles.radioItemActive : ""
               }`}
-              onClick={() => setSelectedMethod("net")}
+              onClick={() => setSelectedMethod("netbanking")}
             >
               <span className={styles.radioLeft}>
                 <input
                   type="radio"
                   className={styles.radio}
-                  checked={selectedMethod === "net"}
-                  onChange={() => setSelectedMethod("net")}
+                  checked={selectedMethod === "netbanking"}
+                  onChange={() => setSelectedMethod("netbanking")}
                 />
                 <span>Net Banking</span>
               </span>
@@ -466,37 +678,22 @@ export default function CartPage() {
 
         <div className={styles.productsGrid}>
           {recommendations.map((product) => (
-            <ProductCard key={product.id} href={`/products/${product.id}`}>
+            <ProductCard key={product.id} href={productHref(product)}>
               <ProductCard.Image
-                src={product.image}
+                src={productImageUrl(product)}
                 alt={product.title}
                 onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                  const target = e.target as HTMLImageElement;
-                  if (product.id === "potted-plant") {
-                    target.src =
-                      "https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&fit=crop&q=80&w=250";
-                  } else if (product.id === "gold-necklace") {
-                    target.src =
-                      "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&q=80&w=250";
-                  } else if (product.id === "line-art") {
-                    target.src =
-                      "https://images.unsplash.com/photo-1580136579312-94651dfd596d?auto=format&fit=crop&q=80&w=250";
-                  } else if (product.id === "boho-woven") {
-                    target.src =
-                      "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=250";
-                  } else {
-                    target.src =
-                      "https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&q=80&w=250";
-                  }
+                  (e.target as HTMLImageElement).src =
+                    "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=250";
                 }}
               />
               <ProductCard.Body>
                 <ProductCard.Title>{product.title}</ProductCard.Title>
-                <ProductCard.Subtitle>{product.subtitle}</ProductCard.Subtitle>
+                <ProductCard.Subtitle>{product.shopName}</ProductCard.Subtitle>
                 <ProductCard.Price amount={product.price} />
                 <ProductCard.Rating
-                  rating={product.rating}
-                  reviewsCount={product.reviews}
+                  rating={product.avgRating}
+                  reviewsCount={product.reviewCount}
                 />
               </ProductCard.Body>
             </ProductCard>

@@ -1,7 +1,24 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { redirectToLogin } from "@/utils/api-client";
+import {
+  fetchOrderDetail,
+  fetchOrders,
+  fetchAddresses,
+  formatOrderStatusLabel,
+  orderStatusBadgeClass,
+  type OrderListItem,
+} from "@/utils/cart";
+import {
+  fetchWishlist,
+  removeFromWishlist,
+  type WishlistItem,
+} from "@/utils/wishlist";
+import { productHref } from "@/utils/catalog";
 
 import {
   LayoutDashboard,
@@ -29,102 +46,234 @@ import Button from "@/components/ui/Button/Button";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
 import Sidebar from "@/components/layout/Sidebar/Sidebar";
 
-export default function AccountPage() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+type DisplayOrder = {
+  id: string;
+  orderNumber?: string;
+  title: string;
+  date: string;
+  price: number;
+  qty: number;
+  status: string;
+  statusKey: string;
+  image: string;
+};
 
-  // User details
+function mapOrdersForDisplay(
+  orders: OrderListItem[],
+  details: Map<string, Awaited<ReturnType<typeof fetchOrderDetail>>>
+): DisplayOrder[] {
+  return orders.map((order) => {
+    const detail = details.get(order.id);
+    const firstItem = detail?.items[0];
+    return {
+      id: order.id,
+      title:
+        order.previewTitle ??
+        firstItem?.productTitle ??
+        `Order · ${order.itemCount} item(s)`,
+      date: new Date(order.createdAt).toLocaleDateString("en-IN", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      }),
+      price: order.totalAmount,
+      qty: firstItem?.quantity ?? order.itemCount,
+      status: formatOrderStatusLabel(order.status),
+      statusKey: order.status,
+      image:
+        order.previewThumbnailUrl ||
+        firstItem?.productThumbnailUrl ||
+        "/images/product-woven-hanging.jpg",
+      orderNumber: order.orderNumber,
+    };
+  });
+}
+
+export default function AccountPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className={styles.container}>
+          <Text>Loading account…</Text>
+        </div>
+      }
+    >
+      <AccountPageInner />
+    </Suspense>
+  );
+}
+
+function AccountPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user: sessionUser, status: authStatus, logout } = useAuth();
+  const tabParam = searchParams.get("tab");
+  const pendingOrderId = searchParams.get("pending");
+  const [activeTab, setActiveTab] = useState(tabParam ?? "dashboard");
+  const [recentOrders, setRecentOrders] = useState<DisplayOrder[]>([]);
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [addressCount, setAddressCount] = useState(0);
+  const [defaultAddressLabel, setDefaultAddressLabel] = useState(
+    "Add an address to get started"
+  );
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [wishlistCount, setWishlistCount] = useState(0);
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  useEffect(() => {
+    if (authStatus === "ready" && !sessionUser) {
+      redirectToLogin("/account");
+    }
+  }, [authStatus, sessionUser]);
+
+  useEffect(() => {
+    if (authStatus !== "ready" || !sessionUser) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const list = await fetchOrders(1, activeTab === "orders" ? 20 : 5);
+      if (cancelled) return;
+
+      const detailEntries = await Promise.all(
+        list.orders.slice(0, activeTab === "orders" ? 10 : 3).map(async (order) => {
+          const detail = await fetchOrderDetail(order.id);
+          return [order.id, detail] as const;
+        })
+      );
+      if (cancelled) return;
+
+      setOrdersTotal(list.total);
+      setRecentOrders(mapOrdersForDisplay(list.orders, new Map(detailEntries)));
+
+      const addresses = await fetchAddresses();
+      if (!cancelled) {
+        setAddressCount(addresses.length);
+        const defaultAddress =
+          addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
+        if (defaultAddress) {
+          setDefaultAddressLabel(
+            [
+              defaultAddress.line1,
+              defaultAddress.line2,
+              defaultAddress.city,
+              defaultAddress.state,
+              defaultAddress.postalCode,
+            ]
+              .filter(Boolean)
+              .join(", ")
+          );
+        } else {
+          setDefaultAddressLabel("Add an address to get started");
+        }
+      }
+
+      if (pendingOrderId) {
+        const fromList = list.orders.find((order) => order.id === pendingOrderId);
+        const status =
+          fromList?.status ??
+          (await fetchOrderDetail(pendingOrderId))?.status ??
+          "pending_payment";
+        setPendingNotice(
+          status === "pending_payment"
+            ? `Order ${pendingOrderId.slice(0, 8)}… is awaiting payment. Complete checkout when Razorpay is enabled (Phase 4).`
+            : `Order ${pendingOrderId.slice(0, 8)}… was placed (${formatOrderStatusLabel(status)}).`
+        );
+      }
+
+      const wish = await fetchWishlist();
+      if (!cancelled) {
+        setWishlistItems(wish.items);
+        setWishlistCount(wish.total || wish.items.length);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, sessionUser, activeTab, pendingOrderId]);
+
   const user = {
-    name: "Nandita Sharma",
-    email: "nandita@example.com",
-    phone: "+91 98156 43210",
-    memberSince: "May 10, 2024",
-    status: "Active",
-    address: "123, Green Street, Mumbai, Maharashtra 400001, India",
+    name: sessionUser?.fullName ?? "",
+    email: sessionUser?.email ?? "",
+    phone: sessionUser?.phoneNumber ?? "Not set",
+    memberSince: sessionUser?.createdAt
+      ? new Date(sessionUser.createdAt).toLocaleDateString("en-IN", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : "",
+    status: sessionUser?.status === "active" ? "Active" : (sessionUser?.status ?? ""),
+    address: defaultAddressLabel,
     avatar:
       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS_nZ1bL9Vcq6_iyx6xBOSL2oaaTepkAAFPaw&s",
+    emailVerified: Boolean(sessionUser?.emailVerifiedAt),
   };
 
-  // Stats cards values
   const stats = [
     {
-      val: "12",
+      val: String(ordersTotal),
       label: "Total Orders",
       linkText: "View all orders",
       href: "/account?tab=orders",
       icon: <ShoppingBag size={20} />,
-      bg: "#f5f3ff", // purple-50
+      bg: "#f5f3ff",
       color: "var(--color-primary)",
     },
     {
-      val: "24",
+      val: String(wishlistCount),
       label: "Wishlist Items",
       linkText: "View wishlist",
       href: "/account?tab=wishlist",
       icon: <Heart size={20} />,
-      bg: "#fff5f5", // red-50
+      bg: "#fff5f5",
       color: "var(--color-danger)",
     },
     {
-      val: "18",
+      val: "—",
       label: "Reviews Given",
-      linkText: "View reviews",
+      linkText: "Coming soon",
       href: "/account?tab=reviews",
       icon: <Star size={20} />,
-      bg: "#fffbeb", // amber-50
+      bg: "#fffbeb",
       color: "var(--color-warning)",
     },
     {
-      val: "5",
+      val: String(addressCount),
       label: "Saved Addresses",
       linkText: "Manage addresses",
       href: "/account?tab=addresses",
       icon: <MapPin size={20} />,
-      bg: "#eff6ff", // blue-50
+      bg: "#eff6ff",
       color: "var(--color-info)",
     },
   ];
 
-  // Recent Orders
-  const recentOrders = [
-    {
-      id: "#SFY12345",
-      title: "Boho Woven Wall Hanging",
-      date: "May 20, 2024",
-      price: 1599,
-      qty: 1,
-      status: "Delivered",
-      image: "/images/product-woven-hanging.jpg",
-    },
-    {
-      id: "#SFY12344",
-      title: "Scented Soy Candle",
-      date: "May 18, 2024",
-      price: 799,
-      qty: 1,
-      status: "Delivered",
-      image: "/images/product-soy-candle.jpg",
-    },
-    {
-      id: "#SFY12343",
-      title: "Beaded Flower Earrings",
-      date: "May 15, 2024",
-      price: 499,
-      qty: 1,
-      status: "Shipped",
-      image: "/images/product-flower-earrings.jpg",
-    },
-  ];
+  if (authStatus !== "ready" || !sessionUser) {
+    return (
+      <div className={styles.container}>
+        <Text>Checking your session...</Text>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.container}>
-      {/* Breadcrumbs */}
       <Breadcrumbs>
         <Breadcrumbs.Item href="/">Home</Breadcrumbs.Item>
         <Breadcrumbs.Item active>My Account</Breadcrumbs.Item>
       </Breadcrumbs>
 
       <div className={styles.layout}>
-        {/* Sidebar Nav */}
         <Sidebar>
           <Sidebar.Nav>
             <Sidebar.Item
@@ -186,7 +335,7 @@ export default function AccountPage() {
             <Sidebar.Item
               icon={<Store size={18} />}
               active={activeTab === "seller-dashboard"}
-              onClick={() => setActiveTab("seller-dashboard")}
+              onClick={() => router.push("/seller")}
             >
               Seller Dashboard
             </Sidebar.Item>
@@ -199,13 +348,16 @@ export default function AccountPage() {
             </Sidebar.Item>
             <Sidebar.Item
               icon={<LogOut size={18} />}
-              onClick={() => alert("Logging out...")}
+              onClick={() => {
+                void logout().then(() => {
+                  router.replace("/login");
+                });
+              }}
             >
               Logout
             </Sidebar.Item>
           </Sidebar.Nav>
 
-          {/* Sell Callout */}
           <Sidebar.Callout
             title="Sell on Stuffsy"
             description="Start your online store and grow your business with us."
@@ -214,7 +366,6 @@ export default function AccountPage() {
           />
         </Sidebar>
 
-        {/* Dashboard Main Content */}
         <main className={styles.mainContent}>
           <div className={styles.headerArea}>
             <Heading level={2}>My Account</Heading>
@@ -223,7 +374,12 @@ export default function AccountPage() {
             </span>
           </div>
 
-          {/* Profile Header */}
+          {pendingNotice && (
+            <div className={styles.pendingPaymentNotice} role="status">
+              {pendingNotice}
+            </div>
+          )}
+
           <div className={styles.profileCard}>
             <div className={styles.profileLeft}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -239,7 +395,11 @@ export default function AccountPage() {
               <div className={styles.profileDetails}>
                 <div className={styles.nameRow}>
                   <Heading level={3}>{user.name}</Heading>
-                  <span className={styles.verifiedBadge}>Verified</span>
+                  {user.emailVerified ? (
+                    <span className={styles.verifiedBadge}>Verified</span>
+                  ) : (
+                    <span className={styles.verifiedBadge}>Unverified</span>
+                  )}
                 </div>
                 <div className={styles.contactRow}>
                   <div className={styles.contactItem}>
@@ -258,7 +418,6 @@ export default function AccountPage() {
             </Button>
           </div>
 
-          {/* Stats Row */}
           <div className={styles.statsRow}>
             {stats.map((stat, idx) => (
               <div key={idx} className={styles.statCard}>
@@ -280,20 +439,102 @@ export default function AccountPage() {
             ))}
           </div>
 
-          {/* Recent Orders & Overview splits */}
           <div className={styles.splitGrid}>
-            {/* Recent Orders */}
+            {activeTab === "notifications" ? (
+              <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
+                <div className={styles.sectionHeader}>
+                  <Heading level={4}>Notifications</Heading>
+                </div>
+                <Text size="sm" color="muted">
+                  Order and marketing email preferences are not wired to a backend API yet.
+                  Transactional mail (order confirmation, shipping, invoice, auth) is sent
+                  automatically when those events occur.
+                </Text>
+              </div>
+            ) : activeTab === "wishlist" ? (
+              <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
+                <div className={styles.sectionHeader}>
+                  <Heading level={4}>Wishlist ({wishlistItems.length})</Heading>
+                </div>
+                {wishlistItems.length === 0 ? (
+                  <Text size="sm" color="muted">
+                    No saved items yet. Tap the heart on a product to add it here.
+                  </Text>
+                ) : (
+                  <div className={styles.ordersList}>
+                    {wishlistItems.map((item) => (
+                      <div key={item.id} className={styles.orderRow}>
+                        <Link
+                          href={productHref({ slug: item.slug })}
+                          style={{
+                            display: "contents",
+                            textDecoration: "none",
+                            color: "inherit",
+                          }}
+                        >
+                          <div className={styles.orderImgWrapper}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={item.thumbnailUrl || "/images/product-woven-hanging.jpg"}
+                              alt={item.title}
+                              className={styles.orderImg}
+                            />
+                          </div>
+                          <div className={styles.orderInfo}>
+                            <span className={styles.orderTitle}>{item.title}</span>
+                            <span className={styles.orderId}>{item.shopName}</span>
+                          </div>
+                        </Link>
+                        <div className={styles.orderMeta}>
+                          <span className={styles.orderPrice}>
+                            ₹{item.price.toLocaleString("en-IN")}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              void removeFromWishlist(item.productId).then(async () => {
+                                const wish = await fetchWishlist();
+                                setWishlistItems(wish.items);
+                                setWishlistCount(wish.total || wish.items.length);
+                              });
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
             <div className={styles.splitSection}>
               <div className={styles.sectionHeader}>
-                <Heading level={4}>Recent Orders</Heading>
-                <Link href="/account?tab=orders" className={styles.viewAllLink}>
-                  <span>View all orders</span>
-                  <ArrowRight size={12} />
-                </Link>
+                <Heading level={4}>
+                  {activeTab === "orders" ? "Your Orders" : "Recent Orders"}
+                </Heading>
+                {activeTab !== "orders" && (
+                  <Link href="/account?tab=orders" className={styles.viewAllLink}>
+                    <span>View all orders</span>
+                    <ArrowRight size={12} />
+                  </Link>
+                )}
               </div>
               <div className={styles.ordersList}>
-                {recentOrders.map((order, idx) => (
-                  <div key={idx} className={styles.orderRow}>
+                {recentOrders.length === 0 && (
+                  <Text size="sm" color="muted">
+                    No orders yet.
+                  </Text>
+                )}
+                {recentOrders.map((order) => (
+                  <Link
+                    key={order.id}
+                    href={`/orders/${order.id}/details`}
+                    className={styles.orderRow}
+                    style={{ textDecoration: "none", color: "inherit" }}
+                  >
                     <div className={styles.orderImgWrapper}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -301,24 +542,15 @@ export default function AccountPage() {
                         alt={order.title}
                         className={styles.orderImg}
                         onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          if (order.title.includes("Woven")) {
-                            target.src =
-                              "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=100";
-                          } else if (order.title.includes("Candle")) {
-                            target.src =
-                              "https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&q=80&w=100";
-                          } else {
-                            target.src =
-                              "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&q=80&w=100";
-                          }
+                          (e.target as HTMLImageElement).src =
+                            "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=100";
                         }}
                       />
                     </div>
                     <div className={styles.orderInfo}>
                       <span className={styles.orderTitle}>{order.title}</span>
                       <span className={styles.orderId}>
-                        Order ID: {order.id}
+                        Order ID: {order.orderNumber || order.id.slice(0, 8)}
                       </span>
                       <span className={styles.orderId}>{order.date}</span>
                     </div>
@@ -329,20 +561,17 @@ export default function AccountPage() {
                       <span className={styles.orderQty}>{order.qty} Item</span>
                       <span
                         className={`${styles.statusBadge} ${
-                          order.status === "Delivered"
-                            ? styles.delivered
-                            : styles.shipped
+                          styles[orderStatusBadgeClass(order.statusKey)]
                         }`}
                       >
                         {order.status}
                       </span>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
 
-            {/* Account Overview */}
             <div className={styles.splitSection}>
               <div className={styles.sectionHeader}>
                 <Heading level={4}>Account Overview</Heading>
@@ -384,9 +613,7 @@ export default function AccountPage() {
                   </div>
                   <div className={styles.overviewLabelCol}>
                     <span className={styles.overviewLabel}>Member Since</span>
-                    <span className={styles.overviewVal}>
-                      {user.memberSince}
-                    </span>
+                    <span className={styles.overviewVal}>{user.memberSince}</span>
                   </div>
                 </div>
 
@@ -405,14 +632,14 @@ export default function AccountPage() {
                     <MapPin size={16} />
                   </div>
                   <div className={styles.overviewLabelCol}>
-                    <span className={styles.overviewLabel}>
-                      Default Address
-                    </span>
+                    <span className={styles.overviewLabel}>Default Address</span>
                     <span className={styles.overviewVal}>{user.address}</span>
                   </div>
                 </div>
               </div>
             </div>
+              </>
+            )}
           </div>
         </main>
       </div>
