@@ -3,6 +3,7 @@ import type { CookieOptions, Request, Response } from "express";
 import type { PoolClient, QueryResultRow } from "pg";
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
+import { baseCookieOptions } from "../utils/cookie-options.js";
 import { loadCartItemsForCoupon, validateCoupon } from "./coupon.service.js";
 import { AppError } from "../utils/errors.js";
 
@@ -54,10 +55,7 @@ export type CartView = {
 
 function guestCookieOptions(): CookieOptions {
   return {
-    httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
+    ...baseCookieOptions(),
     maxAge: GUEST_SESSION_MAX_AGE_MS,
   };
 }

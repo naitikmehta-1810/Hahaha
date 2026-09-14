@@ -1,21 +1,12 @@
 import type { CookieOptions, Response } from "express";
-import { env } from "../config/env.js";
 import { ACCESS_TOKEN_TTL_SECONDS } from "./jwt.js";
+import { baseCookieOptions } from "./cookie-options.js";
 
 export const ACCESS_COOKIE = "access_token";
 export const REFRESH_COOKIE = "refresh_token";
 
 const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60;
 const REFRESH_TTL_REMEMBER_OFF_SECONDS = 7 * 24 * 60 * 60;
-
-function baseCookieOptions(): CookieOptions {
-  return {
-    httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-  };
-}
 
 export function refreshTtlSeconds(rememberMe: boolean) {
   return rememberMe ? REFRESH_TTL_SECONDS : REFRESH_TTL_REMEMBER_OFF_SECONDS;

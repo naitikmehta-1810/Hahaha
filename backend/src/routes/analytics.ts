@@ -5,6 +5,7 @@ import { asyncHandler } from "../middleware/async-handler.js";
 import { trackViewLimiter } from "../middleware/auth-rate-limit.js";
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
+import { baseCookieOptions } from "../utils/cookie-options.js";
 import {
   deriveViewChannel,
   viewChannelToOrderChannel,
@@ -46,10 +47,7 @@ analyticsRouter.post(
     if (!sessionId) {
       sessionId = randomUUID();
       res.cookie(ANALYTICS_SESSION_COOKIE, sessionId, {
-        httpOnly: true,
-        secure: env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
+        ...baseCookieOptions(),
         maxAge: 365 * 24 * 60 * 60 * 1000,
       });
     }
@@ -63,10 +61,8 @@ analyticsRouter.post(
 
     const orderChannel = viewChannelToOrderChannel(viewChannel, parsed.data.utmSource);
     res.cookie(LAST_CHANNEL_COOKIE, orderChannel, {
+      ...baseCookieOptions(),
       httpOnly: false,
-      secure: env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 

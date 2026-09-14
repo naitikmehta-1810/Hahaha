@@ -7,6 +7,7 @@ import { authWriteLimiter } from "../middleware/auth-rate-limit.js";
 import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
 import { comparePassword } from "../utils/password.js";
 import { REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from "../utils/cookies.js";
+import { baseCookieOptions } from "../utils/cookie-options.js";
 import {
   confirmEmailVerification,
   createEmailVerificationToken,
@@ -58,10 +59,7 @@ const OAUTH_NEXT_COOKIE = "oauth_next";
 
 function oauthCookieOptions(): CookieOptions {
   return {
-    httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
+    ...baseCookieOptions(),
     maxAge: 10 * 60 * 1000,
   };
 }
