@@ -102,7 +102,7 @@ function AuthPageInner({ mode }: AuthPageProps) {
     const next = searchParams.get("next");
     const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/account";
     window.location.assign(
-      `${apiBaseUrl}/api/auth/${provider}?next=${encodeURIComponent(safeNext)}`
+      `${apiBaseUrl()}/api/auth/${provider}?next=${encodeURIComponent(safeNext)}`
     );
   };
 

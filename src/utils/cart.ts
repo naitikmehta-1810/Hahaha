@@ -478,7 +478,7 @@ export async function fetchOrderDetail(orderId: string): Promise<OrderDetail | n
 /** Authenticated PDF download (regenerated server-side; does not depend on Cloudinary public URLs). */
 export async function downloadOrderInvoice(orderId: string): Promise<{ error: string | null }> {
   try {
-    const response = await fetch(`${apiBaseUrl}/api/orders/${orderId}/invoice`, {
+    const response = await fetch(`${apiBaseUrl()}/api/orders/${orderId}/invoice`, {
       method: "GET",
       credentials: "include",
     });

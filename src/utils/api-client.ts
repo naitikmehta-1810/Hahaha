@@ -28,6 +28,11 @@ type ApiRequestOptions = Omit<RequestInit, "credentials" | "body"> & {
 };
 
 function getApiBaseUrl() {
+  // Browser: same-origin `/api` via Next rewrite (first-party cookies).
+  if (typeof window !== "undefined") {
+    return "";
+  }
+
   const healthUrl = process.env.NEXT_PUBLIC_BACKEND_HEALTH_URL;
   if (healthUrl) {
     return healthUrl.replace(/\/api\/health\/?$/i, "").replace(/\/$/, "");
@@ -36,7 +41,10 @@ function getApiBaseUrl() {
   return (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:4000").replace(/\/$/, "");
 }
 
-export const apiBaseUrl = getApiBaseUrl();
+/** Prefer calling this at request time; value differs on server vs browser. */
+export function apiBaseUrl() {
+  return getApiBaseUrl();
+}
 
 function messageFromBody(body: unknown, fallback: string) {
   if (body && typeof body === "object" && "message" in body) {
@@ -101,7 +109,7 @@ export async function apiRequest<T>(
   const { skipRefresh = false, body, headers, ...init } = options;
 
   const execute = () =>
-    fetch(`${apiBaseUrl}${path}`, {
+    fetch(`${apiBaseUrl()}${path}`, {
       ...init,
       method,
       credentials: "include",
