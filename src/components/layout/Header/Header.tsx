@@ -3,7 +3,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Heart, ShoppingCart, Store, ChevronDown, UserRound } from "lucide-react";
+import {
+  Search,
+  Heart,
+  ShoppingCart,
+  Store,
+  ChevronDown,
+  UserRound,
+  Menu,
+  X,
+} from "lucide-react";
 import styles from "./Header.module.css";
 import { getCart, refreshCart } from "@/utils/cart";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -17,6 +26,7 @@ export const Header = () => {
   const { user, status, isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [cartCount, setCartCount] = useState(0);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<{
     products: SuggestProduct[];
     categories: SuggestCategory[];
@@ -76,9 +86,19 @@ export const Header = () => {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileOpen]);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSuggestOpen(false);
+    setMobileOpen(false);
     if (searchQuery.trim()) {
       router.push(`/shop?search=${encodeURIComponent(searchQuery)}`);
     } else {
@@ -86,102 +106,124 @@ export const Header = () => {
     }
   };
 
+  const SearchField = (
+    <form
+      ref={formRef}
+      onSubmit={handleSearchSubmit}
+      className={styles.searchForm}
+      role="search"
+    >
+      <input
+        type="text"
+        placeholder="Search for products, categories, shops..."
+        className={styles.searchInput}
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        onFocus={() => {
+          if (suggestions && (suggestions.products.length || suggestions.categories.length)) {
+            setSuggestOpen(true);
+          }
+        }}
+        autoComplete="off"
+        aria-autocomplete="list"
+        aria-expanded={suggestOpen}
+      />
+      <Search size={18} className={styles.searchIcon} />
+      {suggestOpen && suggestions ? (
+        <div className={styles.suggestPanel} role="listbox">
+          {suggestions.products.length > 0 ? (
+            <div className={styles.suggestGroup}>
+              <p className={styles.suggestLabel}>Products</p>
+              {suggestions.products.map((p) => (
+                <Link
+                  key={p.id}
+                  href={`/products/${p.slug || p.id}`}
+                  className={styles.suggestItem}
+                  role="option"
+                  onClick={() => {
+                    setSuggestOpen(false);
+                    setMobileOpen(false);
+                  }}
+                >
+                  {p.title}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+          {suggestions.categories.length > 0 ? (
+            <div className={styles.suggestGroup}>
+              <p className={styles.suggestLabel}>Categories</p>
+              {suggestions.categories.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/shop?category=${encodeURIComponent(c.slug)}`}
+                  className={styles.suggestItem}
+                  role="option"
+                  onClick={() => {
+                    setSuggestOpen(false);
+                    setMobileOpen(false);
+                  }}
+                >
+                  {c.name}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+          <button
+            type="submit"
+            className={styles.suggestAll}
+            onClick={() => setSuggestOpen(false)}
+          >
+            See all results for “{searchQuery.trim()}”
+          </button>
+        </div>
+      ) : null}
+    </form>
+  );
+
   return (
     <header className={styles.headerWrapper}>
       <div className={styles.header}>
-        <Link href="/" className={styles.logoArea}>
-          <span className={styles.logoIcon}>
-            <svg
-              width="36"
-              height="36"
-              viewBox="0 0 36 36"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <rect width="36" height="36" rx="10" fill="#7C3AED" />
-              <path
-                d="M14 26C11.5 26 9.5 24 9.5 21.5C9.5 19 11.5 17 14 17C16.5 17 18 19 19 20.5C20 22 21.5 24 24 24C26.5 24 28.5 22 28.5 19.5C28.5 17 26.5 15 24 15C21.5 15 20 17 19 18.5"
-                stroke="white"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-          Stuffsy
-        </Link>
-
-        <form
-          ref={formRef}
-          onSubmit={handleSearchSubmit}
-          className={styles.searchForm}
-          role="search"
-        >
-          <input
-            type="text"
-            placeholder="Search for products, categories, shops..."
-            className={styles.searchInput}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => {
-              if (suggestions && (suggestions.products.length || suggestions.categories.length)) {
-                setSuggestOpen(true);
-              }
-            }}
-            autoComplete="off"
-            aria-autocomplete="list"
-            aria-expanded={suggestOpen}
-          />
-          <Search size={18} className={styles.searchIcon} />
-          {suggestOpen && suggestions ? (
-            <div className={styles.suggestPanel} role="listbox">
-              {suggestions.products.length > 0 ? (
-                <div className={styles.suggestGroup}>
-                  <p className={styles.suggestLabel}>Products</p>
-                  {suggestions.products.map((p) => (
-                    <Link
-                      key={p.id}
-                      href={`/products/${p.slug || p.id}`}
-                      className={styles.suggestItem}
-                      role="option"
-                      onClick={() => setSuggestOpen(false)}
-                    >
-                      {p.title}
-                    </Link>
-                  ))}
-                </div>
-              ) : null}
-              {suggestions.categories.length > 0 ? (
-                <div className={styles.suggestGroup}>
-                  <p className={styles.suggestLabel}>Categories</p>
-                  {suggestions.categories.map((c) => (
-                    <Link
-                      key={c.id}
-                      href={`/shop?category=${encodeURIComponent(c.slug)}`}
-                      className={styles.suggestItem}
-                      role="option"
-                      onClick={() => setSuggestOpen(false)}
-                    >
-                      {c.name}
-                    </Link>
-                  ))}
-                </div>
-              ) : null}
-              <button
-                type="submit"
-                className={styles.suggestAll}
-                onClick={() => setSuggestOpen(false)}
+        <div className={styles.leftCluster}>
+          <button
+            type="button"
+            className={styles.menuBtn}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen((v) => !v)}
+          >
+            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+          <Link href="/" className={styles.logoArea} onClick={() => setMobileOpen(false)}>
+            <span className={styles.logoIcon}>
+              <svg
+                width="36"
+                height="36"
+                viewBox="0 0 36 36"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden
               >
-                See all results for “{searchQuery.trim()}”
-              </button>
-            </div>
-          ) : null}
-        </form>
+                <rect width="36" height="36" rx="10" fill="#7C3AED" />
+                <path
+                  d="M14 26C11.5 26 9.5 24 9.5 21.5C9.5 19 11.5 17 14 17C16.5 17 18 19 19 20.5C20 22 21.5 24 24 24C26.5 24 28.5 22 28.5 19.5C28.5 17 26.5 15 24 15C21.5 15 20 17 19 18.5"
+                  stroke="white"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+            <span className={styles.logoText}>Stuffsy</span>
+          </Link>
+        </div>
+
+        <div className={styles.searchSlot}>{SearchField}</div>
 
         <div className={styles.navActions}>
           <Link href="/sell" className={styles.sellLink}>
             <Store size={18} />
-            <span>Sell on Stuffsy</span>
+            <span className={styles.sellText}>Sell on Stuffsy</span>
           </Link>
 
           <Link
@@ -194,7 +236,7 @@ export const Header = () => {
 
           <Link href="/cart" className={styles.iconBtn} aria-label="Shopping Cart">
             <ShoppingCart size={20} />
-            <span className={styles.badge}>{cartCount}</span>
+            {cartCount > 0 ? <span className={styles.badge}>{cartCount}</span> : null}
           </Link>
 
           {status === "loading" ? (
@@ -218,6 +260,42 @@ export const Header = () => {
           )}
         </div>
       </div>
+
+      {mobileOpen ? (
+        <div className={styles.mobileDrawer} role="dialog" aria-label="Menu">
+          <nav className={styles.mobileNav}>
+            <Link href="/shop" onClick={() => setMobileOpen(false)}>
+              Shop all
+            </Link>
+            <Link href="/sell" onClick={() => setMobileOpen(false)}>
+              Sell on Stuffsy
+            </Link>
+            <Link
+              href={isAuthenticated ? "/account?tab=wishlist" : "/login?next=/account?tab=wishlist"}
+              onClick={() => setMobileOpen(false)}
+            >
+              Wishlist
+            </Link>
+            <Link href="/cart" onClick={() => setMobileOpen(false)}>
+              Cart{cartCount > 0 ? ` (${cartCount})` : ""}
+            </Link>
+            {isAuthenticated ? (
+              <Link href="/account" onClick={() => setMobileOpen(false)}>
+                My Account
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" onClick={() => setMobileOpen(false)}>
+                  Sign in
+                </Link>
+                <Link href="/signup" onClick={() => setMobileOpen(false)}>
+                  Sign up
+                </Link>
+              </>
+            )}
+          </nav>
+        </div>
+      ) : null}
     </header>
   );
 };

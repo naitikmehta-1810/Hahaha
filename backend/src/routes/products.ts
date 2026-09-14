@@ -10,8 +10,11 @@ import {
   type ProductSort,
 } from "../services/catalog.service.js";
 import { subscribeStockNotification } from "../services/stock-notifications.service.js";
+import { publicReadLimiter } from "../middleware/auth-rate-limit.js";
 
 const productsRouter = Router();
+
+productsRouter.use(publicReadLimiter);
 
 /** Comma-separated query values, e.g. ?tags=macrame,handmade */
 const csv = z

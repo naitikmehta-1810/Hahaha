@@ -18,20 +18,28 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
-  S3_BUCKET: z.string().min(1).optional(),
-  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
-  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
-  S3_REGION: z.string().min(1).default("auto"),
-  S3_ENDPOINT: z.string().url().optional(),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   FACEBOOK_APP_ID: z.string().min(1).optional(),
   FACEBOOK_APP_SECRET: z.string().min(1).optional(),
-  // Transition flag: also return the access JWT in JSON so older clients keep working.
-  AUTH_RETURN_TOKEN_IN_BODY: z
+  /**
+   * Also return the access JWT in JSON. Defaults false in production (httpOnly cookie only);
+   * true in development so scripts/Bearer proofs keep working.
+   */
+  AUTH_RETURN_TOKEN_IN_BODY: z.enum(["true", "false"]).optional(),
+  /** Shared secret for POST /api/shipping/webhook (header x-stuffsy-shipping-secret). */
+  SHIPPING_WEBHOOK_SECRET: z.string().min(16).optional(),
+  /** Allow admin PATCH inventory reset (k6). Forbidden implicitly in production unless true. */
+  ALLOW_LOADTEST_HELPERS: z
     .enum(["true", "false"])
-    .default("true")
+    .default("false")
     .transform((value) => value === "true"),
+  /** pg Pool max connections per process (put PgBouncer in front at scale). */
+  PG_POOL_MAX: z.coerce.number().int().positive().default(20),
+  PG_IDLE_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
+  PG_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  /** Per-query statement timeout in ms (0 = disabled). */
+  PG_STATEMENT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(15_000),
   /** Minutes a pending_payment order may hold inventory before auto-cancel. */
   RESERVATION_TIMEOUT_MINUTES: z.coerce.number().int().positive().default(20),
   /** "Free Shipping on orders over ₹999" — shown on the cart and every value-prop strip. */
@@ -67,7 +75,36 @@ const envSchema = z.object({
   PAYOUT_ENCRYPTION_KEY: z.string().min(1).optional(),
 });
 
-export const env = envSchema.parse(process.env);
+const parsed = envSchema.parse(process.env);
+
+export const env = {
+  ...parsed,
+  AUTH_RETURN_TOKEN_IN_BODY:
+    parsed.AUTH_RETURN_TOKEN_IN_BODY !== undefined
+      ? parsed.AUTH_RETURN_TOKEN_IN_BODY === "true"
+      : parsed.NODE_ENV !== "production",
+};
+
+if (env.NODE_ENV === "production" && !env.SHIPPING_WEBHOOK_SECRET) {
+  throw new Error(
+    "SHIPPING_WEBHOOK_SECRET (≥16 chars) is required in production for POST /api/shipping/webhook."
+  );
+}
+
+if (env.NODE_ENV === "production" && !env.PAYOUT_ENCRYPTION_KEY) {
+  throw new Error(
+    "PAYOUT_ENCRYPTION_KEY (32-byte base64) is required in production for seller payout_details."
+  );
+}
+
+if (env.PAYOUT_ENCRYPTION_KEY) {
+  const keyLen = Buffer.from(env.PAYOUT_ENCRYPTION_KEY, "base64").length;
+  if (keyLen !== 32) {
+    throw new Error(
+      "PAYOUT_ENCRYPTION_KEY must decode to exactly 32 bytes (base64). Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\""
+    );
+  }
+}
 
 if (env.PAYMENT_MODE === "stub") {
   if (env.NODE_ENV === "production") {

@@ -418,6 +418,7 @@ async function applyCapturedPayment(opts: {
     }
 
     try {
+      await client.query("SAVEPOINT capture_payment");
       await client.query(
         `update public.payments
          set status = 'captured',
@@ -427,6 +428,7 @@ async function applyCapturedPayment(opts: {
          where id = $3`,
         [opts.gatewayPaymentId, JSON.stringify(opts.payload), payment.id]
       );
+      await client.query("RELEASE SAVEPOINT capture_payment");
     } catch (error) {
       // Partial unique index may reject a second captured payment for the same order.
       if (
@@ -435,6 +437,7 @@ async function applyCapturedPayment(opts: {
         "code" in error &&
         String((error as { code?: string }).code) === "23505"
       ) {
+        await client.query("ROLLBACK TO SAVEPOINT capture_payment");
         await client.query(
           `update public.payments
            set status = 'failed',
@@ -559,6 +562,15 @@ export async function handleWebhook(rawBody: Buffer, signature: string | undefin
     const gatewayRefundId = String(entity.id ?? "");
     const gatewayPaymentId = String(entity.payment_id ?? "");
     const amountPaise = Number(entity.amount ?? 0);
+    if (!gatewayRefundId) {
+      return { ok: true, ignored: true };
+    }
+
+    const existingRefund = await pool.query<{ id: string; payment_id: string }>(
+      `select id, payment_id from public.refunds where gateway_refund_id = $1 limit 1`,
+      [gatewayRefundId]
+    );
+
     const payment = await pool.query<{ id: string; order_id: string; status: string }>(
       `select id, order_id, status from public.payments
        where gateway_payment_id = $1
@@ -569,17 +581,39 @@ export async function handleWebhook(rawBody: Buffer, signature: string | undefin
       return { ok: true, ignored: true };
     }
 
-    await pool.query(
-      `insert into public.refunds
-         (id, payment_id, amount, reason, status, gateway_refund_id, created_at, updated_at)
-       values (gen_random_uuid(), $1, $2, $3, 'processed', $4, now(), now())`,
-      [
-        payment.rows[0].id,
-        amountPaise / 100,
-        typeof entity.notes === "object" ? JSON.stringify(entity.notes) : "refund.processed",
-        gatewayRefundId,
-      ]
-    );
+    if (existingRefund.rows[0]) {
+      await pool.query(
+        `update public.refunds
+         set status = 'processed', updated_at = now()
+         where id = $1 and status <> 'processed'`,
+        [existingRefund.rows[0].id]
+      );
+    } else {
+      try {
+        await pool.query(
+          `insert into public.refunds
+             (id, payment_id, amount, reason, status, gateway_refund_id, created_at, updated_at)
+           values (gen_random_uuid(), $1, $2, $3, 'processed', $4, now(), now())`,
+          [
+            payment.rows[0].id,
+            amountPaise / 100,
+            typeof entity.notes === "object" ? JSON.stringify(entity.notes) : "refund.processed",
+            gatewayRefundId,
+          ]
+        );
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error &&
+          "code" in error &&
+          String((error as { code?: string }).code) === "23505"
+        ) {
+          // Concurrent webhook / duplicate gateway id — treat as idempotent.
+        } else {
+          throw error;
+        }
+      }
+    }
 
     await pool.query(
       `update public.payments set status = 'refunded', updated_at = now() where id = $1`,
@@ -587,17 +621,34 @@ export async function handleWebhook(rawBody: Buffer, signature: string | undefin
     );
 
     try {
-      await transition(payment.rows[0].order_id, "returned", {
-        reason: "refund_processed",
-        note: "Order returned after refund.",
-        meta: { gatewayRefundId },
-      });
+      const orderStatus = await pool.query<{ status: string }>(
+        `select status from public.orders where id = $1`,
+        [payment.rows[0].order_id]
+      );
+      const status = orderStatus.rows[0]?.status;
+      if (status === "cancelled" || status === "returned") {
+        await transition(payment.rows[0].order_id, "refunded", {
+          reason: "refund_processed",
+          note: "Payment refunded.",
+          meta: { gatewayRefundId },
+        });
+      } else if (status === "delivered") {
+        await transition(payment.rows[0].order_id, "returned", {
+          reason: "refund_processed",
+          note: "Order returned after refund.",
+          meta: { gatewayRefundId },
+        });
+        await transition(payment.rows[0].order_id, "refunded", {
+          reason: "refund_processed",
+          note: "Payment refunded.",
+          meta: { gatewayRefundId },
+        });
+      }
     } catch (error) {
-      // delivered→returned only; log illegal transitions without failing webhook.
       console.error("[payments] refund order transition skipped", error);
     }
 
-    return { ok: true, duplicate: false };
+    return { ok: true, duplicate: Boolean(existingRefund.rows[0]) };
   }
 
   return { ok: true, ignored: true };
@@ -658,9 +709,14 @@ export async function refundPayment(orderId: string, amount: number, reason: str
 
   const amountPaise = Math.round(amount * 100);
   let gatewayRefundId = `rfnd_stub_${randomUUID().replace(/-/g, "").slice(0, 10)}`;
+  let refundStatus: "created" | "processed" = "created";
 
   if (row.gateway === "cod") {
     gatewayRefundId = `rfnd_cod_${randomUUID().replace(/-/g, "").slice(0, 10)}`;
+    // COD never hit a card gateway — mark processed locally (ops may reverse offline).
+    refundStatus = "processed";
+  } else if (env.PAYMENT_MODE === "stub") {
+    refundStatus = "processed";
   } else {
     const razorpay = getRazorpay();
     if (razorpay && row.gateway_payment_id) {
@@ -669,26 +725,48 @@ export async function refundPayment(orderId: string, amount: number, reason: str
         notes: { reason, stuffsy_order_id: orderId },
       });
       gatewayRefundId = String(refund.id);
+      // Keep payment as captured until refund.processed webhook confirms.
+      refundStatus = "created";
+    } else {
+      throw new AppError(502, "REFUND_GATEWAY_UNAVAILABLE", "Could not reach payment gateway for refund");
     }
   }
 
-  const inserted = await pool.query(
+  const inserted = await pool.query<{ id: string }>(
     `insert into public.refunds
        (id, payment_id, amount, reason, status, gateway_refund_id, created_at, updated_at)
-     values (gen_random_uuid(), $1, $2, $3, 'created', $4, now(), now())
+     values (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now())
      returning id`,
-    [row.id, amount, reason, gatewayRefundId]
+    [row.id, amount, reason, refundStatus, gatewayRefundId]
   );
 
-  await pool.query(
-    `update public.payments set status = 'refunded', updated_at = now() where id = $1`,
-    [row.id]
-  );
+  if (refundStatus === "processed") {
+    await pool.query(
+      `update public.payments set status = 'refunded', updated_at = now() where id = $1`,
+      [row.id]
+    );
+    try {
+      const orderStatus = await pool.query<{ status: string }>(
+        `select status from public.orders where id = $1`,
+        [orderId]
+      );
+      const status = orderStatus.rows[0]?.status;
+      if (status === "cancelled" || status === "returned") {
+        await transition(orderId, "refunded", {
+          reason: "refund_local",
+          note: "Payment refunded.",
+          meta: { gatewayRefundId },
+        });
+      }
+    } catch (error) {
+      console.error("[payments] local refund order transition skipped", error);
+    }
+  }
 
   return {
     refundId: inserted.rows[0].id,
     gatewayRefundId,
-    status: "created" as const,
+    status: refundStatus,
   };
 }
 

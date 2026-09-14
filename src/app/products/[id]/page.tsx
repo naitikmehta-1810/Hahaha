@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Headphones,
   Sparkles,
+  Store,
 } from "lucide-react";
 import styles from "./product-details.module.css";
 import Heading from "@/components/ui/Heading/Heading";
@@ -25,9 +26,14 @@ import { addToCart } from "@/utils/cart";
 import {
   asSpecLines,
   fetchProductBySlug,
+  fetchProducts,
+  productHref,
+  productImageUrl,
   shopHref,
+  type ProductCard as CatalogProduct,
   type ProductDetail,
 } from "@/utils/catalog";
+import ProductCard from "@/components/ui/ProductCard/ProductCard";
 import { isWished, toggleWishlist } from "@/utils/wishlist";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
@@ -53,6 +59,7 @@ export default function ProductDetailsPage() {
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [notifyBusy, setNotifyBusy] = useState(false);
   const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
+  const [related, setRelated] = useState<CatalogProduct[]>([]);
 
   useEffect(() => {
     if (!slug) return;
@@ -78,6 +85,16 @@ export default function ProductDetailsPage() {
             utmSource: params.get("utm_source"),
             utmMedium: params.get("utm_medium"),
           },
+        });
+        void fetchProducts({
+          categoryId: result.product.categoryId,
+          pageSize: 8,
+          sort: "popular",
+        }).then((list) => {
+          if (cancelled) return;
+          setRelated(
+            list.products.filter((p) => p.id !== result.product!.id).slice(0, 5)
+          );
         });
       }
     });
@@ -496,6 +513,97 @@ export default function ProductDetailsPage() {
           <ChevronDown size={14} />
         </button>
       </section>
+
+      <section className={styles.sellerCard}>
+        <div className={styles.sellerLeft}>
+          <div className={styles.sellerAvatar} aria-hidden>
+            {product.seller.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={product.seller.logoUrl} alt="" />
+            ) : (
+              <Store size={22} />
+            )}
+          </div>
+          <div>
+            <h3 className={styles.sellerName}>{product.seller.shopName}</h3>
+            <p className={styles.sellerMeta}>
+              {product.seller.rating > 0
+                ? `${product.seller.rating.toFixed(1)} shop rating · `
+                : ""}
+              {product.seller.reviewCount} reviews
+              {product.seller.badge ? ` · ${product.seller.badge}` : ""}
+            </p>
+          </div>
+        </div>
+        <Link href={shopHref(product.shopSlug)} className={styles.sellerCta}>
+          Visit shop
+        </Link>
+      </section>
+
+      <section className={styles.reviewsBox}>
+        <h3 className={styles.boxTitle}>Customer Reviews</h3>
+        <div className={styles.reviewsSummary}>
+          <div className={styles.reviewsScore}>
+            <span className={styles.reviewsScoreNum}>
+              {product.avgRating > 0 ? product.avgRating.toFixed(1) : "—"}
+            </span>
+            <div className={styles.reviewsStars}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star
+                  key={i}
+                  size={16}
+                  fill={i < Math.round(product.avgRating) ? "#ffab00" : "none"}
+                  color="#ffab00"
+                />
+              ))}
+            </div>
+            <span className={styles.reviewsCount}>
+              Based on {product.reviewCount} review{product.reviewCount === 1 ? "" : "s"}
+            </span>
+          </div>
+          <Text size="sm" color="muted">
+            Verified buyers can write a review from their delivered order details. Full
+            review listings ship in a later release.
+          </Text>
+        </div>
+      </section>
+
+      {related.length > 0 ? (
+        <section className={styles.relatedSection}>
+          <div className={styles.relatedHeader}>
+            <h3 className={styles.boxTitle}>You may also like</h3>
+            <Link href="/shop" className={styles.relatedAll}>
+              View all
+            </Link>
+          </div>
+          <div className={styles.relatedGrid}>
+            {related.map((item) => (
+              <ProductCard key={item.id} href={productHref(item)}>
+                <ProductCard.Image
+                  src={productImageUrl(item) || FALLBACK_IMAGE}
+                  alt={item.title}
+                  onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                    (e.target as HTMLImageElement).src = FALLBACK_IMAGE;
+                  }}
+                />
+                <ProductCard.Body>
+                  <ProductCard.Title>{item.title}</ProductCard.Title>
+                  <ProductCard.Subtitle>{item.shopName}</ProductCard.Subtitle>
+                  <ProductCard.Price
+                    amount={item.price}
+                    originalAmount={item.compareAtPrice ?? undefined}
+                    discountPercentage={item.discountPercent ?? undefined}
+                  />
+                  <ProductCard.Rating
+                    rating={item.avgRating}
+                    reviewsCount={item.reviewCount}
+                  />
+                </ProductCard.Body>
+              </ProductCard>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

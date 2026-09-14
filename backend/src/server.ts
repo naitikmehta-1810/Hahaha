@@ -1,7 +1,8 @@
 import cors from "cors";
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import express from "express";
-import path from "node:path";
+import helmet from "helmet";
 import authRouter from "./routes/auth.js";
 import cartRouter from "./routes/cart.js";
 import ordersRouter from "./routes/orders.js";
@@ -39,6 +40,14 @@ const app = express();
 if (env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
+
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+app.use(compression());
 
 function isDevLanOrigin(origin: string) {
   try {
@@ -79,10 +88,36 @@ app.post(
   }
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "12mb" }));
+app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true });
+app.get("/api/health", async (_req, res) => {
+  const checks: { database: "ok" | "error"; redis: "ok" | "error" | "skipped" } = {
+    database: "error",
+    redis: "skipped",
+  };
+
+  try {
+    await pool.query("select 1");
+    checks.database = "ok";
+  } catch {
+    checks.database = "error";
+  }
+
+  try {
+    const { getRedis } = await import("./config/redis.js");
+    const redis = getRedis();
+    if (redis.status === "wait") {
+      await redis.connect();
+    }
+    const pong = await redis.ping();
+    checks.redis = pong === "PONG" ? "ok" : "error";
+  } catch {
+    checks.redis = "error";
+  }
+
+  const ok = checks.database === "ok" && checks.redis === "ok";
+  res.status(ok ? 200 : 503).json({ ok, ...checks });
 });
 
 app.use("/api/auth", authRouter);
@@ -101,7 +136,6 @@ app.use("/api/shipping/webhook", shippingWebhookRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/search", searchRouter);
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use(notFound);
 app.use(errorHandler);
 

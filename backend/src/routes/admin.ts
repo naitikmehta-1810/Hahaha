@@ -7,6 +7,7 @@ import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
 import { refundPayment } from "../services/payment.service.js";
 import { transition } from "../services/order-state-machine.js";
+import { env } from "../config/env.js";
 
 const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
@@ -580,10 +581,13 @@ adminRouter.get(
   })
 );
 
-/** Reset stock for load tests (k6 setup). */
+/** Reset stock for load tests (k6 setup). Disabled in production unless ALLOW_LOADTEST_HELPERS=true. */
 adminRouter.patch(
   "/inventory/:variantId",
   asyncHandler(async (req, res) => {
+    if (env.NODE_ENV === "production" && !env.ALLOW_LOADTEST_HELPERS) {
+      throw new AppError(403, "LOADTEST_HELPER_DISABLED", "Inventory reset is disabled in production");
+    }
     const parsed = z
       .object({
         quantityOnHand: z.number().int().nonnegative(),

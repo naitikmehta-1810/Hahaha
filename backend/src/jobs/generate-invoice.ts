@@ -35,8 +35,7 @@ export async function enqueueInvoiceGeneration(orderId: string) {
 
 async function nextInvoiceNumber() {
   const result = await pool.query<{ n: string }>(
-    `select coalesce(max(nullif(regexp_replace(invoice_number, '\\D', '', 'g'), '')::bigint), 1000) + 1 as n
-     from public.invoices`
+    `select nextval('public.invoice_number_seq')::text as n`
   );
   const n = Number(result.rows[0]?.n ?? 1001);
   return `INV-${n}`;

@@ -1,4 +1,11 @@
 import { pool } from "../config/db.js";
+import {
+  cacheGetJson,
+  cacheSetJson,
+  catalogDetailCacheKey,
+  catalogListCacheKey,
+  CATEGORY_TREE_CACHE_KEY,
+} from "./catalog-cache.js";
 
 /**
  * Public catalog reads backing the home page, product listing page, product detail
@@ -235,11 +242,38 @@ export async function listProducts(filters: ProductListFilters = {}) {
   const pageSize = Math.min(60, Math.max(1, filters.pageSize ?? 12));
   const offset = (page - 1) * pageSize;
   const sort = filters.sort && isProductSort(filters.sort) ? filters.sort : "featured";
+  const normalizedFilters = { ...filters, page, pageSize, sort };
 
+  const cacheKey = catalogListCacheKey(normalizedFilters);
+  const cached = await cacheGetJson<Awaited<ReturnType<typeof listProductsUncached>>>(cacheKey);
+  if (cached) return cached;
+
+  const result = await listProductsUncached(normalizedFilters, page, pageSize, offset, sort);
+  await cacheSetJson(cacheKey, result, 30);
+  return result;
+}
+
+async function listProductsUncached(
+  filters: ProductListFilters,
+  page: number,
+  pageSize: number,
+  offset: number,
+  sort: ProductSort
+) {
   const { where, params, searchRankSql } = buildFilterClause(filters);
   const orderBy = searchRankSql
     ? `${searchRankSql} desc, ${PRODUCT_SORTS[sort]}`
     : PRODUCT_SORTS[sort];
+
+  const needsSalesCount = sort === "bestsellers";
+  const salesCountSql = needsSalesCount
+    ? `(
+        select count(*)
+        from public.order_items oi
+        join public.orders o on o.id = oi.order_id
+        where oi.product_id = p.id and o.status in ('delivered', 'returned', 'refunded')
+      ) as sales_count`
+    : `0::bigint as sales_count`;
 
   const listQuery = `
     select
@@ -262,18 +296,24 @@ export async function listProducts(filters: ProductListFilters = {}) {
         limit 1
       ) as thumbnail_url,
       ${IN_STOCK_SQL} as in_stock,
-      (
-        select count(*)
-        from public.order_items oi
-        join public.orders o on o.id = oi.order_id
-        where oi.product_id = p.id and o.status = 'delivered'
-      ) as sales_count
+      ${salesCountSql}
     from public.products p
     join public.sellers s on s.id = p.seller_id
     where ${where}
     order by ${orderBy}
     limit $${params.length + 1} offset $${params.length + 2}
   `;
+
+  // Price slider range: same facet filters minus min/max price so the slider stays useful.
+  const rangeFilters: ProductListFilters = {
+    ...filters,
+    priceMin: null,
+    priceMax: null,
+    page: undefined,
+    pageSize: undefined,
+    sort: undefined,
+  };
+  const rangeClause = buildFilterClause(rangeFilters);
 
   const [listResult, countResult, rangeResult] = await Promise.all([
     pool.query<ProductCardRow & { sales_count: string }>(listQuery, [
@@ -288,13 +328,12 @@ export async function listProducts(filters: ProductListFilters = {}) {
        where ${where}`,
       params
     ),
-    // Actual dataset min/max so the price slider isn't hardcoded to ₹149-₹2,499.
     pool.query<{ min_price: string | null; max_price: string | null }>(
       `select min(p.base_price)::text as min_price, max(p.base_price)::text as max_price
        from public.products p
        join public.sellers s on s.id = p.seller_id
-       where ${PUBLIC_VISIBILITY_SQL}`,
-      []
+       where ${rangeClause.where}`,
+      rangeClause.params
     ),
   ]);
 
@@ -367,6 +406,18 @@ async function loadBreadcrumb(categoryId: string | null) {
 }
 
 export async function getProductBySlug(slug: string): Promise<ProductDetail | null> {
+  const cacheKey = catalogDetailCacheKey(slug);
+  const cached = await cacheGetJson<ProductDetail>(cacheKey);
+  if (cached) return cached;
+
+  const detail = await loadProductBySlugUncached(slug);
+  if (detail) {
+    await cacheSetJson(cacheKey, detail, 60);
+  }
+  return detail;
+}
+
+async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | null> {
   const result = await pool.query<
     ProductCardRow & {
       short_description: string | null;
@@ -507,6 +558,12 @@ export type CategoryNode = {
  * products, which is what the sidebar's top-level numbers represent.
  */
 export async function getCategoryTree(sellerId?: string | null): Promise<CategoryNode[]> {
+  const cacheKey = sellerId
+    ? `${CATEGORY_TREE_CACHE_KEY}:seller:${sellerId}`
+    : CATEGORY_TREE_CACHE_KEY;
+  const cached = await cacheGetJson<CategoryNode[]>(cacheKey);
+  if (cached) return cached;
+
   const params: unknown[] = [];
   let sellerClause = "";
   if (sellerId) {
@@ -580,6 +637,7 @@ export async function getCategoryTree(sellerId?: string | null): Promise<Categor
   };
   roots.forEach(rollUp);
 
+  await cacheSetJson(cacheKey, roots, 120);
   return roots;
 }
 

@@ -65,7 +65,7 @@ function startFallbackInterval() {
   }
 
   console.warn(
-    "[reservations] Redis unavailable — using in-process timer every 5m (dev fallback). Start Redis to use BullMQ."
+    "[reservations] Redis unavailable — using in-process timer every 5m. Start Redis for BullMQ."
   );
 
   fallbackTimer = setInterval(() => {
@@ -87,9 +87,16 @@ export async function startReservationReleaseJob() {
   if (!redisOk) {
     if (env.NODE_ENV === "production") {
       console.warn(
-        "[reservations] Redis unreachable — reservation release job not started. Fix REDIS_URL."
+        "[reservations] Redis unreachable — falling back to in-process timer. Fix REDIS_URL."
       );
-      return;
+      try {
+        const Sentry = await import("@sentry/node");
+        Sentry.captureMessage("Reservation release: Redis unreachable, using in-process fallback", {
+          level: "warning",
+        });
+      } catch {
+        /* Sentry optional */
+      }
     }
     startFallbackInterval();
     return;
@@ -126,9 +133,7 @@ export async function startReservationReleaseJob() {
   } catch (error) {
     console.warn("[reservations] failed to start BullMQ worker", error);
     await stopReservationReleaseJob();
-    if (env.NODE_ENV !== "production") {
-      startFallbackInterval();
-    }
+    startFallbackInterval();
   }
 }
 

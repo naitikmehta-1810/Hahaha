@@ -488,8 +488,9 @@ export async function placeOrder(input: PlaceOrderInput) {
     }
 
     if (appliedCouponId) {
-      // The (coupon_id, user_id) unique index added in 022 is what actually stops
-      // two simultaneous tabs from both creating a usage row.
+      // Per-user coupon abuse across accounts remains a known limitation.
+      // Concurrent double-redeem for the same user is stopped by FOR UPDATE on the coupon
+      // row in loadCoupon (migration 022's index on (coupon_id, user_id) is non-unique).
       await client.query(
         `insert into public.coupon_usage (id, coupon_id, user_id, order_id, used_at)
          values (gen_random_uuid(), $1, $2, $3, now())`,
@@ -500,15 +501,25 @@ export async function placeOrder(input: PlaceOrderInput) {
     await clearCartItems(client, cart.id);
     await client.query("commit");
 
-    if (paymentMethod === "cod") {
-      const { finalizeCodOrder } = await import("./payment.service.js");
-      await finalizeCodOrder(orderId, userId);
-    }
+    try {
+      if (paymentMethod === "cod") {
+        const { finalizeCodOrder } = await import("./payment.service.js");
+        await finalizeCodOrder(orderId, userId);
+      }
 
-    const order = await getOrderForUser(userId, orderId);
-    return paymentReadyShape(order!);
+      const order = await getOrderForUser(userId, orderId);
+      return paymentReadyShape(order!);
+    } catch (postCommitError) {
+      // Order row already committed — do not rollback; surface a clear error.
+      console.error("[orders] post-commit finalize failed", { orderId, postCommitError });
+      throw postCommitError;
+    }
   } catch (error) {
-    await client.query("rollback");
+    try {
+      await client.query("rollback");
+    } catch {
+      /* already committed or idle */
+    }
     throw error;
   } finally {
     client.release();

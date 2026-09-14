@@ -11,6 +11,7 @@ export const ORDER_STATUSES = [
   "delivered",
   "cancelled",
   "returned",
+  "refunded",
 ] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -25,6 +26,9 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
  * customers must open a return request instead. Paid/processing cancels restore
  * captured stock and trigger a refund outside the status flip.
  *
+ * `refunded` is reached after a successful gateway refund from cancelled (buyer cancel)
+ * or from returned (return-approved refund). Delivered returns still go delivered→returned first.
+ *
  * No other module may UPDATE orders.status — go through transition().
  */
 export const ORDER_TRANSITIONS: Readonly<Record<OrderStatus, readonly OrderStatus[]>> = {
@@ -34,8 +38,9 @@ export const ORDER_TRANSITIONS: Readonly<Record<OrderStatus, readonly OrderStatu
   shipped: ["out_for_delivery"],
   out_for_delivery: ["delivered"],
   delivered: ["returned"],
-  cancelled: [],
-  returned: [],
+  cancelled: ["refunded"],
+  returned: ["refunded"],
+  refunded: [],
 } as const;
 
 /**
@@ -61,6 +66,7 @@ const STATUS_NOTES: Readonly<Record<OrderStatus, string>> = {
   delivered: "Your order has been delivered.",
   cancelled: "Your order was cancelled.",
   returned: "Your order was returned.",
+  refunded: "Payment for this order has been refunded.",
 };
 
 export type TransitionContext = {

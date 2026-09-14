@@ -16,6 +16,17 @@ import {
   type SellerDashboard,
   type SellerProfile,
 } from "@/utils/seller";
+import {
+  IndianRupee,
+  Package,
+  Users,
+  Percent,
+  Plus,
+  Boxes,
+  ShoppingBag,
+  Wallet,
+  Settings,
+} from "lucide-react";
 import styles from "./seller.module.css";
 
 const FALLBACK_AVATAR =
@@ -149,27 +160,80 @@ export default function SellerDashboardPage() {
 
           <div className={styles.metrics}>
             <div className={styles.metricCard}>
-              <div className={styles.metricLabel}>Total Sales</div>
+              <div className={styles.metricTop}>
+                <div className={styles.metricLabel}>Total Sales</div>
+                <span className={styles.metricIcon}>
+                  <IndianRupee size={18} />
+                </span>
+              </div>
               <div className={styles.metricValue}>
                 ₹{(dash?.metrics.totalSales ?? 0).toLocaleString("en-IN")}
               </div>
             </div>
             <div className={styles.metricCard}>
-              <div className={styles.metricLabel}>Orders</div>
+              <div className={styles.metricTop}>
+                <div className={styles.metricLabel}>Orders</div>
+                <span className={styles.metricIcon} style={{ background: "#ecfdf5", color: "#059669" }}>
+                  <Package size={18} />
+                </span>
+              </div>
               <div className={styles.metricValue}>{dash?.metrics.ordersCount ?? 0}</div>
             </div>
             <div className={styles.metricCard}>
-              <div className={styles.metricLabel}>Visitors</div>
+              <div className={styles.metricTop}>
+                <div className={styles.metricLabel}>Visitors</div>
+                <span className={styles.metricIcon} style={{ background: "#fff7ed", color: "#ea580c" }}>
+                  <Users size={18} />
+                </span>
+              </div>
               <div className={styles.metricValue}>
                 {(dash?.metrics.visitors ?? 0).toLocaleString("en-IN")}
               </div>
             </div>
             <div className={styles.metricCard}>
-              <div className={styles.metricLabel}>Conversion Rate</div>
+              <div className={styles.metricTop}>
+                <div className={styles.metricLabel}>Conversion Rate</div>
+                <span className={styles.metricIcon}>
+                  <Percent size={18} />
+                </span>
+              </div>
               <div className={styles.metricValue}>
                 {(dash?.metrics.conversionRate ?? 0).toFixed(1)}%
               </div>
             </div>
+          </div>
+
+          <div className={styles.quickActions}>
+            <Link href="/seller/products/new" className={styles.quickAction}>
+              <span className={styles.quickActionIcon} style={{ background: "#f5f3ff", color: "#7c3aed" }}>
+                <Plus size={18} />
+              </span>
+              Add Product
+            </Link>
+            <Link href="/seller/products" className={styles.quickAction}>
+              <span className={styles.quickActionIcon} style={{ background: "#ecfdf5", color: "#059669" }}>
+                <Boxes size={18} />
+              </span>
+              Manage Inventory
+            </Link>
+            <Link href="/seller/products" className={styles.quickAction}>
+              <span className={styles.quickActionIcon} style={{ background: "#fff7ed", color: "#ea580c" }}>
+                <ShoppingBag size={18} />
+              </span>
+              View Orders
+            </Link>
+            <Link href="/seller/shop-setup" className={styles.quickAction}>
+              <span className={styles.quickActionIcon} style={{ background: "#fdf2f8", color: "#db2777" }}>
+                <Wallet size={18} />
+              </span>
+              Payouts
+            </Link>
+            <Link href="/seller/shop-setup" className={styles.quickAction}>
+              <span className={styles.quickActionIcon} style={{ background: "#eff6ff", color: "#2563eb" }}>
+                <Settings size={18} />
+              </span>
+              Shop Settings
+            </Link>
           </div>
 
           <div className={styles.grid2}>

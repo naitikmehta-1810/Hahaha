@@ -12,6 +12,8 @@ import {
   assertSellerOwnsProduct,
 } from "../utils/seller-scope.js";
 import { decryptPayoutDetails, encryptPayoutDetails } from "../utils/payout-crypto.js";
+import { parseDimensionCm, parseWeightKg } from "../utils/product-dims.js";
+import { invalidateCatalogCaches } from "../services/catalog-cache.js";
 
 const sellerRouter = Router();
 
@@ -456,6 +458,15 @@ function slugifyProduct(title: string) {
   );
 }
 
+const optionalWeightKg = z.preprocess(
+  (val) => parseWeightKg(val),
+  z.number().nonnegative().optional().nullable()
+);
+const optionalDimensionCm = z.preprocess(
+  (val) => parseDimensionCm(val),
+  z.number().nonnegative().optional().nullable()
+);
+
 const productCreateSchema = z.object({
   title: z.string().trim().min(1).max(150),
   shortDescription: z.string().trim().min(1).max(250),
@@ -470,11 +481,11 @@ const productCreateSchema = z.object({
   stockQuantity: z.number().int().nonnegative().default(0),
   lowStockAlert: z.number().int().nonnegative().default(5),
   continueSellingWhenOutOfStock: z.boolean().default(false),
-  weight: z.number().nonnegative().optional().nullable(),
+  weight: optionalWeightKg,
   weightUnit: z.string().trim().max(8).default("kg"),
-  lengthCm: z.number().nonnegative().optional().nullable(),
-  widthCm: z.number().nonnegative().optional().nullable(),
-  heightCm: z.number().nonnegative().optional().nullable(),
+  lengthCm: optionalDimensionCm,
+  widthCm: optionalDimensionCm,
+  heightCm: optionalDimensionCm,
   status: z.enum(["draft", "active"]).default("draft"),
   tags: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
   imageUrls: z.array(z.string().min(1).max(500)).max(8).default([]),
@@ -656,7 +667,8 @@ sellerRouter.post(
     if (data.productType === "physical") {
       if (data.weight == null || data.lengthCm == null || data.widthCm == null || data.heightCm == null) {
         res.status(400).json({
-          message: "Weight and dimensions are required for physical products.",
+          message:
+            "Enter valid weight in kg (e.g. 0.2 or 200g) and length/width/height in cm for physical products.",
         });
         return;
       }
@@ -752,6 +764,7 @@ sellerRouter.post(
       }
 
       await client.query("commit");
+      void invalidateCatalogCaches();
       res.status(201).json({
         product: { id: productId, slug: product.rows[0].slug, status: data.status },
       });
@@ -878,7 +891,8 @@ sellerRouter.patch(
         dimsMissing
       ) {
         res.status(400).json({
-          message: "Weight and dimensions are required for physical products.",
+          message:
+            "Enter valid weight in kg (e.g. 0.2 or 200g) and length/width/height in cm for physical products.",
         });
         return;
       }
@@ -1022,6 +1036,7 @@ sellerRouter.patch(
       void enqueueBackInStockForVariants(restockVariantIds);
     }
 
+    void invalidateCatalogCaches();
     res.json({ product: { id: productId } });
   })
 );
@@ -1044,11 +1059,13 @@ sellerRouter.delete(
          where id = $1`,
         [productId]
       );
+      void invalidateCatalogCaches();
       res.json({ softDeleted: true });
       return;
     }
 
     await pool.query(`delete from public.products where id = $1`, [productId]);
+    void invalidateCatalogCaches();
     res.status(204).send();
   })
 );

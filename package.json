@@ -2,6 +2,7 @@
   "name": "stuffsy",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.15.0",
   "scripts": {
     "dev": "concurrently -n web,api -c magenta,cyan \"npm run dev:web\" \"npm run dev:backend\"",
     "dev:web": "next dev",

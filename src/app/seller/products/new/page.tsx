@@ -9,6 +9,10 @@ import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
 import { fetchCategories, type CategoryNode } from "@/utils/catalog";
+import {
+  parseOptionalNumber,
+  validatePhysicalShippingFields,
+} from "@/utils/productForm";
 import { fetchMySeller } from "@/utils/seller";
 import styles from "../../seller.module.css";
 
@@ -94,6 +98,13 @@ export default function AddProductPage() {
   };
 
   const uploadFile = async (file: File) => {
+    // Base64 inflates ~33%; keep under the API's 12mb JSON body limit.
+    const maxBytes = 8 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      throw new Error(
+        `"${file.name}" is too large (${Math.round(file.size / 1024 / 1024)}MB). Use an image under 8MB.`
+      );
+    }
     const reader = new FileReader();
     const dataBase64 = await new Promise<string>((resolve, reject) => {
       reader.onload = () => resolve(String(reader.result ?? ""));
@@ -104,7 +115,11 @@ export default function AddProductPage() {
       body: { fileName: file.name, dataBase64, folder: "products" },
     });
     if (result.error || !result.data?.url) {
-      throw new Error(result.error ?? "Upload failed");
+      const msg = result.error ?? "Upload failed";
+      if (/entity too large|payload too large|413/i.test(msg)) {
+        throw new Error("Image is too large for upload. Use a smaller file (under 8MB).");
+      }
+      throw new Error(msg);
     }
     return result.data.url;
   };
@@ -112,6 +127,24 @@ export default function AddProductPage() {
   const submit = async (status: "draft" | "active") => {
     setBusy(true);
     setError(null);
+
+    let weight: number | null = null;
+    let lengthCm: number | null = null;
+    let widthCm: number | null = null;
+    let heightCm: number | null = null;
+    if (form.productType === "physical") {
+      const dims = validatePhysicalShippingFields(form);
+      if (!dims.ok) {
+        setError(dims.message);
+        setBusy(false);
+        return;
+      }
+      weight = dims.weight;
+      lengthCm = dims.lengthCm;
+      widthCm = dims.widthCm;
+      heightCm = dims.heightCm;
+    }
+
     const tags = form.tags
       .split(",")
       .map((t) => t.trim())
@@ -132,16 +165,16 @@ export default function AddProductPage() {
           subcategoryId: form.subcategoryId || null,
           productType: form.productType,
           price: Number(form.price),
-          compareAtPrice: form.compareAtPrice ? Number(form.compareAtPrice) : null,
-          costPrice: form.costPrice ? Number(form.costPrice) : null,
+          compareAtPrice: parseOptionalNumber(form.compareAtPrice),
+          costPrice: parseOptionalNumber(form.costPrice),
           sku: form.sku.trim() || null,
           stockQuantity: Number(form.stockQuantity) || 0,
           lowStockAlert: Number(form.lowStockAlert) || 5,
           continueSellingWhenOutOfStock: form.continueSelling,
-          weight: form.weight ? Number(form.weight) : null,
-          lengthCm: form.lengthCm ? Number(form.lengthCm) : null,
-          widthCm: form.widthCm ? Number(form.widthCm) : null,
-          heightCm: form.heightCm ? Number(form.heightCm) : null,
+          weight,
+          lengthCm,
+          widthCm,
+          heightCm,
           status,
           tags,
           imageUrls,
@@ -340,6 +373,8 @@ export default function AddProductPage() {
               <input
                 value={form.weight}
                 onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
+                placeholder="0.2 or 200g"
+                inputMode="decimal"
                 style={inputStyle}
               />
             </div>
@@ -348,6 +383,8 @@ export default function AddProductPage() {
               <input
                 value={form.lengthCm}
                 onChange={(e) => setForm((f) => ({ ...f, lengthCm: e.target.value }))}
+                placeholder="15"
+                inputMode="decimal"
                 style={inputStyle}
               />
             </div>
@@ -356,6 +393,8 @@ export default function AddProductPage() {
               <input
                 value={form.widthCm}
                 onChange={(e) => setForm((f) => ({ ...f, widthCm: e.target.value }))}
+                placeholder="20"
+                inputMode="decimal"
                 style={inputStyle}
               />
             </div>
@@ -364,6 +403,8 @@ export default function AddProductPage() {
               <input
                 value={form.heightCm}
                 onChange={(e) => setForm((f) => ({ ...f, heightCm: e.target.value }))}
+                placeholder="20"
+                inputMode="decimal"
                 style={inputStyle}
               />
             </div>

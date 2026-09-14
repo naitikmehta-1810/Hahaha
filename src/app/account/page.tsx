@@ -9,9 +9,13 @@ import {
   fetchOrderDetail,
   fetchOrders,
   fetchAddresses,
+  createAddress,
+  deleteAddress,
+  updateMyProfile,
   formatOrderStatusLabel,
   orderStatusBadgeClass,
   type OrderListItem,
+  type AddressRecord,
 } from "@/utils/cart";
 import {
   fetchWishlist,
@@ -106,18 +110,34 @@ export default function AccountPage() {
 function AccountPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user: sessionUser, status: authStatus, logout } = useAuth();
+  const { user: sessionUser, status: authStatus, logout, refreshSession, setUser } = useAuth();
   const tabParam = searchParams.get("tab");
   const pendingOrderId = searchParams.get("pending");
   const [activeTab, setActiveTab] = useState(tabParam ?? "dashboard");
   const [recentOrders, setRecentOrders] = useState<DisplayOrder[]>([]);
   const [ordersTotal, setOrdersTotal] = useState(0);
   const [addressCount, setAddressCount] = useState(0);
+  const [addresses, setAddresses] = useState<AddressRecord[]>([]);
   const [defaultAddressLabel, setDefaultAddressLabel] = useState(
     "Add an address to get started"
   );
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [profileName, setProfileName] = useState("");
+  const [profilePhone, setProfilePhone] = useState("");
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<string | null>(null);
+  const [addressBusy, setAddressBusy] = useState(false);
+  const [newAddress, setNewAddress] = useState({
+    label: "Home",
+    recipientName: "",
+    phoneNumber: "",
+    line1: "",
+    line2: "",
+    city: "",
+    state: "",
+    postalCode: "",
+  });
   const [wishlistCount, setWishlistCount] = useState(0);
 
   useEffect(() => {
@@ -156,6 +176,7 @@ function AccountPageInner() {
 
       const addresses = await fetchAddresses();
       if (!cancelled) {
+        setAddresses(addresses);
         setAddressCount(addresses.length);
         const defaultAddress =
           addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
@@ -174,6 +195,11 @@ function AccountPageInner() {
         } else {
           setDefaultAddressLabel("Add an address to get started");
         }
+      }
+
+      if (!cancelled) {
+        setProfileName(sessionUser.fullName ?? "");
+        setProfilePhone(sessionUser.phoneNumber ?? "");
       }
 
       if (pendingOrderId) {
@@ -241,7 +267,7 @@ function AccountPageInner() {
     {
       val: "—",
       label: "Reviews Given",
-      linkText: "Coming soon",
+      linkText: "Not available yet",
       href: "/account?tab=reviews",
       icon: <Star size={20} />,
       bg: "#fffbeb",
@@ -413,7 +439,12 @@ function AccountPageInner() {
                 </div>
               </div>
             </div>
-            <Button variant="outline" size="sm" leftIcon={<Edit3 size={14} />}>
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Edit3 size={14} />}
+              onClick={() => setActiveTab("profile-details")}
+            >
               Edit Profile
             </Button>
           </div>
@@ -450,6 +481,204 @@ function AccountPageInner() {
                   Transactional mail (order confirmation, shipping, invoice, auth) is sent
                   automatically when those events occur.
                 </Text>
+              </div>
+            ) : activeTab === "reviews" ||
+              activeTab === "payment-methods" ||
+              activeTab === "settings" ? (
+              <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
+                <div className={styles.sectionHeader}>
+                  <Heading level={4}>
+                    {activeTab === "reviews"
+                      ? "Reviews"
+                      : activeTab === "payment-methods"
+                        ? "Payment Methods"
+                        : "Settings"}
+                  </Heading>
+                </div>
+                <Text size="sm" color="muted">
+                  {activeTab === "reviews"
+                    ? "A reviews list API is not available yet. You can still write verified reviews from a delivered order’s details page."
+                    : activeTab === "payment-methods"
+                      ? "Saved cards / UPI wallets are not stored on Stuffsy — payments run through Razorpay Checkout at order time."
+                      : "Account settings beyond profile and addresses are not available yet."}
+                </Text>
+              </div>
+            ) : activeTab === "addresses" ? (
+              <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
+                <div className={styles.sectionHeader}>
+                  <Heading level={4}>Saved Addresses ({addresses.length})</Heading>
+                </div>
+                {addresses.length === 0 ? (
+                  <Text size="sm" color="muted">
+                    No saved addresses yet.
+                  </Text>
+                ) : (
+                  <div className={styles.ordersList}>
+                    {addresses.map((addr) => (
+                      <div key={addr.id} className={styles.orderRow}>
+                        <div className={styles.orderInfo}>
+                          <span className={styles.orderTitle}>
+                            {addr.label}
+                            {addr.isDefault ? " · Default" : ""}
+                          </span>
+                          <span className={styles.orderId}>
+                            {addr.recipientName} · {addr.phoneNumber}
+                          </span>
+                          <span className={styles.orderId}>
+                            {[addr.line1, addr.line2, addr.city, addr.state, addr.postalCode]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </span>
+                        </div>
+                        <div className={styles.orderMeta}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={addressBusy}
+                            onClick={() => {
+                              void (async () => {
+                                setAddressBusy(true);
+                                try {
+                                  await deleteAddress(addr.id);
+                                  const list = await fetchAddresses();
+                                  setAddresses(list);
+                                  setAddressCount(list.length);
+                                } finally {
+                                  setAddressBusy(false);
+                                }
+                              })();
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className={styles.sectionHeader} style={{ marginTop: 24 }}>
+                  <Heading level={4}>Add address</Heading>
+                </div>
+                <div style={{ display: "grid", gap: 8, maxWidth: 480 }}>
+                  {(
+                    [
+                      ["label", "Label"],
+                      ["recipientName", "Full name"],
+                      ["phoneNumber", "Phone"],
+                      ["line1", "Address line 1"],
+                      ["line2", "Address line 2"],
+                      ["city", "City"],
+                      ["state", "State"],
+                      ["postalCode", "PIN"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} style={{ display: "grid", gap: 4, fontSize: 13 }}>
+                      {label}
+                      <input
+                        value={newAddress[key]}
+                        onChange={(e) =>
+                          setNewAddress((prev) => ({ ...prev, [key]: e.target.value }))
+                        }
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          border: "1px solid var(--color-border, #e5e7eb)",
+                        }}
+                      />
+                    </label>
+                  ))}
+                  <Button
+                    disabled={addressBusy}
+                    onClick={() => {
+                      void (async () => {
+                        setAddressBusy(true);
+                        try {
+                          await createAddress({
+                            ...newAddress,
+                            line2: newAddress.line2 || null,
+                            isDefault: addresses.length === 0,
+                          });
+                          const list = await fetchAddresses();
+                          setAddresses(list);
+                          setAddressCount(list.length);
+                          setNewAddress({
+                            label: "Home",
+                            recipientName: "",
+                            phoneNumber: "",
+                            line1: "",
+                            line2: "",
+                            city: "",
+                            state: "",
+                            postalCode: "",
+                          });
+                        } finally {
+                          setAddressBusy(false);
+                        }
+                      })();
+                    }}
+                  >
+                    {addressBusy ? "Saving…" : "Save address"}
+                  </Button>
+                </div>
+              </div>
+            ) : activeTab === "profile-details" ? (
+              <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
+                <div className={styles.sectionHeader}>
+                  <Heading level={4}>Profile Details</Heading>
+                </div>
+                <div style={{ display: "grid", gap: 8, maxWidth: 420 }}>
+                  <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
+                    Full name
+                    <input
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        border: "1px solid var(--color-border, #e5e7eb)",
+                      }}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
+                    Phone
+                    <input
+                      value={profilePhone}
+                      onChange={(e) => setProfilePhone(e.target.value)}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        border: "1px solid var(--color-border, #e5e7eb)",
+                      }}
+                    />
+                  </label>
+                  <Text size="sm" color="muted">
+                    Email: {sessionUser?.email} (change not supported here)
+                  </Text>
+                  {profileMsg ? <Text size="sm">{profileMsg}</Text> : null}
+                  <Button
+                    disabled={profileBusy}
+                    onClick={() => {
+                      void (async () => {
+                        setProfileBusy(true);
+                        setProfileMsg(null);
+                        const result = await updateMyProfile({
+                          fullName: profileName,
+                          phoneNumber: profilePhone || null,
+                        });
+                        setProfileBusy(false);
+                        if (result.error || !result.data?.user) {
+                          setProfileMsg(result.error ?? "Could not update profile");
+                          return;
+                        }
+                        setUser(result.data.user);
+                        setProfileMsg("Profile updated.");
+                        void refreshSession();
+                      })();
+                    }}
+                  >
+                    {profileBusy ? "Saving…" : "Save profile"}
+                  </Button>
+                </div>
               </div>
             ) : activeTab === "wishlist" ? (
               <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>

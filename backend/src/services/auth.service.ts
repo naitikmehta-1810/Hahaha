@@ -179,6 +179,33 @@ export async function findUserById(id: string): Promise<AuthUser | null> {
   return user;
 }
 
+export async function updateUserProfile(
+  userId: string,
+  input: { fullName?: string; phoneNumber?: string | null }
+): Promise<AuthUser> {
+  const result = await pool.query<UserRecord>(
+    `update public.users
+     set full_name = coalesce($2, full_name),
+         phone_number = case when $3::boolean then $4 else phone_number end,
+         updated_at = now()
+     where id = $1
+     returning ${USER_COLUMNS}`,
+    [
+      userId,
+      input.fullName?.trim() || null,
+      input.phoneNumber !== undefined,
+      input.phoneNumber === undefined ? null : input.phoneNumber,
+    ]
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new Error("USER_NOT_FOUND");
+  }
+  const user = toAuthUser(row);
+  user.role = await resolveEffectiveRole(userId, row.role);
+  return user;
+}
+
 export async function issueAuthTokens(user: { id: string; email: string; role: string }, rememberMe: boolean) {
   const role = await resolveEffectiveRole(user.id, user.role);
   const accessToken = signAccessToken({ userId: user.id, email: user.email, role });

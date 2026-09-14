@@ -4,7 +4,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { authWriteLimiter } from "../middleware/auth-rate-limit.js";
-import { optionalAuth } from "../middleware/requireAuth.js";
+import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
 import { comparePassword } from "../utils/password.js";
 import { REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from "../utils/cookies.js";
 import {
@@ -21,7 +21,9 @@ import {
   revokeRefreshToken,
   rotateRefreshToken,
   sendVerificationEmailForUser,
+  updateUserProfile,
 } from "../services/auth.service.js";
+import { AppError } from "../utils/errors.js";
 import {
   buildOAuthAuthorizeUrl,
   createOAuthState,
@@ -291,6 +293,33 @@ authRouter.get(
     }
 
     res.json({ user });
+  })
+);
+
+authRouter.patch(
+  "/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({
+        fullName: z.string().trim().min(2).max(120).optional(),
+        phoneNumber: z.string().trim().min(6).max(20).nullable().optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid profile" });
+      return;
+    }
+    if (parsed.data.fullName === undefined && parsed.data.phoneNumber === undefined) {
+      res.status(400).json({ message: "Provide fullName and/or phoneNumber" });
+      return;
+    }
+    try {
+      const user = await updateUserProfile(req.user!.id, parsed.data);
+      res.json({ user });
+    } catch {
+      throw new AppError(404, "USER_NOT_FOUND", "User was not found");
+    }
   })
 );
 

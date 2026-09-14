@@ -57,6 +57,63 @@
   line-height: 1.6;
 }
 
+.socialRow {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.socialBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  color: var(--color-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary-light);
+  transition: background var(--transition-fast);
+}
+
+.socialBtn:hover {
+  background: #ede9fe;
+}
+
+.paymentsRow {
+  max-width: 1400px;
+  margin: 0 auto 28px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.paymentsLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.payMarks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.payMark {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-dark);
+  background: #fff;
+  color: var(--color-text-main);
+}
+
 .linksCol {
   display: flex;
   flex-direction: column;

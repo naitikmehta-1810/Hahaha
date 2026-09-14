@@ -17,12 +17,14 @@ export default function AppShell({
     pathname === "/verify-email" ||
     pathname === "/forgot-password" ||
     pathname === "/reset-password";
+  const isSellOnboarding = pathname === "/sell" || pathname.startsWith("/sell/");
+  const hideChrome = isAuthRoute || isSellOnboarding;
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", flexDirection: "column" }}>
-      {!isAuthRoute && <Header />}
+      {!hideChrome && <Header />}
       <main style={{ flex: 1, minHeight: 0 }}>{children}</main>
-      {!isAuthRoute && <Footer />}
+      {!hideChrome && <Footer />}
     </div>
   );
 }

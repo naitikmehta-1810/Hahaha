@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
+import { publicReadLimiter } from "../middleware/auth-rate-limit.js";
 import { listProducts, suggestSearch } from "../services/catalog.service.js";
 
 const searchRouter = Router();
 
 searchRouter.get(
   "/",
+  publicReadLimiter,
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
@@ -32,6 +34,7 @@ searchRouter.get(
 
 searchRouter.get(
   "/suggest",
+  publicReadLimiter,
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({ q: z.string().trim().min(1).max(200) })

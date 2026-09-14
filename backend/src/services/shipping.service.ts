@@ -1,4 +1,3 @@
-import type { PoolClient } from "pg";
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/errors.js";
@@ -260,9 +259,4 @@ export async function applyShipmentStatusUpdate(input: {
   }
 
   return { shipmentId: row.id, orderId: row.order_id, sellerId: row.seller_id, toStatus: target };
-}
-
-/** @deprecated no-op kept for callers that still import it */
-export async function advancePaidOrdersToProcessing(_client?: PoolClient) {
-  return;
 }

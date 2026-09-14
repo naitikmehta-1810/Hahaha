@@ -68,6 +68,7 @@ function ShopPageInner() {
   const [totalPages, setTotalPages] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const [loading, setLoading] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     setSelectedCategory(categorySlug);
@@ -176,7 +177,11 @@ function ShopPageInner() {
               </option>
             ))}
           </select>
-          <button type="button" className={styles.filterBtn}>
+          <button
+            type="button"
+            className={styles.filterBtn}
+            onClick={() => setFiltersOpen(true)}
+          >
             <FilterIcon size={16} />
             <span>Filter</span>
           </button>
@@ -184,8 +189,23 @@ function ShopPageInner() {
       </div>
 
       <div className={styles.layout}>
-        <aside className={styles.sidebar}>
+        <aside
+          className={`${styles.sidebar} ${filtersOpen ? styles.sidebarOpen : ""}`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setFiltersOpen(false);
+          }}
+        >
           <div className={styles.filterSection}>
+            <div className={styles.filterMobileHead}>
+              <strong>Filters</strong>
+              <button
+                type="button"
+                className={styles.filterClose}
+                onClick={() => setFiltersOpen(false)}
+              >
+                Close
+              </button>
+            </div>
             <div className={styles.filterGroup}>
               <div className={styles.filterGroupTitle}>
                 <span>Categories</span>

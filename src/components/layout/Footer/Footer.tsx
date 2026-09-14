@@ -1,5 +1,6 @@
 import React from "react";
 import Link from "next/link";
+import { Share2, Globe, PlayCircle } from "lucide-react";
 import styles from "./Footer.module.css";
 
 export const Footer = () => {
@@ -15,6 +16,7 @@ export const Footer = () => {
                 viewBox="0 0 36 36"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
+                aria-hidden
               >
                 <rect width="36" height="36" rx="10" fill="#7C3AED" />
                 <path
@@ -29,8 +31,38 @@ export const Footer = () => {
             Stuffsy
           </Link>
           <p className={styles.brandDesc}>
-            Discover unique handmade treasures and crafts created by passionate artisans around the world. Supporting creators everywhere.
+            Discover unique handmade treasures and crafts created by passionate artisans
+            around the world. Supporting creators everywhere.
           </p>
+          <div className={styles.socialRow} aria-label="Social links">
+            <a
+              href="https://instagram.com"
+              className={styles.socialBtn}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Instagram"
+            >
+              <Share2 size={16} />
+            </a>
+            <a
+              href="https://facebook.com"
+              className={styles.socialBtn}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Facebook"
+            >
+              <Globe size={16} />
+            </a>
+            <a
+              href="https://youtube.com"
+              className={styles.socialBtn}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="YouTube"
+            >
+              <PlayCircle size={16} />
+            </a>
+          </div>
         </div>
 
         <div className={styles.linksCol}>
@@ -63,52 +95,63 @@ export const Footer = () => {
           <h4 className={styles.linksTitle}>Sell</h4>
           <ul className={styles.linksList}>
             <li>
-              <Link href="/shop" className={styles.link}>
+              <Link href="/sell" className={styles.link}>
                 Start Selling
               </Link>
             </li>
             <li>
-              <Link href="/seller-handbook" className={styles.link}>
-                Seller Handbook
+              <Link href="/seller" className={styles.link}>
+                Seller Dashboard
               </Link>
             </li>
             <li>
-              <Link href="/teams" className={styles.link}>
-                Teams
+              <Link href="/seller/shop-setup" className={styles.link}>
+                Shop Setup
               </Link>
             </li>
             <li>
-              <Link href="/forums" className={styles.link}>
-                Forums
+              <Link href="/account" className={styles.link}>
+                My Account
               </Link>
             </li>
           </ul>
         </div>
 
         <div className={styles.linksCol}>
-          <h4 className={styles.linksTitle}>About</h4>
+          <h4 className={styles.linksTitle}>Help</h4>
           <ul className={styles.linksList}>
             <li>
-              <Link href="/about" className={styles.link}>
-                About Stuffsy
+              <a href="mailto:support@stuffsy.in" className={styles.link}>
+                Contact Support
+              </a>
+            </li>
+            <li>
+              <Link href="/account?tab=orders" className={styles.link}>
+                Track Orders
               </Link>
             </li>
             <li>
-              <Link href="/policies" className={styles.link}>
-                Policies
+              <Link href="/cart" className={styles.link}>
+                Cart
               </Link>
             </li>
             <li>
-              <Link href="/careers" className={styles.link}>
-                Careers
-              </Link>
-            </li>
-            <li>
-              <Link href="/press" className={styles.link}>
-                Press
+              <Link href="/checkout" className={styles.link}>
+                Checkout
               </Link>
             </li>
           </ul>
+        </div>
+      </div>
+
+      <div className={styles.paymentsRow}>
+        <span className={styles.paymentsLabel}>We accept</span>
+        <div className={styles.payMarks}>
+          <span className={styles.payMark}>VISA</span>
+          <span className={styles.payMark}>Mastercard</span>
+          <span className={styles.payMark}>RuPay</span>
+          <span className={styles.payMark}>UPI</span>
+          <span className={styles.payMark}>Paytm</span>
         </div>
       </div>
 
@@ -117,15 +160,9 @@ export const Footer = () => {
           © {new Date().getFullYear()} Stuffsy, Inc. All rights reserved.
         </p>
         <div className={styles.legalLinks}>
-          <Link href="/terms" className={styles.legalLink}>
-            Terms of Use
-          </Link>
-          <Link href="/privacy" className={styles.legalLink}>
-            Privacy Policy
-          </Link>
-          <Link href="/cookies" className={styles.legalLink}>
-            Interest-Based Ads
-          </Link>
+          <span className={styles.legalLink}>Terms of Use</span>
+          <span className={styles.legalLink}>Privacy Policy</span>
+          <span className={styles.legalLink}>Interest-Based Ads</span>
         </div>
       </div>
     </footer>

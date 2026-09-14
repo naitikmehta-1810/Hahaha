@@ -2,6 +2,7 @@ import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
+import { trackViewLimiter } from "../middleware/auth-rate-limit.js";
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
 import {
@@ -23,6 +24,7 @@ const trackSchema = z.object({
 
 analyticsRouter.post(
   "/track-view",
+  trackViewLimiter,
   asyncHandler(async (req, res) => {
     const parsed = trackSchema.safeParse(req.body);
     if (!parsed.success) {

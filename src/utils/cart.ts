@@ -519,12 +519,54 @@ export async function cancelOrder(orderId: string, reason?: string) {
 
 export async function submitReview(input: {
   productId: string;
-  orderItemId?: string | null;
+  orderItemId: string;
   rating: number;
   title?: string;
   body?: string;
 }) {
   return apiRequest<{ review: { id: string } }>("POST", "/api/reviews", { body: input });
+}
+
+export async function updateAddress(
+  id: string,
+  input: Partial<{
+    label: string;
+    recipientName: string;
+    phoneNumber: string;
+    line1: string;
+    line2: string | null;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+    isDefault: boolean;
+  }>
+): Promise<AddressRecord> {
+  const result = await apiRequest<{ address: AddressRecord }>("PATCH", `/api/addresses/${id}`, {
+    body: input,
+  });
+  if (result.error || !result.data?.address) {
+    throw Object.assign(new Error(result.error ?? "Could not update address"), {
+      status: result.status,
+    });
+  }
+  return result.data.address;
+}
+
+export async function deleteAddress(id: string): Promise<void> {
+  const result = await apiRequest<unknown>("DELETE", `/api/addresses/${id}`);
+  if (result.error) {
+    throw Object.assign(new Error(result.error), { status: result.status });
+  }
+}
+
+export async function updateMyProfile(input: {
+  fullName?: string;
+  phoneNumber?: string | null;
+}) {
+  return apiRequest<{ user: import("./api-client").AuthUser }>("PATCH", "/api/auth/me", {
+    body: input,
+  });
 }
 
 export function formatOrderStatusLabel(status: string) {

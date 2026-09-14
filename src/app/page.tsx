@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Headphones,
   ArrowRight,
+  LayoutGrid,
 } from "lucide-react";
 import styles from "./page.module.css";
 import Heading from "@/components/ui/Heading/Heading";
@@ -40,6 +41,7 @@ export default function Home() {
   const [popularProducts, setPopularProducts] = useState<CatalogProduct[]>([]);
   const [recommendedProducts, setRecommendedProducts] = useState<CatalogProduct[]>([]);
   const [loadingPopular, setLoadingPopular] = useState(true);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -108,35 +110,62 @@ export default function Home() {
 
   return (
     <div className={styles.container}>
+      <button
+        type="button"
+        className={styles.categoriesMobileBtn}
+        onClick={() => setCategoriesOpen(true)}
+      >
+        <LayoutGrid size={16} />
+        Categories
+      </button>
+
       <section className={styles.heroSection}>
-        <aside className={styles.categoriesSidebar}>
-          <div className={styles.sidebarTitle}>
-            <span>Categories</span>
-            <ChevronRight size={16} />
-          </div>
-          {sidebarCategories.map((cat) => (
+        <aside
+          className={`${styles.categoriesSidebar} ${
+            categoriesOpen ? styles.categoriesSidebarOpen : ""
+          }`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCategoriesOpen(false);
+          }}
+        >
+          <div className={styles.categoriesPanel}>
+            <div className={styles.sidebarTitle}>
+              <span>Categories</span>
+              <button
+                type="button"
+                className={styles.categoriesClose}
+                onClick={() => setCategoriesOpen(false)}
+              >
+                Close
+              </button>
+              <ChevronRight size={16} className={styles.sidebarChevron} />
+            </div>
+            {sidebarCategories.map((cat) => (
+              <Link
+                key={cat.id}
+                href={`/shop?category=${encodeURIComponent(cat.slug)}`}
+                className={styles.categoryItem}
+                onClick={() => setCategoriesOpen(false)}
+              >
+                <div className={styles.categoryContent}>
+                  <span>{cat.name}</span>
+                  {cat.productCount > 0 ? (
+                    <span style={{ color: "var(--color-text-muted)", fontSize: "0.8rem" }}>
+                      ({cat.productCount})
+                    </span>
+                  ) : null}
+                </div>
+              </Link>
+            ))}
             <Link
-              key={cat.id}
-              href={`/shop?category=${encodeURIComponent(cat.slug)}`}
+              href="/shop"
               className={styles.categoryItem}
+              style={{ color: "var(--color-primary)", marginTop: "8px" }}
+              onClick={() => setCategoriesOpen(false)}
             >
-              <div className={styles.categoryContent}>
-                <span>{cat.name}</span>
-                {cat.productCount > 0 ? (
-                  <span style={{ color: "var(--color-text-muted)", fontSize: "0.8rem" }}>
-                    ({cat.productCount})
-                  </span>
-                ) : null}
-              </div>
+              <strong>See all categories</strong>
             </Link>
-          ))}
-          <Link
-            href="/shop"
-            className={styles.categoryItem}
-            style={{ color: "var(--color-primary)", marginTop: "8px" }}
-          >
-            <strong>See all categories</strong>
-          </Link>
+          </div>
         </aside>
 
         <div className={styles.carousel}>

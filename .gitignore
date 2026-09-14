@@ -24,6 +24,11 @@ node_modules/
 .DS_Store
 *.pem
 
+# local proof / scratch artifacts (never commit)
+backend/tmp-*
+**/tmp-cookies.txt
+**/tmp-invoice-proof.pdf
+
 # debug
 npm-debug.log*
 yarn-debug.log*
