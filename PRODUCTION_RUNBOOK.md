@@ -19,8 +19,10 @@
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` — product images + invoice assets (CDN)
 - `FRONTEND_URL`, `BACKEND_PUBLIC_URL`
 - `PAYMENT_MODE=razorpay` **in production** with `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
-- Optional: `SENTRY_DSN`, `SHIPROCKET_*`, `OPENWA_*`, `LOG_LEVEL`
+- `SHIPPING_WEBHOOK_SECRET` (≥16 chars) — required for shipping webhook auth in production (`x-stuffsy-shipping-secret` header)
+- Optional: `SENTRY_DSN`, `SHIPROCKET_*`, `OPENWA_*`, `LOG_LEVEL`, `ALLOW_LOADTEST_HELPERS`
 - `PAYOUT_ENCRYPTION_KEY` — 32-byte base64 AES key for seller payout_details (required in production when saving payouts)
+- Pool tuning: `PG_POOL_MAX`, `PG_IDLE_TIMEOUT_MS`, `PG_CONNECTION_TIMEOUT_MS`, `PG_STATEMENT_TIMEOUT_MS`
 
 Dev-only: `PAYMENT_MODE=stub` auto-captures for local polling UI. Never use stub in production.
 
@@ -29,9 +31,23 @@ Dev-only: `PAYMENT_MODE=stub` auto-captures for local polling UI. Never use stub
 1. `cd backend && npm ci && npm run migrate`
 2. Start Redis, then API, then email + WhatsApp workers
 3. Configure Razorpay webhook → `POST {BACKEND_PUBLIC_URL}/api/payments/webhook` (raw JSON body)
-4. Configure Shiprocket webhook → `POST {BACKEND_PUBLIC_URL}/api/shipping/webhook` (no-ops cleanly if provider unset)
+4. Configure shipping webhook → `POST {BACKEND_PUBLIC_URL}/api/shipping/webhook` with `x-stuffsy-shipping-secret` (rejects without secret in production)
 5. Confirm Cloudinary delivery URLs are HTTPS CDN fronts for catalog images
-6. Smoke: `/api/health`, place order → paid → invoice_url set → order confirmation email job
+6. Smoke: `GET /api/health` returns `{ ok: true, database: "ok", redis: "ok" }`, place order → paid → invoice download via `GET /api/orders/:id/invoice`
+
+**Root install on Vercel:** `packageManager` is pinned to `pnpm@10.15.0`. Keep `pnpm-lock.yaml` in sync with root `package.json` after any dependency change (`npx pnpm@10.15.0 install`). CI still uses `npm ci` for root/backend (keep `package-lock.json` synced too when editing root deps).
+
+## Wave 1 hardening (done in code)
+
+- Shipping webhook auth; payment double-capture `SAVEPOINT`; invoice `invoice_number_seq`; refund dedupe + `refunded` order status
+- Helmet + compression; catalog Redis cache; slim bestsellers-only sales subquery; pg pool timeouts
+- Verified-purchase reviews only; rate limits on catalog/search/track-view/reviews
+- Account Addresses + Profile tabs wired; Reviews/Payment Methods/Settings show honest unavailable copy
+- If Next shows `global-error.js` Client Manifest errors in dev: delete `.next` and restart `npm run dev`
+
+## Scale honesty
+
+Wave 1 is **not** “millions of users ready.” Still needed for Flipkart-class load: PgBouncer, horizontal API replicas, edge/CDN caching or ISR for catalog, separate invoice worker process, real carrier booking, and load tests with live Razorpay.
 
 ## Payments
 
@@ -91,11 +107,13 @@ Manual payment edge cases: `backend/MANUAL_TEST_CHECKLIST_PHASE4.md`
 
 Do these yourself before calling production “live”:
 
-1. **Razorpay (Tier 0.1)** — set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`; `PAYMENT_MODE=razorpay`. Then manually prove: Checkout widget pay, webhook signature OK, bad-signature reject, replay idempotency, refund.
-2. **GitHub Actions** — push/open PR so CI runs; paste/check Actions output. Configure Environments `staging` / `production` (reviewers on production).
-3. **Deploy hooks** — set secrets `STAGING_DEPLOY_HOOK` and `PRODUCTION_DEPLOY_HOOK` (or replace job steps with your host’s deploy).
-4. **Production payout key** — set `PAYOUT_ENCRYPTION_KEY` on the live API host (local `.env` is not enough).
-5. **Optional k6** — install the k6 binary if you want the official load script; node contention proof already covers the stock invariant.
+1. **Commit & push** — land Wave 1 hardening + synced `pnpm-lock.yaml` on `main` so Vercel builds.
+2. **Backend host** — Postgres + Redis + API + email/WhatsApp workers; set `NEXT_PUBLIC_BACKEND_URL` on Vercel; set `FRONTEND_URL` / `BACKEND_PUBLIC_URL` on API.
+3. **Razorpay (Tier 0.1)** — set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`; `PAYMENT_MODE=razorpay`. Then manually prove: Checkout widget pay, webhook signature OK, bad-signature reject, replay idempotency, refund.
+4. **GitHub Actions** — push/open PR so CI runs; paste/check Actions output. Configure Environments `staging` / `production` (reviewers on production).
+5. **Deploy hooks** — set secrets `STAGING_DEPLOY_HOOK` and `PRODUCTION_DEPLOY_HOOK` (or replace job steps with your host’s deploy).
+6. **Production secrets** — `PAYOUT_ENCRYPTION_KEY` and `SHIPPING_WEBHOOK_SECRET` (API now **refuses to boot** in production without them).
+7. **Optional k6** — install the k6 binary if you want the official load script; node contention proof already covers the stock invariant.
 
 ## Known product decisions
 
