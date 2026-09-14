@@ -86,6 +86,12 @@ jobs:
         working-directory: backend
         run: npm run migrate
 
+      - name: Seed categories + demo catalog (seller-scope proofs)
+        working-directory: backend
+        run: |
+          npm run seed:categories
+          npm run seed:demo
+
       - name: Start API for regression proofs
         working-directory: backend
         run: |

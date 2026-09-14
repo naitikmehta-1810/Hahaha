@@ -1,5 +1,8 @@
 create extension if not exists pgcrypto;
 
+-- Prefer Umzug migration 000_create_users_table.ts for fresh installs.
+-- This file remains a manual bootstrap reference and mirrors that migration.
+
 create table if not exists public.users (
   id uuid primary key default gen_random_uuid(),
   full_name text not null,

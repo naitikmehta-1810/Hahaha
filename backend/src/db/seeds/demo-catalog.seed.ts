@@ -358,7 +358,7 @@ async function upsertSellerUser(shop: SeedShop) {
        (id, full_name, email, phone_number, password_hash, role, status,
         email_verified_at, created_at, updated_at)
      values (gen_random_uuid(), $1, $2, $3, $4, 'customer', 'active', now(), now(), now())
-     on conflict (lower(email)) do update set full_name = excluded.full_name, updated_at = now()
+     on conflict ((lower(email))) do update set full_name = excluded.full_name, updated_at = now()
      returning id`,
     [shop.ownerName, shop.email, shop.contactPhone, passwordHash]
   );
