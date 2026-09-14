@@ -10,6 +10,10 @@ import { env } from "./env.js";
 export const queueConnection: ConnectionOptions = {
   url: env.REDIS_URL,
   maxRetriesPerRequest: null,
+  family: 4,
+  ...(env.REDIS_URL.startsWith("rediss://")
+    ? { tls: { rejectUnauthorized: false } }
+    : {}),
 };
 
 /** Prefix BullMQ keys so Stuffsy doesn't collide with other apps on a shared Redis. */

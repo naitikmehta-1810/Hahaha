@@ -6,15 +6,25 @@ import { env } from "./env.js";
  * Use createRedisClient() for app-level caching/sessions.
  * BullMQ workers must use queueConnection from config/queue.ts instead
  * (maxRetriesPerRequest must be null for BullMQ).
+ *
+ * Upstash / Redis Cloud require `rediss://` (TLS). Plain `redis://` to those
+ * hosts usually fails with ECONNRESET from Render.
  */
 export const redisOptions = {
   maxRetriesPerRequest: 3,
   enableReadyCheck: true,
   lazyConnect: true,
+  // Prefer IPv4 on some PaaS networks where IPv6 routes reset.
+  family: 4,
 } as const;
 
 export function createRedisClient(): Redis {
-  return new Redis(env.REDIS_URL, { ...redisOptions });
+  const url = env.REDIS_URL;
+  const needsTls = url.startsWith("rediss://");
+  return new Redis(url, {
+    ...redisOptions,
+    ...(needsTls ? { tls: { rejectUnauthorized: false } } : {}),
+  });
 }
 
 /** Lazy singleton for general-purpose Redis access. */

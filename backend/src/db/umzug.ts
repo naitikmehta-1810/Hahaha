@@ -14,9 +14,10 @@ const __dirname = path.dirname(__filename);
 const migrationSequelize = new Sequelize(env.DATABASE_URL, {
   dialect: "postgres",
   logging: false,
-  dialectOptions: env.DATABASE_URL.includes("supabase.co")
-    ? { ssl: { require: true, rejectUnauthorized: false } }
-    : undefined,
+  dialectOptions:
+    env.DATABASE_URL.includes("supabase.co") || env.DATABASE_URL.includes("neon.tech")
+      ? { ssl: { require: true, rejectUnauthorized: false } }
+      : undefined,
 });
 
 export const migrator = new Umzug({
