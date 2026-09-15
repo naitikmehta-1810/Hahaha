@@ -14,10 +14,20 @@ type SendMailInput = {
  * RESEND_API_KEY is set; fall back to Gmail SMTP for local/dev.
  */
 async function sendViaResend(input: SendMailInput) {
-  const apiKey = env.RESEND_API_KEY;
-  if (!apiKey) return null;
+  const apiKey = env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    console.warn("[mail] RESEND_API_KEY unset — falling back to Gmail SMTP (often blocked on Render)");
+    return null;
+  }
 
-  const from = env.EMAIL_FROM || "Stuffsy <onboarding@resend.dev>";
+  // Free/testing: only onboarding@resend.dev works without a verified domain.
+  // A Gmail address in EMAIL_FROM will be rejected by Resend.
+  const configured = env.EMAIL_FROM?.trim();
+  const from =
+    !configured || /@gmail\.com\b/i.test(configured)
+      ? "Stuffsy <onboarding@resend.dev>"
+      : configured;
+
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -33,10 +43,15 @@ async function sendViaResend(input: SendMailInput) {
     }),
   });
 
-  const body = (await res.json().catch(() => null)) as { id?: string; message?: string } | null;
+  const body = (await res.json().catch(() => null)) as {
+    id?: string;
+    message?: string;
+    name?: string;
+  } | null;
   if (!res.ok) {
-    throw new Error(body?.message ?? `Resend HTTP ${res.status}`);
+    throw new Error(body?.message ?? body?.name ?? `Resend HTTP ${res.status}`);
   }
+  console.info(`[mail] sent via Resend id=${body?.id ?? "?"} to=${input.to} from=${from}`);
   return { ok: true as const, messageId: body?.id ?? "resend" };
 }
 
