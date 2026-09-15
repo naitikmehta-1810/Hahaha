@@ -15,6 +15,9 @@ function createTransport() {
       user: env.EMAIL_USER,
       pass: env.EMAIL_PASS,
     },
+    connectionTimeout: 12_000,
+    greetingTimeout: 12_000,
+    socketTimeout: 20_000,
   });
 }
 

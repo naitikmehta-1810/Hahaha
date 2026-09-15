@@ -3,10 +3,8 @@
 import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
-import Button from "@/components/ui/Button/Button";
 import { apiRequest } from "@/utils/api-client";
+import styles from "../forgot-password/forgot-password.module.css";
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -23,84 +21,79 @@ function ResetPasswordForm() {
       setError("Missing reset token. Open the link from your email again.");
       return;
     }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
     setBusy(true);
     setError(null);
     setMessage(null);
-    const result = await apiRequest<{ message?: string }>("POST", "/api/auth/reset-password", {
-      body: { token, password, confirmPassword },
-      skipRefresh: true,
-    });
-    setBusy(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await apiRequest<{ message?: string }>("POST", "/api/auth/reset-password", {
+        body: { token, password, confirmPassword },
+        skipRefresh: true,
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setMessage(result.data?.message ?? "Password updated.");
+    } catch {
+      setError("Could not reach the server. Please try again in a moment.");
+    } finally {
+      setBusy(false);
     }
-    setMessage(result.data?.message ?? "Password updated.");
   };
 
   return (
-    <div
-      style={{
-        maxWidth: 480,
-        margin: "64px auto",
-        padding: 24,
-      }}
-    >
-      <Heading level={2}>Reset Password</Heading>
-      <Text color="muted" style={{ marginTop: 12, marginBottom: 24 }}>
-        Choose a new password for your Stuffsy account.
-      </Text>
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <h1 className={styles.title}>Reset Password</h1>
+        <p className={styles.subtitle}>Choose a new password for your Stuffsy account.</p>
 
-      <form onSubmit={(e) => void onSubmit(e)}>
-        <label style={{ display: "block", fontSize: "0.85rem", marginBottom: 6 }}>
-          New password
-        </label>
-        <input
-          type="password"
-          required
-          minLength={8}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 12px",
-            border: "1px solid var(--color-border-dark)",
-            borderRadius: 8,
-            marginBottom: 12,
-          }}
-        />
-        <label style={{ display: "block", fontSize: "0.85rem", marginBottom: 6 }}>
-          Confirm password
-        </label>
-        <input
-          type="password"
-          required
-          minLength={8}
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 12px",
-            border: "1px solid var(--color-border-dark)",
-            borderRadius: 8,
-            marginBottom: 16,
-          }}
-        />
-        <Button variant="primary" fullWidth disabled={busy || !token} type="submit">
-          {busy ? "Updating…" : "Update password"}
-        </Button>
-      </form>
+        <form className={styles.form} onSubmit={(e) => void onSubmit(e)}>
+          <label className={styles.field}>
+            New password
+            <input
+              className={styles.input}
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 8 characters"
+            />
+          </label>
+          <label className={styles.field}>
+            Confirm password
+            <input
+              className={styles.input}
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter password"
+            />
+          </label>
+          <button className={styles.submit} type="submit" disabled={busy || !token}>
+            {busy ? "Updating…" : "Update password"}
+          </button>
+        </form>
 
-      {message ? (
-        <Text size="sm" style={{ marginTop: 16, color: "var(--color-success, #15803d)" }}>
-          {message} <Link href="/login">Sign in</Link>
-        </Text>
-      ) : null}
-      {error ? (
-        <Text size="sm" style={{ marginTop: 16, color: "var(--color-danger)" }}>
-          {error}
-        </Text>
-      ) : null}
+        {message ? (
+          <p className={styles.statusOk}>
+            {message} <Link href="/login">Sign in</Link>
+          </p>
+        ) : null}
+        {error ? <p className={styles.statusErr}>{error}</p> : null}
+
+        <div className={styles.footer}>
+          <Link href="/login">Back to Sign In</Link>
+        </div>
+      </div>
     </div>
   );
 }
@@ -109,8 +102,10 @@ export default function ResetPasswordPage() {
   return (
     <Suspense
       fallback={
-        <div style={{ maxWidth: 480, margin: "64px auto", padding: 24 }}>
-          <Text>Loading…</Text>
+        <div className={styles.page}>
+          <div className={styles.card}>
+            <p className={styles.subtitle}>Loading…</p>
+          </div>
         </div>
       }
     >

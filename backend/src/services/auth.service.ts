@@ -363,8 +363,11 @@ export async function requestPasswordReset(email: string) {
   );
 
   const { sendPasswordResetEmail } = await import("./mail.service.js");
-  // Primary: sync send for reliability.
-  await sendPasswordResetEmail(user.email, token);
+  // Do not block the HTTP response on SMTP — Gmail from Render can hang and
+  // leave the forgot-password UI stuck on "Sending…".
+  void sendPasswordResetEmail(user.email, token).catch((error) => {
+    console.error("[auth] password reset email failed", error);
+  });
   // Secondary: also enqueue worker job (best-effort).
   try {
     const { enqueueEmailJob } = await import("./notify.enqueue.js");

@@ -2,10 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
-import Button from "@/components/ui/Button/Button";
 import { apiRequest } from "@/utils/api-client";
+import styles from "./forgot-password.module.css";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -18,67 +16,58 @@ export default function ForgotPasswordPage() {
     setBusy(true);
     setError(null);
     setMessage(null);
-    const result = await apiRequest<{ message?: string }>("POST", "/api/auth/forgot-password", {
-      body: { email: email.trim() },
-      skipRefresh: true,
-    });
-    setBusy(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await apiRequest<{ message?: string }>("POST", "/api/auth/forgot-password", {
+        body: { email: email.trim() },
+        skipRefresh: true,
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setMessage(
+        result.data?.message ??
+          "If an account exists for that email, a password reset link was sent."
+      );
+    } catch {
+      setError("Could not reach the server. Please try again in a moment.");
+    } finally {
+      setBusy(false);
     }
-    setMessage(
-      result.data?.message ??
-        "If an account exists for that email, a password reset link was sent."
-    );
   };
 
   return (
-    <div
-      style={{
-        maxWidth: 480,
-        margin: "64px auto",
-        padding: 24,
-      }}
-    >
-      <Heading level={2}>Forgot Password</Heading>
-      <Text color="muted" style={{ marginTop: 12, marginBottom: 24 }}>
-        Enter the email on your Stuffsy account. If it exists, we&apos;ll send a reset link.
-      </Text>
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <h1 className={styles.title}>Forgot Password</h1>
+        <p className={styles.subtitle}>
+          Enter the email on your Stuffsy account. If it exists, we&apos;ll send a reset link.
+        </p>
 
-      <form onSubmit={(e) => void onSubmit(e)}>
-        <label style={{ display: "block", fontSize: "0.85rem", marginBottom: 6 }}>Email</label>
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 12px",
-            border: "1px solid var(--color-border-dark)",
-            borderRadius: 8,
-            marginBottom: 16,
-          }}
-        />
-        <Button variant="primary" fullWidth disabled={busy} type="submit">
-          {busy ? "Sending…" : "Send reset link"}
-        </Button>
-      </form>
+        <form className={styles.form} onSubmit={(e) => void onSubmit(e)}>
+          <label className={styles.field}>
+            Email
+            <input
+              className={styles.input}
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+            />
+          </label>
+          <button className={styles.submit} type="submit" disabled={busy}>
+            {busy ? "Sending…" : "Send reset link"}
+          </button>
+        </form>
 
-      {message ? (
-        <Text size="sm" style={{ marginTop: 16, color: "var(--color-success, #15803d)" }}>
-          {message}
-        </Text>
-      ) : null}
-      {error ? (
-        <Text size="sm" style={{ marginTop: 16, color: "var(--color-danger)" }}>
-          {error}
-        </Text>
-      ) : null}
+        {message ? <p className={styles.statusOk}>{message}</p> : null}
+        {error ? <p className={styles.statusErr}>{error}</p> : null}
 
-      <div style={{ marginTop: 24, textAlign: "center" }}>
-        <Link href="/login">Back to Sign In</Link>
+        <div className={styles.footer}>
+          <Link href="/login">Back to Sign In</Link>
+        </div>
       </div>
     </div>
   );
