@@ -8,9 +8,46 @@ type SendMailInput = {
   html?: string;
 };
 
-function createTransport() {
+/**
+ * Render (and many PaaS free tiers) block outbound SMTP (465/587). Gmail from
+ * Render often fails with ETIMEDOUT / ENETUNREACH. Prefer Resend HTTPS when
+ * RESEND_API_KEY is set; fall back to Gmail SMTP for local/dev.
+ */
+async function sendViaResend(input: SendMailInput) {
+  const apiKey = env.RESEND_API_KEY;
+  if (!apiKey) return null;
+
+  const from = env.EMAIL_FROM || "Stuffsy <onboarding@resend.dev>";
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [input.to],
+      subject: input.subject,
+      text: input.text,
+      html: input.html ?? input.text.replace(/\n/g, "<br/>"),
+    }),
+  });
+
+  const body = (await res.json().catch(() => null)) as { id?: string; message?: string } | null;
+  if (!res.ok) {
+    throw new Error(body?.message ?? `Resend HTTP ${res.status}`);
+  }
+  return { ok: true as const, messageId: body?.id ?? "resend" };
+}
+
+function createGmailTransport() {
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    // Prefer IPv4 — Render logs showed ENETUNREACH to Gmail IPv6 :465.
+    family: 4,
     auth: {
       user: env.EMAIL_USER,
       pass: env.EMAIL_PASS,
@@ -22,10 +59,12 @@ function createTransport() {
 }
 
 export async function sendMail(input: SendMailInput) {
-  const transporter = createTransport();
-  const from = env.EMAIL_FROM || `Stuffsy <${env.EMAIL_USER}>`;
-
   try {
+    const viaResend = await sendViaResend(input);
+    if (viaResend) return viaResend;
+
+    const transporter = createGmailTransport();
+    const from = env.EMAIL_FROM || `Stuffsy <${env.EMAIL_USER}>`;
     const info = await transporter.sendMail({
       from,
       to: input.to,

@@ -11,10 +11,15 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   BACKEND_PUBLIC_URL: z.string().url().default("http://localhost:4000"),
   REDIS_URL: z.string().min(1).default("redis://127.0.0.1:6379"),
-  /** Gmail (or Google Workspace) SMTP via app password. */
+  /** Gmail (or Google Workspace) SMTP via app password — often blocked on Render free. */
   EMAIL_USER: z.string().email(),
   EMAIL_PASS: z.string().min(1),
   EMAIL_FROM: z.string().min(1).optional(),
+  /**
+   * Resend API key (HTTPS). Preferred in production on Render — SMTP ports are
+   * commonly blocked. https://resend.com
+   */
+  RESEND_API_KEY: z.string().min(1).optional(),
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
