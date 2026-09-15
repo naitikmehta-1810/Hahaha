@@ -46,8 +46,6 @@ function createGmailTransport() {
     port: 587,
     secure: false,
     requireTLS: true,
-    // Prefer IPv4 — Render logs showed ENETUNREACH to Gmail IPv6 :465.
-    family: 4,
     auth: {
       user: env.EMAIL_USER,
       pass: env.EMAIL_PASS,
