@@ -10,7 +10,8 @@ import { pool } from "../../config/db.js";
  *
  * `icon_url` holds a lucide-react icon NAME rather than a hosted image path — the
  * icon set in the design is a rendered icon font, not uploaded artwork. The frontend
- * maps the name to a component. Custom uploads can overwrite this per-row later.
+ * maps the name to a component. Category circle/grid photos live in `image_url`
+ * (Cloudinary) via `npm run seed:category-images`.
  *
  * Idempotent: re-running updates names/icons/order in place, never duplicates.
  */

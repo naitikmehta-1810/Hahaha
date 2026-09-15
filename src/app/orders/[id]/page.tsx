@@ -31,9 +31,9 @@ import {
   orderStatusBadgeClass,
   downloadOrderInvoice,
 } from "@/utils/cart";
+import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
 
-const FALLBACK_THUMB =
-  "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=150";
+const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
 
 const STAGE_ICONS: Record<string, React.ReactNode> = {
   confirmed: <ClipboardCheck size={18} />,

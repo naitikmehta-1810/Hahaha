@@ -28,9 +28,9 @@ import {
   Settings,
 } from "lucide-react";
 import styles from "./seller.module.css";
+import { FALLBACK_SHOP_LOGO } from "@/utils/media";
 
-const FALLBACK_AVATAR =
-  "https://images.unsplash.com/photo-1614613535308-eb5fbd8d2c17?w=200&q=80";
+const FALLBACK_AVATAR = FALLBACK_SHOP_LOGO;
 
 const NAV = [
   { href: "/seller", label: "Dashboard" },

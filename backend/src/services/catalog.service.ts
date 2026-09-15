@@ -547,6 +547,7 @@ export type CategoryNode = {
   name: string;
   slug: string;
   iconUrl: string | null;
+  imageUrl: string | null;
   displayOrder: number;
   productCount: number;
   children: CategoryNode[];
@@ -577,6 +578,7 @@ export async function getCategoryTree(sellerId?: string | null): Promise<Categor
     name: string;
     slug: string;
     icon_url: string | null;
+    image_url: string | null;
     display_order: number;
     product_count: string;
   }>(
@@ -586,6 +588,7 @@ export async function getCategoryTree(sellerId?: string | null): Promise<Categor
        c.name,
        c.slug,
        c.icon_url,
+       c.image_url,
        c.display_order,
        (
          select count(*)
@@ -612,6 +615,7 @@ export async function getCategoryTree(sellerId?: string | null): Promise<Categor
       name: row.name,
       slug: row.slug,
       iconUrl: row.icon_url,
+      imageUrl: row.image_url,
       displayOrder: row.display_order,
       productCount: Number(row.product_count),
       children: [],

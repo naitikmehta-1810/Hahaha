@@ -17,6 +17,7 @@ import {
   User,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import BrandLogo from "@/components/brand/BrandLogo";
 import { apiBaseUrl, apiRequest, type AuthUser } from "@/utils/api-client";
 import { refreshCart } from "@/utils/cart";
 import styles from "./AuthPage.module.css";
@@ -173,7 +174,7 @@ function AuthPageInner({ mode }: AuthPageProps) {
           }`}
         >
           <div className={styles.brandRow}>
-            <span className={styles.brandMark}>sj</span>
+            <BrandLogo size={40} decorative className={styles.brandMark} />
             <span className={styles.brandName}>Stuffsy</span>
           </div>
 

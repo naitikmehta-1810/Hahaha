@@ -59,9 +59,9 @@
 }
 
 .brandMark {
-  color: #6d28d9;
-  font-size: 1.9rem;
-  line-height: 1;
+  display: block;
+  border-radius: 10px;
+  line-height: 0;
 }
 
 .brandName {

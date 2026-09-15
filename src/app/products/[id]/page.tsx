@@ -37,9 +37,9 @@ import ProductCard from "@/components/ui/ProductCard/ProductCard";
 import { isWished, toggleWishlist } from "@/utils/wishlist";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
+import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
 
-const FALLBACK_IMAGE =
-  "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=500";
+const FALLBACK_IMAGE = FALLBACK_PRODUCT_IMAGE;
 
 export default function ProductDetailsPage() {
   const params = useParams();

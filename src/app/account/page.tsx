@@ -23,6 +23,7 @@ import {
   type WishlistItem,
 } from "@/utils/wishlist";
 import { productHref } from "@/utils/catalog";
+import { FALLBACK_AVATAR_IMAGE, FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
 
 import {
   LayoutDashboard,
@@ -87,7 +88,7 @@ function mapOrdersForDisplay(
       image:
         order.previewThumbnailUrl ||
         firstItem?.productThumbnailUrl ||
-        "/images/product-woven-hanging.jpg",
+        FALLBACK_PRODUCT_IMAGE,
       orderNumber: order.orderNumber,
     };
   });
@@ -414,8 +415,7 @@ function AccountPageInner() {
                 alt={user.name}
                 className={styles.avatar}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150";
+                  (e.target as HTMLImageElement).src = FALLBACK_AVATAR_IMAGE;
                 }}
               />
               <div className={styles.profileDetails}>
@@ -704,7 +704,7 @@ function AccountPageInner() {
                           <div className={styles.orderImgWrapper}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={item.thumbnailUrl || "/images/product-woven-hanging.jpg"}
+                              src={item.thumbnailUrl || FALLBACK_PRODUCT_IMAGE}
                               alt={item.title}
                               className={styles.orderImg}
                             />
@@ -771,8 +771,7 @@ function AccountPageInner() {
                         alt={order.title}
                         className={styles.orderImg}
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src =
-                            "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=100";
+                          (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
                         }}
                       />
                     </div>

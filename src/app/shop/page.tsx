@@ -25,9 +25,9 @@ import {
   type ProductCard as CatalogProduct,
   type ProductSort,
 } from "@/utils/catalog";
+import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
 
-const FALLBACK_THUMB =
-  "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=250";
+const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
 
 const SORT_OPTIONS: Array<{ value: ProductSort; label: string }> = [
   { value: "popular", label: "Sort by: Popular" },

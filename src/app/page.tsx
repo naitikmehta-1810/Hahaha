@@ -17,8 +17,8 @@ import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
 import ProductCard from "@/components/ui/ProductCard/ProductCard";
 import {
-  CATEGORY_CIRCLE_IMAGES,
   HOME_POPULAR_SORT,
+  categoryImageUrl,
   fetchCategories,
   fetchProducts,
   pickShopByCategoryNodes,
@@ -28,9 +28,9 @@ import {
   type CategoryNode,
   type ProductCard as CatalogProduct,
 } from "@/utils/catalog";
+import { FALLBACK_PRODUCT_IMAGE, HERO_CAROUSEL_IMAGES } from "@/utils/media";
 
-const FALLBACK_THUMB =
-  "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=250";
+const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
 
 export default function Home() {
   const [activePopularTab, setActivePopularTab] = useState("popular");
@@ -184,22 +184,20 @@ export default function Home() {
             <div className={styles.heroImageContainer}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/images/hero-carousel-1.jpg"
+                src={HERO_CAROUSEL_IMAGES[0]}
                 alt="Candle set"
                 className={styles.heroImg1}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    "https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&q=80&w=300";
+                  (e.target as HTMLImageElement).src = FALLBACK_THUMB;
                 }}
               />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/images/hero-carousel-2.jpg"
+                src={HERO_CAROUSEL_IMAGES[1]}
                 alt="Woven Wall Hanging"
                 className={styles.heroImg2}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=300";
+                  (e.target as HTMLImageElement).src = FALLBACK_THUMB;
                 }}
               />
             </div>
@@ -312,7 +310,7 @@ export default function Home() {
               <div className={styles.circleImgWrapper}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={CATEGORY_CIRCLE_IMAGES[cat.slug] ?? FALLBACK_THUMB}
+                  src={categoryImageUrl(cat)}
                   alt={cat.name}
                   className={styles.circleImg}
                 />

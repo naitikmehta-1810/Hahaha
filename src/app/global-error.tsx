@@ -25,6 +25,14 @@ export default function GlobalError({
         }}
       >
         <main style={{ maxWidth: 420, padding: 24, textAlign: "center" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/stuffsy-logo.png"
+            alt="Stuffsy"
+            width={48}
+            height={48}
+            style={{ borderRadius: 12, margin: "0 auto 8px" }}
+          />
           <p style={{ letterSpacing: "0.12em", textTransform: "uppercase", fontSize: 12, opacity: 0.7 }}>
             Stuffsy
           </p>

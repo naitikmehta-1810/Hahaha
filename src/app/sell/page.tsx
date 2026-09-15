@@ -20,7 +20,9 @@ import {
 } from "lucide-react";
 import styles from "./sell.module.css";
 import { useAuth } from "@/components/auth/AuthProvider";
+import BrandLogo from "@/components/brand/BrandLogo";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
+import { SELL_STEP_IMAGES } from "@/utils/media";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3;
@@ -74,19 +76,8 @@ const TERMS = [
   },
 ];
 
-// ─── Logo SVG (matches Stuffsy brand) ────────────────────────────────────────
-const LogoSvg = () => (
-  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect width="36" height="36" rx="10" fill="#7C3AED" />
-    <path
-      d="M14 26C11.5 26 9.5 24 9.5 21.5C9.5 19 11.5 17 14 17C16.5 17 18 19 19 20.5C20 22 21.5 24 24 24C26.5 24 28.5 22 28.5 19.5C28.5 17 26.5 15 24 15C21.5 15 20 17 19 18.5"
-      stroke="white"
-      strokeWidth="3.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
+// ─── Brand mark ───────────────────────────────────────────────────────────────
+const LogoMark = () => <BrandLogo size={34} decorative />;
 
 // ─── Stepper ──────────────────────────────────────────────────────────────────
 const Stepper = ({ step }: { step: Step }) => (
@@ -193,9 +184,7 @@ const SIDEBAR_DATA = [
 
 // ─── Illustration placeholder per step ────────────────────────────────────────
 const ILLUSTRATIONS = [
-  "/images/seller-step1-bg.png",
-  "/images/seller-step2-illustration.png",
-  "/images/seller-step3-bg.png",
+  ...SELL_STEP_IMAGES,
 ];
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -378,7 +367,7 @@ export default function SellPage() {
       {/* ── Top Nav ──────────────────────────────────────────── */}
       <nav className={styles.topNav}>
         <Link href="/" className={styles.logoArea}>
-          <LogoSvg />
+          <LogoMark />
           <div>
             <div className={styles.logoText}>Stuffsy</div>
             {step === 2 && (

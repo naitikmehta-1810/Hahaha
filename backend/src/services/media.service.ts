@@ -15,7 +15,13 @@ function ensureCloudinary() {
   configured = true;
 }
 
-export type UploadFolder = "products" | "shops" | "misc" | "invoices";
+export type UploadFolder =
+  | "products"
+  | "shops"
+  | "misc"
+  | "invoices"
+  | "categories"
+  | "ui";
 
 export type UploadResult = {
   url: string;
@@ -66,12 +72,16 @@ export async function uploadRawFile(input: {
 
 /**
  * Upload a base64 data URL / raw base64 string or a remote URL to Cloudinary.
+ * Pass `publicId` + `overwrite: true` for idempotent seed/re-upload of fixed assets.
  */
 export async function uploadImage(input: {
   dataBase64?: string;
   url?: string;
   fileName?: string;
   folder?: UploadFolder;
+  /** Asset name inside the folder (no extension). */
+  publicId?: string;
+  overwrite?: boolean;
 }): Promise<UploadResult> {
   ensureCloudinary();
 
@@ -87,13 +97,17 @@ export async function uploadImage(input: {
       ? source
       : `data:image/jpeg;base64,${source}`;
 
+  const fixedId = Boolean(input.publicId);
+
   try {
     const result = await cloudinary.uploader.upload(payload, {
       folder,
+      public_id: input.publicId,
       resource_type: "image",
-      use_filename: Boolean(input.fileName),
-      unique_filename: true,
-      overwrite: false,
+      use_filename: Boolean(input.fileName) && !fixedId,
+      unique_filename: !fixedId,
+      overwrite: input.overwrite ?? false,
+      invalidate: input.overwrite === true,
       transformation: [{ quality: "auto", fetch_format: "auto" }],
     });
 

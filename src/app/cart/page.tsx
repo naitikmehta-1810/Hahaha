@@ -39,6 +39,7 @@ import {
   productImageUrl,
   type ProductCard as CatalogProduct,
 } from "@/utils/catalog";
+import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
 
 export default function CartPage() {
   const router = useRouter();
@@ -272,17 +273,7 @@ export default function CartPage() {
                     alt={item.title}
                     className={styles.itemImg}
                     onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      if (item.id === "boho-vase") {
-                        target.src =
-                          "https://images.unsplash.com/photo-1612196808214-b8e1d6145a8c?auto=format&fit=crop&q=80&w=150";
-                      } else if (item.id === "flower-earrings") {
-                        target.src =
-                          "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&q=80&w=150";
-                      } else {
-                        target.src =
-                          "https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&q=80&w=150";
-                      }
+                      (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
                     }}
                   />
                   {!item.available && (
@@ -683,8 +674,7 @@ export default function CartPage() {
                 src={productImageUrl(product)}
                 alt={product.title}
                 onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                  (e.target as HTMLImageElement).src =
-                    "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=250";
+                  (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
                 }}
               />
               <ProductCard.Body>

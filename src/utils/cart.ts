@@ -1,4 +1,5 @@
 import { apiBaseUrl, apiRequest } from "./api-client";
+import { FALLBACK_PRODUCT_IMAGE } from "./media";
 
 export interface CartItem {
   id: string;
@@ -76,7 +77,7 @@ function mapApiCart(cart: ApiCart): CartItem[] {
       : "No longer available",
     price: Number(line.unitPrice),
     qty: Number(line.quantity),
-    image: line.imageUrl || "/images/product-woven-hanging.jpg",
+    image: line.imageUrl || FALLBACK_PRODUCT_IMAGE,
     available: Boolean(line.available),
     availableStock: Number(line.availableStock ?? 0),
   }));

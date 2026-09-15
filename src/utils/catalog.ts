@@ -1,4 +1,5 @@
 import { apiRequest } from "./api-client";
+import { FALLBACK_PRODUCT_IMAGE } from "./media";
 
 export type ProductSort =
   | "featured"
@@ -64,6 +65,7 @@ export type CategoryNode = {
   name: string;
   slug: string;
   iconUrl: string | null;
+  imageUrl: string | null;
   displayOrder: number;
   productCount: number;
   children: CategoryNode[];
@@ -93,21 +95,7 @@ export type ProductListParams = {
   pageSize?: number;
 };
 
-const FALLBACK_IMAGE =
-  "https://images.unsplash.com/photo-1528190336454-13cd56b45b5a?auto=format&fit=crop&q=80&w=400";
-
-/** Circle-grid images for the home "Shop by Category" section — keyed by slug. */
-export const CATEGORY_CIRCLE_IMAGES: Record<string, string> = {
-  "home-decor":
-    "https://images.unsplash.com/photo-1578500494198-246f612d03b3?w=400&q=80",
-  jewelry: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80",
-  "wall-art": "https://images.unsplash.com/photo-1561214115-6d2f1b0609fa?w=400&q=80",
-  clothing: "https://images.unsplash.com/photo-1509631179647-0177331693ae?w=400&q=80",
-  accessories: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80",
-  candles: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=400&q=80",
-  stationery: "https://images.unsplash.com/photo-1569158160384-21829cd1a85b?w=400&q=80",
-  crafts: "https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=400&q=80",
-};
+const FALLBACK_IMAGE = FALLBACK_PRODUCT_IMAGE;
 
 /** Home Popular tabs → API sort values from Section D5. */
 export const HOME_POPULAR_SORT: Record<string, ProductSort> = {
@@ -119,6 +107,10 @@ export const HOME_POPULAR_SORT: Record<string, ProductSort> = {
 
 export function productImageUrl(product: Pick<ProductCard, "thumbnailUrl">) {
   return product.thumbnailUrl || FALLBACK_IMAGE;
+}
+
+export function categoryImageUrl(category: Pick<CategoryNode, "imageUrl">) {
+  return category.imageUrl || FALLBACK_IMAGE;
 }
 
 export function productHref(product: Pick<ProductCard, "slug">) {

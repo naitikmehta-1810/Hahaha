@@ -10,6 +10,7 @@
     "migrate:down": "node --loader ts-node/esm src/db/umzug.ts down",
     "migrate:status": "node --loader ts-node/esm src/db/umzug.ts pending",
     "seed:categories": "tsx src/db/seeds/categories.seed.ts",
+    "seed:category-images": "tsx src/db/seeds/category-images.seed.ts",
     "seed:demo": "tsx src/db/seeds/demo-catalog.seed.ts",
     "lint": "eslint . --max-warnings 100",
     "proof:race": "tsx scripts/concurrency-race-proof.mts",

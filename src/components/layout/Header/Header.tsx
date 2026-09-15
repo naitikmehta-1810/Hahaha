@@ -17,6 +17,7 @@ import styles from "./Header.module.css";
 import { getCart, refreshCart } from "@/utils/cart";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest } from "@/utils/api-client";
+import BrandLogo from "@/components/brand/BrandLogo";
 
 type SuggestProduct = { id: string; slug: string; title: string };
 type SuggestCategory = { id: string; slug: string; name: string };
@@ -196,23 +197,7 @@ export const Header = () => {
           </button>
           <Link href="/" className={styles.logoArea} onClick={() => setMobileOpen(false)}>
             <span className={styles.logoIcon}>
-              <svg
-                width="36"
-                height="36"
-                viewBox="0 0 36 36"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden
-              >
-                <rect width="36" height="36" rx="10" fill="#7C3AED" />
-                <path
-                  d="M14 26C11.5 26 9.5 24 9.5 21.5C9.5 19 11.5 17 14 17C16.5 17 18 19 19 20.5C20 22 21.5 24 24 24C26.5 24 28.5 22 28.5 19.5C28.5 17 26.5 15 24 15C21.5 15 20 17 19 18.5"
-                  stroke="white"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <BrandLogo size={36} decorative priority />
             </span>
             <span className={styles.logoText}>Stuffsy</span>
           </Link>
