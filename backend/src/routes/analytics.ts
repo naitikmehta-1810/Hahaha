@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { trackViewLimiter } from "../middleware/auth-rate-limit.js";
+import { optionalAuth } from "../middleware/requireAuth.js";
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
 import { baseCookieOptions } from "../utils/cookie-options.js";
@@ -26,6 +27,7 @@ const trackSchema = z.object({
 analyticsRouter.post(
   "/track-view",
   trackViewLimiter,
+  optionalAuth,
   asyncHandler(async (req, res) => {
     const parsed = trackSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -77,9 +79,15 @@ analyticsRouter.post(
     if (!recent.rows[0]) {
       await pool.query(
         `insert into public.product_page_views
-           (id, product_id, seller_id, session_id, referrer_channel, created_at)
-         values (gen_random_uuid(), $1, $2, $3, $4, now())`,
-        [product.rows[0].id, product.rows[0].seller_id, sessionId, viewChannel]
+           (id, product_id, seller_id, session_id, referrer_channel, user_id, created_at)
+         values (gen_random_uuid(), $1, $2, $3, $4, $5, now())`,
+        [
+          product.rows[0].id,
+          product.rows[0].seller_id,
+          sessionId,
+          viewChannel,
+          req.user?.id ?? null,
+        ]
       );
     }
 
@@ -89,6 +97,80 @@ analyticsRouter.post(
       channel: viewChannel,
       orderChannel,
       deduped: Boolean(recent.rows[0]),
+    });
+  })
+);
+
+/** Products the current user (or anonymous session) recently viewed. */
+analyticsRouter.get(
+  "/recently-viewed",
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const limit = Math.min(24, Math.max(1, Number(req.query.limit ?? 8)));
+    const sessionId = String(req.cookies?.[ANALYTICS_SESSION_COOKIE] ?? "").trim();
+    const userId = req.user?.id ?? null;
+
+    if (!userId && !sessionId) {
+      res.json({ products: [] });
+      return;
+    }
+
+    const result = await pool.query<{
+      id: string;
+      slug: string;
+      title: string;
+      base_price: string;
+      compare_at_price: string | null;
+      avg_rating: string;
+      review_count: string;
+      is_bestseller: boolean;
+      thumbnail_url: string | null;
+      shop_name: string;
+      shop_slug: string;
+      seller_id: string;
+      maker_name: string | null;
+    }>(
+      `with recent as (
+         select v.product_id, max(v.created_at) as last_seen
+         from public.product_page_views v
+         where ($1::uuid is not null and v.user_id = $1)
+            or ($2::text <> '' and v.session_id = $2)
+         group by v.product_id
+         order by max(v.created_at) desc
+         limit $3
+       )
+       select p.id, p.slug, p.title, p.base_price::text, p.compare_at_price::text,
+              p.avg_rating::text, p.review_count::text, p.is_bestseller, p.maker_name, p.seller_id,
+              s.shop_name, s.shop_slug,
+              (select pi.url from public.product_images pi
+               where pi.product_id = p.id
+               order by pi.is_thumbnail desc, pi.display_order asc limit 1) as thumbnail_url
+       from recent r
+       join public.products p on p.id = r.product_id
+       join public.sellers s on s.id = p.seller_id
+       where p.deleted_at is null and p.status = 'active'
+       order by r.last_seen desc`,
+      [userId, sessionId, limit]
+    );
+
+    res.json({
+      products: result.rows.map((row) => ({
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        price: Number(row.base_price),
+        compareAtPrice: row.compare_at_price != null ? Number(row.compare_at_price) : null,
+        discountPercent: null,
+        thumbnailUrl: row.thumbnail_url,
+        avgRating: Number(row.avg_rating),
+        reviewCount: Number(row.review_count),
+        isBestseller: row.is_bestseller,
+        inStock: true,
+        sellerId: row.seller_id,
+        shopName: row.shop_name,
+        shopSlug: row.shop_slug,
+        makerName: row.maker_name,
+      })),
     });
   })
 );

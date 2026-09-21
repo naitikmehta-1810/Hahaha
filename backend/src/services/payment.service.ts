@@ -285,7 +285,7 @@ function resolveWhatsAppTo(order: NotifyOrderSnapshot): string | null {
 async function enqueuePostCaptureJobs(orderId: string) {
   try {
     const { enqueueInvoiceGeneration } = await import("../jobs/generate-invoice.js");
-    const { createShipment } = await import("./shipping.service.js");
+    const { createPendingShipments } = await import("./shipping.service.js");
 
     const order = await loadNotifyOrderSnapshot(orderId);
     if (!order) {
@@ -310,9 +310,9 @@ async function enqueuePostCaptureJobs(orderId: string) {
 
     await enqueueInvoiceGeneration(orderId);
     try {
-      await createShipment(orderId);
+      await createPendingShipments(orderId);
     } catch (error) {
-      console.error("[payments] createShipment after capture failed", error);
+      console.error("[payments] createPendingShipments after capture failed", error);
     }
 
     try {

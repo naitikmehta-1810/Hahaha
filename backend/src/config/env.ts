@@ -71,8 +71,18 @@ const envSchema = z.object({
   RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
   /** Max order total allowed for Cash on Delivery (fraud / non-collection risk). */
   COD_MAX_ORDER_VALUE: z.coerce.number().positive().default(5000),
+  /**
+   * stub = local fake AWB (default for local).
+   * shiprocket = real Shiprocket booking — requires SHIPROCKET_EMAIL/PASSWORD.
+   */
+  SHIPPING_MODE: z.enum(["stub", "shiprocket"]).default("stub"),
   SHIPROCKET_EMAIL: z.string().email().optional(),
   SHIPROCKET_PASSWORD: z.string().min(1).optional(),
+  /** Web Push (VAPID). Generate: npx web-push generate-vapid-keys */
+  VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+  VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+  /** Contact URI for VAPID, e.g. mailto:ops@yourdomain.com */
+  VAPID_SUBJECT: z.string().min(1).optional(),
   OPENWA_BASE_URL: z.string().url().optional(),
   OPENWA_API_KEY: z.string().min(1).optional(),
   SENTRY_DSN: z.string().url().optional(),
@@ -93,6 +103,18 @@ export const env = {
 if (env.NODE_ENV === "production" && !env.SHIPPING_WEBHOOK_SECRET) {
   throw new Error(
     "SHIPPING_WEBHOOK_SECRET (≥16 chars) is required in production for POST /api/shipping/webhook."
+  );
+}
+
+if (env.SHIPPING_MODE === "shiprocket") {
+  if (!env.SHIPROCKET_EMAIL || !env.SHIPROCKET_PASSWORD) {
+    throw new Error(
+      "SHIPPING_MODE=shiprocket requires SHIPROCKET_EMAIL and SHIPROCKET_PASSWORD."
+    );
+  }
+} else if (env.NODE_ENV === "production") {
+  console.warn(
+    "[env] SHIPPING_MODE=stub in production — courier booking is simulated. Set SHIPPING_MODE=shiprocket with credentials when KYC is ready."
   );
 }
 
@@ -127,4 +149,10 @@ if (env.PAYMENT_MODE === "stub") {
         "For local-only simulated payments set PAYMENT_MODE=stub explicitly (non-production)."
     );
   }
+}
+
+if (env.NODE_ENV === "production" && (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY)) {
+  console.warn(
+    "[env] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY unset — browser push notifications disabled. Generate with: npx web-push generate-vapid-keys"
+  );
 }

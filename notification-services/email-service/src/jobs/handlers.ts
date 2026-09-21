@@ -4,6 +4,8 @@ import {
   renderAbandonedCart,
   renderBackInStock,
   renderCouponOffer,
+  renderCartPriceDrop,
+  renderRecentlyViewedDigest,
   renderEmailVerification,
   renderInvoiceReady,
   renderLowStockAlert,
@@ -17,9 +19,11 @@ import {
   type AbandonedCartPayload,
   type AuthEmailPayload,
   type BackInStockPayload,
+  type CartPriceDropPayload,
   type CouponOfferPayload,
   type LowStockAlertPayload,
   type OrderEmailPayload,
+  type RecentlyViewedDigestPayload,
 } from "../templates/index.js";
 import { sendMail } from "../utils/mailer.js";
 
@@ -33,6 +37,8 @@ export const EMAIL_JOB_NAMES = [
   "invoice-ready",
   "abandoned-cart",
   "coupon-offer",
+  "cart-price-drop",
+  "recently-viewed-digest",
   "email-verification",
   "password-reset",
   "low-stock-alert",
@@ -125,6 +131,22 @@ export async function processEmailJob(job: Job) {
         throw new Error("coupon-offer requires to and couponCode");
       }
       const rendered = renderCouponOffer(payload);
+      return sendMail({ to: payload.to, ...rendered });
+    }
+    case "cart-price-drop": {
+      const payload = job.data as CartPriceDropPayload;
+      if (!payload?.to || !Array.isArray(payload.items)) {
+        throw new Error("cart-price-drop requires to and items[]");
+      }
+      const rendered = renderCartPriceDrop(payload);
+      return sendMail({ to: payload.to, ...rendered });
+    }
+    case "recently-viewed-digest": {
+      const payload = job.data as RecentlyViewedDigestPayload;
+      if (!payload?.to || !Array.isArray(payload.items)) {
+        throw new Error("recently-viewed-digest requires to and items[]");
+      }
+      const rendered = renderRecentlyViewedDigest(payload);
       return sendMail({ to: payload.to, ...rendered });
     }
     case "email-verification": {

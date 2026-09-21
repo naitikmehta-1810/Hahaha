@@ -206,6 +206,32 @@ export default function AdminCouponsPage() {
                     >
                       Edit
                     </Button>{" "}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        void (async () => {
+                          const result = await apiRequest<{ enqueued: number }>(
+                            "POST",
+                            `/api/admin/coupons/${c.id}/send-offer`,
+                            {
+                              body: {
+                                description: `Use code ${c.code} on Stuffsy`,
+                                limit: 100,
+                              },
+                            }
+                          );
+                          if (result.error) {
+                            setError(result.error);
+                            return;
+                          }
+                          setError(null);
+                          window.alert(`Offer queued to ${result.data?.enqueued ?? 0} users.`);
+                        })();
+                      }}
+                    >
+                      Send offer
+                    </Button>{" "}
                     <Button size="sm" variant="outline" onClick={() => void onDelete(c.id)}>
                       Delete
                     </Button>

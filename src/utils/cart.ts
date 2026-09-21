@@ -462,6 +462,9 @@ export type OrderDetail = {
     carrier: string | null;
     courierUrl: string | null;
     status: string;
+    labelUrl?: string | null;
+    trackingEvents?: Array<{ date: string; activity: string; location: string }>;
+    trackingSyncedAt?: string | null;
   }>;
   payment: {
     method: string | null;
@@ -474,6 +477,23 @@ export type OrderDetail = {
 export async function fetchOrderDetail(orderId: string): Promise<OrderDetail | null> {
   const result = await apiRequest<{ order: OrderDetail }>("GET", `/api/orders/${orderId}`);
   return result.data?.order ?? null;
+}
+
+export async function fetchOrderTracking(orderId: string) {
+  return apiRequest<{
+    orderId: string;
+    shipments: Array<{
+      id: string;
+      sellerId: string;
+      shopName: string | null;
+      trackingNumber: string | null;
+      carrier: string | null;
+      courierUrl: string | null;
+      status: string;
+      events: Array<{ date: string; activity: string; location: string }>;
+      refreshed: boolean;
+    }>;
+  }>("GET", `/api/orders/${orderId}/tracking`);
 }
 
 /** Authenticated PDF download (regenerated server-side; does not depend on Cloudinary public URLs). */

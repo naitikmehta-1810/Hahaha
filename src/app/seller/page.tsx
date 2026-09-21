@@ -34,6 +34,7 @@ const FALLBACK_AVATAR = FALLBACK_SHOP_LOGO;
 
 const NAV = [
   { href: "/seller", label: "Dashboard" },
+  { href: "/seller/orders", label: "Orders" },
   { href: "/seller/products", label: "Products" },
   { href: "/seller/products/new", label: "Add Product" },
   { href: "/seller/shop-setup", label: "Shop Setup" },

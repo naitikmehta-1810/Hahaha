@@ -35,6 +35,7 @@ export type OrderEmailPayload = {
   trackingNumber?: string | null;
   courierName?: string | null;
   courierUrl?: string | null;
+  trackingUrl?: string | null;
   invoiceUrl?: string | null;
   estimatedDeliveryAt?: string | null;
   frontendOrderUrl?: string;
@@ -83,6 +84,25 @@ export type BackInStockPayload = {
   to: string;
   productTitle: string;
   productUrl?: string;
+};
+
+export type CartPriceDropPayload = {
+  to: string;
+  customerName?: string;
+  items: Array<{
+    title: string;
+    url: string;
+    previousPrice: number;
+    currentPrice: number;
+  }>;
+  cartUrl?: string;
+};
+
+export type RecentlyViewedDigestPayload = {
+  to: string;
+  customerName?: string;
+  items: Array<{ title: string; url: string; imageUrl?: string }>;
+  shopUrl?: string;
 };
 
 function formatInr(amount: number | undefined) {
@@ -380,6 +400,61 @@ export function renderCouponOffer(payload: CouponOfferPayload) {
     subject: `Coupon ${payload.couponCode} · Stuffsy`,
     text: `Use coupon ${payload.couponCode} on Stuffsy${payload.expiresAt ? ` before ${payload.expiresAt}` : ""}.`,
     html: layout({ title: "Coupon offer", body }),
+  };
+}
+
+export function renderCartPriceDrop(payload: CartPriceDropPayload) {
+  const rows = payload.items
+    .map(
+      (item) => `
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #eee;">
+          <a href="${escapeHtml(item.url)}" style="color:#111827;font-weight:600;text-decoration:none;">${escapeHtml(item.title)}</a>
+          <div style="font-size:13px;color:#6b7280;margin-top:4px;">
+            Was ${formatInr(item.previousPrice)} · now <strong style="color:#059669;">${formatInr(item.currentPrice)}</strong>
+          </div>
+        </td>
+      </tr>`
+    )
+    .join("");
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:22px;">Price drop in your cart</h1>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#4b5563;">
+      Hi${payload.customerName ? ` ${escapeHtml(payload.customerName)}` : ""} — something in your cart got cheaper.
+    </p>
+    <table style="width:100%;border-collapse:collapse;">${rows}</table>
+    ${payload.cartUrl ? cta(payload.cartUrl, "Review cart") : ""}
+  `;
+  return {
+    subject: "Price drop on items in your Stuffsy cart",
+    text: "An item in your Stuffsy cart dropped in price. Open your cart to check it out.",
+    html: layout({ title: "Cart price drop", body }),
+  };
+}
+
+export function renderRecentlyViewedDigest(payload: RecentlyViewedDigestPayload) {
+  const rows = payload.items
+    .map(
+      (item) => `
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #eee;">
+          <a href="${escapeHtml(item.url)}" style="color:#111827;font-weight:600;text-decoration:none;">${escapeHtml(item.title)}</a>
+        </td>
+      </tr>`
+    )
+    .join("");
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:22px;">Still thinking about these?</h1>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#4b5563;">
+      Hi${payload.customerName ? ` ${escapeHtml(payload.customerName)}` : ""} — here are handmade pieces you looked at recently.
+    </p>
+    <table style="width:100%;border-collapse:collapse;">${rows}</table>
+    ${payload.shopUrl ? cta(payload.shopUrl, "Keep browsing") : ""}
+  `;
+  return {
+    subject: "Recently viewed on Stuffsy",
+    text: "Come back to the handmade items you recently viewed on Stuffsy.",
+    html: layout({ title: "Recently viewed", body }),
   };
 }
 

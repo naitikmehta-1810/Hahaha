@@ -135,6 +135,7 @@ sellerRouter.get(
       contact_phone: string;
       contact_phone_country_code: string;
       business_address: string | null;
+      pickup_address: Record<string, unknown> | null;
       social_links: Record<string, string> | null;
       seo_title: string | null;
       seo_description: string | null;
@@ -146,7 +147,7 @@ sellerRouter.get(
     }>(
       `select id, shop_name, shop_slug, status, badge, logo_url, shop_tagline, description,
               contact_email, contact_phone, contact_phone_country_code, business_address,
-              social_links, seo_title, seo_description, banner_url, shop_policies,
+              pickup_address, social_links, seo_title, seo_description, banner_url, shop_policies,
               is_vacation_mode, payout_details, created_at
        from public.sellers
        where user_id = $1 and deleted_at is null`,
@@ -172,6 +173,7 @@ sellerRouter.get(
         contactPhone: row.contact_phone,
         phoneCountryCode: row.contact_phone_country_code,
         businessAddress: row.business_address,
+        pickupAddress: row.pickup_address,
         socialLinks: row.social_links,
         seoTitle: row.seo_title,
         seoDescription: row.seo_description,
@@ -192,6 +194,19 @@ const shopUpdateSchema = z.object({
   contactPhone: z.string().trim().min(6).max(20).optional(),
   phoneCountryCode: z.string().trim().min(1).max(8).optional(),
   businessAddress: z.string().trim().max(500).optional().nullable(),
+  pickupAddress: z
+    .object({
+      name: z.string().trim().min(2).max(120),
+      phone: z.string().trim().min(10).max(20),
+      address1: z.string().trim().min(3).max(250),
+      address2: z.string().trim().max(250).optional().nullable(),
+      city: z.string().trim().min(2).max(100),
+      state: z.string().trim().min(2).max(100),
+      pincode: z.string().trim().regex(/^\d{6}$/),
+      pickupLocationName: z.string().trim().max(36).optional().nullable(),
+    })
+    .optional()
+    .nullable(),
   socialLinks: z
     .object({
       instagram: z.string().optional(),
@@ -260,6 +275,7 @@ sellerRouter.patch(
          is_vacation_mode = coalesce($14, is_vacation_mode),
          shop_policies = coalesce($15::jsonb, shop_policies),
          payout_details = case when $16::boolean then $17::jsonb else payout_details end,
+         pickup_address = case when $18::boolean then $19::jsonb else pickup_address end,
          updated_at = now()
        where id = $1`,
       [
@@ -280,6 +296,10 @@ sellerRouter.patch(
         data.shopPolicies === undefined ? null : JSON.stringify(data.shopPolicies),
         data.payoutDetails !== undefined,
         encryptedPayout === null ? null : JSON.stringify(encryptedPayout),
+        data.pickupAddress !== undefined,
+        data.pickupAddress === undefined || data.pickupAddress === null
+          ? null
+          : JSON.stringify(data.pickupAddress),
       ]
     );
 
@@ -1170,8 +1190,9 @@ sellerRouter.get(
       order_number: string;
       status: string;
       created_at: Date;
+      shipping_address: unknown;
     }>(
-      `select id, order_number, status, created_at
+      `select id, order_number, status, created_at, shipping_address
        from public.orders
        where id = $1`,
       [orderId]
@@ -1184,12 +1205,31 @@ sellerRouter.get(
       [orderId, sellerId]
     );
 
+    const shipment = await pool.query<{
+      id: string;
+      status: string;
+      tracking_number: string | null;
+      awb_code: string | null;
+      carrier: string | null;
+      courier_url: string | null;
+      label_url: string | null;
+      tracking_events: unknown;
+    }>(
+      `select id, status, tracking_number, awb_code, carrier, courier_url, label_url, tracking_events
+       from public.shipments
+       where order_id = $1 and seller_id = $2`,
+      [orderId, sellerId]
+    );
+
+    const sh = shipment.rows[0] ?? null;
+
     res.json({
       order: {
         id: order.rows[0].id,
         orderNumber: order.rows[0].order_number,
         status: order.rows[0].status,
         createdAt: new Date(order.rows[0].created_at).toISOString(),
+        shippingAddress: order.rows[0].shipping_address,
         items: items.rows.map((row) => ({
           id: row.id,
           productId: row.product_id,
@@ -1199,8 +1239,33 @@ sellerRouter.get(
           lineTotal: Number(row.line_total),
           variantLabel: row.variant_label,
         })),
+        shipment: sh
+          ? {
+              id: sh.id,
+              status: sh.status,
+              trackingNumber: sh.tracking_number ?? sh.awb_code,
+              carrier: sh.carrier,
+              courierUrl: sh.courier_url,
+              labelUrl: sh.label_url,
+              trackingEvents: Array.isArray(sh.tracking_events) ? sh.tracking_events : [],
+              canShip: !sh.tracking_number && !sh.awb_code && sh.status === "pending",
+            }
+          : null,
       },
     });
+  })
+);
+
+sellerRouter.post(
+  "/orders/:id/ship",
+  requireSeller,
+  asyncHandler(async (req, res) => {
+    const orderId = String(req.params.id);
+    const sellerId = req.seller!.id;
+    await assertSellerOwnsOrder(sellerId, orderId);
+    const { shipSellerShipment } = await import("../services/shipping.service.js");
+    const result = await shipSellerShipment(orderId, sellerId);
+    res.json(result);
   })
 );
 

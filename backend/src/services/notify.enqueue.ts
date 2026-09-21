@@ -59,6 +59,10 @@ export async function enqueueEmailJob(name: string, data: Record<string, unknown
   try {
     const job = await getEmailQueue().add(name, data, defaultJobOpts);
     console.log(`[notify] enqueued email job=${name} id=${job.id}`);
+    // Browser push mirrors the same events (prefs-gated) without blocking email.
+    void import("./push.service.js")
+      .then(({ maybeSendPushForEmailJob }) => maybeSendPushForEmailJob(name, data))
+      .catch((error) => console.warn("[notify] push mirror failed", error));
     return job.id;
   } catch (error) {
     console.error(`[notify] enqueueEmailJob failed name=${name}`, error);

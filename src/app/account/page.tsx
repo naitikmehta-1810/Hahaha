@@ -50,6 +50,7 @@ import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
 import Sidebar from "@/components/layout/Sidebar/Sidebar";
+import { apiRequest } from "@/utils/api-client";
 
 type DisplayOrder = {
   id: string;
@@ -62,6 +63,188 @@ type DisplayOrder = {
   statusKey: string;
   image: string;
 };
+
+type PrefsState = {
+  orderUpdates: boolean;
+  marketing: boolean;
+  priceDrop: boolean;
+  abandonedCart: boolean;
+  recentlyViewed: boolean;
+};
+
+function NotificationPrefsPanel() {
+  const [prefs, setPrefs] = useState<PrefsState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [pushConfigured, setPushConfigured] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    void apiRequest<{ prefs: PrefsState; pushConfigured?: boolean }>(
+      "GET",
+      "/api/account/notification-prefs"
+    ).then((result) => {
+      if (result.data?.prefs) setPrefs(result.data.prefs);
+      if (typeof result.data?.pushConfigured === "boolean") {
+        setPushConfigured(result.data.pushConfigured);
+      }
+    });
+  }, []);
+
+  if (!prefs) {
+    return (
+      <Text size="sm" color="muted">
+        Loading preferences…
+      </Text>
+    );
+  }
+
+  const rows: Array<{ key: keyof PrefsState; label: string; hint: string }> = [
+    {
+      key: "orderUpdates",
+      label: "Order updates",
+      hint: "Email + push: confirmation, shipping, out for delivery, delivered",
+    },
+    {
+      key: "marketing",
+      label: "Offers & discounts",
+      hint: "Email + push: coupon campaigns from Stuffsy",
+    },
+    {
+      key: "priceDrop",
+      label: "Cart price drops",
+      hint: "Email + push: when an item in your cart gets cheaper",
+    },
+    {
+      key: "abandonedCart",
+      label: "Cart reminders",
+      hint: "Email + push: when you leave items in your cart",
+    },
+    {
+      key: "recentlyViewed",
+      label: "Recently viewed digests",
+      hint: "Email + push: occasional reminders of pieces you browsed",
+    },
+  ];
+
+  return (
+    <div>
+      <Text size="sm" color="muted" style={{ marginBottom: 12 }}>
+        Transactional auth emails (verify / reset password) are always sent by email.
+        Order and marketing alerts go by email and browser push when enabled.
+      </Text>
+
+      <div
+        style={{
+          marginBottom: 16,
+          padding: "12px 0",
+          borderBottom: "1px solid #eee",
+        }}
+      >
+        <strong>Browser push</strong>
+        <div style={{ fontSize: 13, opacity: 0.7, margin: "4px 0 10px" }}>
+          {pushConfigured
+            ? "Allow notifications in this browser to get live order updates on your device."
+            : "Push is not configured on the server yet (missing VAPID keys). Email still works."}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={pushBusy || !pushConfigured}
+            onClick={() => {
+              void (async () => {
+                setPushBusy(true);
+                setMessage(null);
+                const { enableBrowserPush } = await import("@/utils/push");
+                const result = await enableBrowserPush();
+                setPushBusy(false);
+                setMessage(result.message);
+              })();
+            }}
+          >
+            {pushBusy ? "Working…" : "Enable browser notifications"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={pushBusy}
+            onClick={() => {
+              void (async () => {
+                setPushBusy(true);
+                setMessage(null);
+                const { disableBrowserPush } = await import("@/utils/push");
+                const result = await disableBrowserPush();
+                setPushBusy(false);
+                setMessage(result.message);
+              })();
+            }}
+          >
+            Disable on this device
+          </Button>
+        </div>
+      </div>
+
+      {rows.map((row) => (
+        <label
+          key={row.key}
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+            padding: "10px 0",
+            borderBottom: "1px solid #eee",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={prefs[row.key]}
+            disabled={saving}
+            onChange={(e) => setPrefs((p) => (p ? { ...p, [row.key]: e.target.checked } : p))}
+            style={{ marginTop: 4 }}
+          />
+          <span>
+            <strong>{row.label}</strong>
+            <div style={{ fontSize: 13, opacity: 0.7 }}>{row.hint}</div>
+          </span>
+        </label>
+      ))}
+      <div style={{ marginTop: 16 }}>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={saving}
+          onClick={() => {
+            void (async () => {
+              setSaving(true);
+              setMessage(null);
+              const result = await apiRequest<{ prefs: PrefsState }>(
+                "PATCH",
+                "/api/account/notification-prefs",
+                { body: prefs }
+              );
+              setSaving(false);
+              if (result.error) {
+                setMessage(result.error);
+                return;
+              }
+              if (result.data?.prefs) setPrefs(result.data.prefs);
+              setMessage("Saved.");
+            })();
+          }}
+        >
+          {saving ? "Saving…" : "Save preferences"}
+        </Button>
+      </div>
+      {message ? (
+        <Text size="sm" style={{ marginTop: 8 }}>
+          {message}
+        </Text>
+      ) : null}
+    </div>
+  );
+}
 
 function mapOrdersForDisplay(
   orders: OrderListItem[],
@@ -476,11 +659,7 @@ function AccountPageInner() {
                 <div className={styles.sectionHeader}>
                   <Heading level={4}>Notifications</Heading>
                 </div>
-                <Text size="sm" color="muted">
-                  Order and marketing email preferences are not wired to a backend API yet.
-                  Transactional mail (order confirmation, shipping, invoice, auth) is sent
-                  automatically when those events occur.
-                </Text>
+                <NotificationPrefsPanel />
               </div>
             ) : activeTab === "reviews" ||
               activeTab === "payment-methods" ||

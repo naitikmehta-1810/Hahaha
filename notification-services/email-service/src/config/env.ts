@@ -9,6 +9,11 @@ const envSchema = z.object({
   EMAIL_USER: z.string().email(),
   EMAIL_PASS: z.string().min(1),
   EMAIL_FROM: z.string().min(1).optional(),
+  /**
+   * Resend API key (HTTPS). Prefer on Render — outbound SMTP is often blocked.
+   * https://resend.com
+   */
+  RESEND_API_KEY: z.string().min(1).optional(),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   SENTRY_DSN: z.string().url().optional(),
 });

@@ -29,6 +29,7 @@ import {
   type ProductCard as CatalogProduct,
 } from "@/utils/catalog";
 import { FALLBACK_PRODUCT_IMAGE, HERO_CAROUSEL_IMAGES } from "@/utils/media";
+import { apiRequest } from "@/utils/api-client";
 
 const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
 
@@ -73,12 +74,22 @@ export default function Home() {
   }, [activePopularTab]);
 
   useEffect(() => {
-    // Phase 3: "For You" falls back to bestsellers. Based on Views / Similar Items
-    // need a recommendation service — show bestsellers for all tabs and flag that.
     let cancelled = false;
-    void fetchProducts({ sort: "bestsellers", pageSize: 6 }).then((result) => {
-      if (!cancelled) setRecommendedProducts(result.products);
-    });
+    void (async () => {
+      if (activeRecommendTab === "views") {
+        const result = await apiRequest<{ products: CatalogProduct[] }>(
+          "GET",
+          "/api/analytics/recently-viewed?limit=6"
+        );
+        if (cancelled) return;
+        if (result.data?.products?.length) {
+          setRecommendedProducts(result.data.products);
+          return;
+        }
+      }
+      const fallback = await fetchProducts({ sort: "bestsellers", pageSize: 6 });
+      if (!cancelled) setRecommendedProducts(fallback.products);
+    })();
     return () => {
       cancelled = true;
     };
@@ -352,10 +363,14 @@ export default function Home() {
         <div className={styles.productsGrid}>
           {recommendedProducts.map(renderProductCard)}
         </div>
-        {activeRecommendTab !== "for-you" ? (
+        {activeRecommendTab === "similar" ? (
           <Text size="sm" color="muted" style={{ marginTop: 12 }}>
-            Personalized recommendations for this tab need a future recommendation service —
-            showing bestsellers for now.
+            Similar-items matching needs a dedicated recommendation model — showing
+            bestsellers for now.
+          </Text>
+        ) : activeRecommendTab === "views" && recommendedProducts.length === 0 ? (
+          <Text size="sm" color="muted" style={{ marginTop: 12 }}>
+            View a few products to personalize this tab.
           </Text>
         ) : null}
       </section>

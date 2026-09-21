@@ -312,10 +312,15 @@ export async function addItem(cart: CartRow, variantId: string, quantity: number
         [nextQty, existing.rows[0].id]
       );
     } else {
+      const priceRow = await client.query<{ price: string }>(
+        `select price::text from public.product_variants where id = $1`,
+        [variantId]
+      );
       await client.query(
-        `insert into public.cart_items (id, cart_id, variant_id, quantity, created_at, updated_at)
-         values (gen_random_uuid(), $1, $2, $3, now(), now())`,
-        [cart.id, variantId, quantity]
+        `insert into public.cart_items
+           (id, cart_id, variant_id, quantity, unit_price_snapshot, created_at, updated_at)
+         values (gen_random_uuid(), $1, $2, $3, $4, now(), now())`,
+        [cart.id, variantId, quantity, priceRow.rows[0]?.price ?? null]
       );
     }
 

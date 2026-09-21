@@ -25,6 +25,7 @@ import { redirectToLogin } from "@/utils/api-client";
 import {
   type OrderDetail,
   fetchOrderDetail,
+  fetchOrderTracking,
   formatOrderDate,
   formatOrderDateTime,
   formatOrderStatusLabel,
@@ -59,6 +60,8 @@ function formatOptions(values: Record<string, unknown>) {
     .join(" · ");
 }
 
+type TrackEvent = { date: string; activity: string; location: string };
+
 export default function OrderTrackingPage() {
   const params = useParams();
   const orderId = String(params.id ?? "");
@@ -67,12 +70,23 @@ export default function OrderTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [copyNote, setCopyNote] = useState<string | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [liveEvents, setLiveEvents] = useState<Record<string, TrackEvent[]>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     const detail = await fetchOrderDetail(orderId);
     setOrder(detail);
     setLoading(false);
+    if (detail) {
+      const track = await fetchOrderTracking(orderId);
+      if (track.data?.shipments) {
+        const map: Record<string, TrackEvent[]> = {};
+        for (const sh of track.data.shipments) {
+          map[sh.id] = sh.events ?? [];
+        }
+        setLiveEvents(map);
+      }
+    }
   }, [orderId]);
 
   useEffect(() => {
@@ -240,7 +254,14 @@ export default function OrderTrackingPage() {
                       status: order.status,
                     },
                   ]
-              ).map((shipment) => (
+              ).map((shipment) => {
+                const events =
+                  liveEvents[shipment.id] ??
+                  ("trackingEvents" in shipment
+                    ? (shipment as { trackingEvents?: TrackEvent[] }).trackingEvents
+                    : []) ??
+                  [];
+                return (
                 <React.Fragment key={shipment.id}>
                   <div className={styles.deliveryCell}>
                     <Barcode size={18} className={styles.deliveryCellIcon} />
@@ -250,7 +271,7 @@ export default function OrderTrackingPage() {
                         {shipment.shopName ? ` · ${shipment.shopName}` : ""}
                       </div>
                       <div className={styles.deliveryCellValue}>
-                        {shipment.trackingNumber || "Pending"}
+                        {shipment.trackingNumber || "Pending — seller will ship soon"}
                         {shipment.trackingNumber && shipment.id === (order.shipments?.[0]?.id ?? "legacy") ? (
                           <button
                             type="button"
@@ -288,8 +309,30 @@ export default function OrderTrackingPage() {
                       </div>
                     </div>
                   </div>
+                  {events.length > 0 ? (
+                    <div
+                      className={styles.deliveryCell}
+                      style={{ gridColumn: "1 / -1", display: "block" }}
+                    >
+                      <div className={styles.deliveryCellLabel}>
+                        Activity{shipment.shopName ? ` · ${shipment.shopName}` : ""}
+                      </div>
+                      <ol style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+                        {events.map((ev, i) => (
+                          <li key={`${shipment.id}-${i}`} style={{ marginBottom: 8 }}>
+                            <strong>{ev.activity}</strong>
+                            <div style={{ fontSize: 12, opacity: 0.7 }}>
+                              {ev.date}
+                              {ev.location ? ` · ${ev.location}` : ""}
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ) : null}
                 </React.Fragment>
-              ))}
+              );
+              })}
             </div>
           </div>
 

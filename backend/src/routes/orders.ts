@@ -41,6 +41,36 @@ ordersRouter.get(
 );
 
 ordersRouter.get(
+  "/:id/tracking",
+  asyncHandler(async (req, res) => {
+    const orderId = String(req.params.id);
+    const order = await getOrderForUser(req.user!.id, orderId);
+    if (!order) {
+      res.status(404).json({ message: "Order not found" });
+      return;
+    }
+
+    const { refreshShipmentTracking } = await import("../services/shipping.service.js");
+    const shipments = [];
+    for (const sh of order.shipments ?? []) {
+      const refreshed = await refreshShipmentTracking(sh.id);
+      shipments.push({
+        id: sh.id,
+        sellerId: sh.sellerId,
+        shopName: sh.shopName,
+        trackingNumber: sh.trackingNumber,
+        carrier: sh.carrier,
+        courierUrl: sh.courierUrl,
+        status: sh.status,
+        events: refreshed.events,
+        refreshed: refreshed.refreshed,
+      });
+    }
+    res.json({ orderId, shipments });
+  })
+);
+
+ordersRouter.get(
   "/:id/invoice",
   asyncHandler(async (req, res) => {
     const orderId = String(req.params.id);

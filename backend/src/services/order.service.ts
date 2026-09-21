@@ -609,6 +609,9 @@ export type OrderDetail = {
     carrier: string | null;
     courierUrl: string | null;
     status: string;
+    labelUrl?: string | null;
+    trackingEvents?: Array<{ date: string; activity: string; location: string }>;
+    trackingSyncedAt?: string | null;
   }>;
   payment: {
     method: string | null;
@@ -920,9 +923,14 @@ export async function getOrderForUser(
         carrier: string | null;
         courier_url: string | null;
         status: string;
+        label_url: string | null;
+        awb_code: string | null;
+        tracking_events: unknown;
+        tracking_synced_at: Date | null;
       }>(
         `select sh.id, sh.seller_id, s.shop_name, sh.tracking_number, sh.carrier,
-                sh.courier_url, sh.status
+                sh.courier_url, sh.status, sh.label_url, sh.awb_code,
+                sh.tracking_events, sh.tracking_synced_at
          from public.shipments sh
          left join public.sellers s on s.id = sh.seller_id
          where sh.order_id = $1
@@ -933,10 +941,15 @@ export async function getOrderForUser(
       id: sh.id,
       sellerId: sh.seller_id,
       shopName: sh.shop_name,
-      trackingNumber: sh.tracking_number,
+      trackingNumber: sh.tracking_number ?? sh.awb_code,
       carrier: sh.carrier,
       courierUrl: sh.courier_url,
       status: sh.status,
+      labelUrl: sh.label_url,
+      trackingEvents: Array.isArray(sh.tracking_events) ? sh.tracking_events : [],
+      trackingSyncedAt: sh.tracking_synced_at
+        ? new Date(sh.tracking_synced_at).toISOString()
+        : null,
     })),
     payment: {
       method: row.payment_method,
@@ -1094,6 +1107,12 @@ export async function cancelOrderForUser(
         `[orders] refund after cancel failed order=${orderId}`,
         error
       );
+    }
+    try {
+      const { cancelShipmentsForOrder } = await import("./shipping.service.js");
+      await cancelShipmentsForOrder(orderId);
+    } catch (error) {
+      console.error(`[orders] cancel shipments failed order=${orderId}`, error);
     }
   }
 

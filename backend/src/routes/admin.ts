@@ -341,6 +341,79 @@ adminRouter.delete(
   })
 );
 
+/** Email a coupon offer to opted-in marketing users (or a single email). */
+adminRouter.post(
+  "/coupons/:id/send-offer",
+  asyncHandler(async (req, res) => {
+    const couponId = String(req.params.id);
+    const parsed = z
+      .object({
+        description: z.string().trim().max(500).optional(),
+        toEmail: z.string().email().optional(),
+        limit: z.number().int().positive().max(500).default(100),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ message: "Invalid send-offer payload" });
+      return;
+    }
+
+    const coupon = await pool.query<{
+      code: string;
+      expires_at: Date;
+      is_active: boolean;
+      deleted_at: Date | null;
+    }>(
+      `select code, expires_at, is_active, deleted_at from public.coupons where id = $1`,
+      [couponId]
+    );
+    if (!coupon.rows[0] || coupon.rows[0].deleted_at || !coupon.rows[0].is_active) {
+      res.status(404).json({ message: "Active coupon not found" });
+      return;
+    }
+
+    const { enqueueEmailJob } = await import("../services/notify.enqueue.js");
+    const { env } = await import("../config/env.js");
+    let enqueued = 0;
+
+    if (parsed.data.toEmail) {
+      await enqueueEmailJob("coupon-offer", {
+        to: parsed.data.toEmail,
+        couponCode: coupon.rows[0].code,
+        description: parsed.data.description,
+        expiresAt: new Date(coupon.rows[0].expires_at).toISOString().slice(0, 10),
+        shopUrl: `${env.FRONTEND_URL}/shop`,
+      });
+      enqueued = 1;
+    } else {
+      const users = await pool.query<{ email: string; full_name: string | null }>(
+        `select u.email, u.full_name
+         from public.users u
+         left join public.user_notification_prefs p on p.user_id = u.id
+         where u.email is not null
+           and u.deleted_at is null
+           and coalesce(p.marketing, true) = true
+         order by u.created_at desc
+         limit $1`,
+        [parsed.data.limit]
+      );
+      for (const user of users.rows) {
+        await enqueueEmailJob("coupon-offer", {
+          to: user.email,
+          customerName: user.full_name ?? undefined,
+          couponCode: coupon.rows[0].code,
+          description: parsed.data.description,
+          expiresAt: new Date(coupon.rows[0].expires_at).toISOString().slice(0, 10),
+          shopUrl: `${env.FRONTEND_URL}/shop`,
+        });
+        enqueued += 1;
+      }
+    }
+
+    res.json({ enqueued, couponCode: coupon.rows[0].code });
+  })
+);
+
 adminRouter.get(
   "/categories",
   asyncHandler(async (_req, res) => {

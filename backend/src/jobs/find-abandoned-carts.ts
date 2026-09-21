@@ -36,7 +36,7 @@ export async function processAbandonedCarts() {
        )
        and exists (
          select 1 from public.cart_items ci
-         where ci.cart_id = c.id and ci.deleted_at is null
+         where ci.cart_id = c.id
        )
      order by c.updated_at asc
      limit 100`
@@ -64,11 +64,14 @@ export async function processAbandonedCarts() {
        from public.cart_items ci
        join public.product_variants pv on pv.id = ci.variant_id
        join public.products p on p.id = pv.product_id
-       where ci.cart_id = $1 and ci.deleted_at is null`,
+       where ci.cart_id = $1`,
       [cart.cart_id]
     );
 
     if (items.rows.length === 0) continue;
+
+    const { userAllows } = await import("../services/notification-prefs.service.js");
+    if (!(await userAllows(cart.user_id, "abandonedCart"))) continue;
 
     await enqueueEmailJob("abandoned-cart", {
       to: cart.email,

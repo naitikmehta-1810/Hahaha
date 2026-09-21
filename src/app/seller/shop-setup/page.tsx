@@ -59,6 +59,14 @@ export default function ShopSetupPage() {
     policyReturns: "",
     policyShipping: "",
     policyPayment: "",
+    pickupName: "",
+    pickupPhone: "",
+    pickupAddress1: "",
+    pickupAddress2: "",
+    pickupCity: "",
+    pickupState: "",
+    pickupPincode: "",
+    pickupLocationName: "",
   });
 
   useEffect(() => {
@@ -91,6 +99,14 @@ export default function ShopSetupPage() {
         policyReturns: profile.shopPolicies?.returns || "",
         policyShipping: profile.shopPolicies?.shipping || "",
         policyPayment: profile.shopPolicies?.payment || "",
+        pickupName: profile.pickupAddress?.name || "",
+        pickupPhone: profile.pickupAddress?.phone || profile.contactPhone || "",
+        pickupAddress1: profile.pickupAddress?.address1 || "",
+        pickupAddress2: profile.pickupAddress?.address2 || "",
+        pickupCity: profile.pickupAddress?.city || "",
+        pickupState: profile.pickupAddress?.state || "",
+        pickupPincode: profile.pickupAddress?.pincode || "",
+        pickupLocationName: profile.pickupAddress?.pickupLocationName || "",
       });
     });
   }, [authStatus, isAuthenticated, router]);
@@ -154,6 +170,24 @@ export default function ShopSetupPage() {
         shipping: form.policyShipping.trim(),
         payment: form.policyPayment.trim(),
       },
+      pickupAddress:
+        form.pickupName.trim() &&
+        form.pickupPhone.trim() &&
+        form.pickupAddress1.trim() &&
+        form.pickupCity.trim() &&
+        form.pickupState.trim() &&
+        /^\d{6}$/.test(form.pickupPincode.trim())
+          ? {
+              name: form.pickupName.trim(),
+              phone: form.pickupPhone.trim(),
+              address1: form.pickupAddress1.trim(),
+              address2: form.pickupAddress2.trim() || null,
+              city: form.pickupCity.trim(),
+              state: form.pickupState.trim(),
+              pincode: form.pickupPincode.trim(),
+              pickupLocationName: form.pickupLocationName.trim() || null,
+            }
+          : null,
     });
     setSaving(false);
     if (result.error) {
@@ -377,8 +411,68 @@ export default function ShopSetupPage() {
 
           {tab === "shipping" ? (
             <div className={styles.card}>
-              <h3 className={styles.cardTitle}>Shipping &amp; Return</h3>
-              <label className={styles.muted}>Shipping policy</label>
+              <h3 className={styles.cardTitle}>Pickup address (courier)</h3>
+              <p className={styles.muted}>
+                Required before you can click Ship now. Must match a Shiprocket pickup
+                location nickname if you use live Shiprocket.
+              </p>
+              <label className={styles.muted}>Contact name</label>
+              <input
+                value={form.pickupName}
+                onChange={(e) => setForm((f) => ({ ...f, pickupName: e.target.value }))}
+                style={inputStyle}
+              />
+              <label className={styles.muted}>Phone</label>
+              <input
+                value={form.pickupPhone}
+                onChange={(e) => setForm((f) => ({ ...f, pickupPhone: e.target.value }))}
+                style={inputStyle}
+              />
+              <label className={styles.muted}>Address line 1</label>
+              <input
+                value={form.pickupAddress1}
+                onChange={(e) => setForm((f) => ({ ...f, pickupAddress1: e.target.value }))}
+                style={inputStyle}
+              />
+              <label className={styles.muted}>Address line 2</label>
+              <input
+                value={form.pickupAddress2}
+                onChange={(e) => setForm((f) => ({ ...f, pickupAddress2: e.target.value }))}
+                style={inputStyle}
+              />
+              <label className={styles.muted}>City</label>
+              <input
+                value={form.pickupCity}
+                onChange={(e) => setForm((f) => ({ ...f, pickupCity: e.target.value }))}
+                style={inputStyle}
+              />
+              <label className={styles.muted}>State</label>
+              <input
+                value={form.pickupState}
+                onChange={(e) => setForm((f) => ({ ...f, pickupState: e.target.value }))}
+                style={inputStyle}
+              />
+              <label className={styles.muted}>Pincode (6 digits)</label>
+              <input
+                value={form.pickupPincode}
+                maxLength={6}
+                onChange={(e) => setForm((f) => ({ ...f, pickupPincode: e.target.value }))}
+                style={inputStyle}
+              />
+              <label className={styles.muted}>Shiprocket pickup location name</label>
+              <input
+                value={form.pickupLocationName}
+                maxLength={36}
+                placeholder="Defaults to shop name"
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, pickupLocationName: e.target.value }))
+                }
+                style={inputStyle}
+              />
+
+              <h3 className={styles.cardTitle} style={{ marginTop: 24 }}>
+                Shipping policy (buyer-facing)
+              </h3>
               <textarea
                 value={form.policyShipping}
                 maxLength={2000}

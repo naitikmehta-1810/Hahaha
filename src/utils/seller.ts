@@ -1,5 +1,16 @@
 import { apiRequest } from "./api-client";
 
+export type SellerPickupAddress = {
+  name: string;
+  phone: string;
+  address1: string;
+  address2?: string | null;
+  city: string;
+  state: string;
+  pincode: string;
+  pickupLocationName?: string | null;
+};
+
 export type SellerProfile = {
   id: string;
   shopName: string;
@@ -14,6 +25,7 @@ export type SellerProfile = {
   contactPhone?: string;
   phoneCountryCode?: string;
   businessAddress?: string | null;
+  pickupAddress?: SellerPickupAddress | null;
   socialLinks?: Record<string, string> | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
@@ -67,4 +79,63 @@ export type SellerDashboard = {
 
 export async function fetchSellerDashboard() {
   return apiRequest<SellerDashboard>("GET", "/api/seller/dashboard");
+}
+
+export type SellerOrderListItem = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  createdAt: string;
+  sellerLineTotal: number;
+};
+
+export async function fetchSellerOrders(page = 1) {
+  return apiRequest<{
+    page: number;
+    pageSize: number;
+    total: number;
+    orders: SellerOrderListItem[];
+  }>("GET", `/api/seller/orders?page=${page}&pageSize=20`);
+}
+
+export type SellerOrderDetail = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  createdAt: string;
+  shippingAddress?: unknown;
+  items: Array<{
+    id: string;
+    productId: string;
+    title: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+    variantLabel: string | null;
+  }>;
+  shipment: {
+    id: string;
+    status: string;
+    trackingNumber: string | null;
+    carrier: string | null;
+    courierUrl: string | null;
+    labelUrl: string | null;
+    trackingEvents: Array<{ date: string; activity: string; location: string }>;
+    canShip: boolean;
+  } | null;
+};
+
+export async function fetchSellerOrder(orderId: string) {
+  return apiRequest<{ order: SellerOrderDetail }>("GET", `/api/seller/orders/${orderId}`);
+}
+
+export async function shipSellerOrder(orderId: string) {
+  return apiRequest<{
+    shipmentId: string;
+    trackingNumber: string | null;
+    carrier?: string;
+    courierUrl?: string;
+    labelUrl?: string | null;
+    alreadyShipped?: boolean;
+  }>("POST", `/api/seller/orders/${orderId}/ship`, { body: {} });
 }

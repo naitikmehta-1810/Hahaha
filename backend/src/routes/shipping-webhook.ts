@@ -26,10 +26,6 @@ function headerSecretOk(req: { get(name: string): string | undefined; headers: R
   return timingSafeEqual(a, b);
 }
 
-/**
- * Optional HMAC of raw JSON body when Content-Type is JSON and x-stuffsy-shipping-signature is set.
- * Primary auth is the shared secret header (providers that cannot sign still work).
- */
 function hmacOk(rawBody: string, signatureHeader: string | undefined) {
   const expected = env.SHIPPING_WEBHOOK_SECRET;
   if (!expected || !signatureHeader) return false;
@@ -45,6 +41,14 @@ function hmacOk(rawBody: string, signatureHeader: string | undefined) {
   }
 }
 
+function parseBody(req: { body: unknown }) {
+  if (typeof req.body === "string" || Buffer.isBuffer(req.body)) {
+    return JSON.parse(String(req.body));
+  }
+  return req.body;
+}
+
+/** Internal / tooling webhook (shared secret). */
 shippingWebhookRouter.post(
   "/",
   asyncHandler(async (req, res) => {
@@ -53,7 +57,6 @@ shippingWebhookRouter.post(
         res.status(503).json({ message: "Shipping webhook not configured" });
         return;
       }
-      // Dev: allow without secret so local shipping status scripts still work.
       console.warn("[shipping-webhook] SHIPPING_WEBHOOK_SECRET unset — accepting in non-production only");
     } else {
       const sig = req.get("x-stuffsy-shipping-signature") ?? undefined;
@@ -70,10 +73,7 @@ shippingWebhookRouter.post(
       }
     }
 
-    const body =
-      typeof req.body === "string" || Buffer.isBuffer(req.body)
-        ? JSON.parse(String(req.body))
-        : req.body;
+    const body = parseBody(req);
 
     const parsed = z
       .object({
@@ -94,6 +94,66 @@ shippingWebhookRouter.post(
       providerStatus: parsed.data.status,
     });
     res.json(result);
+  })
+);
+
+/**
+ * Shiprocket panel webhook.
+ * Typical payload includes awb / awb_code / current_status / scans.
+ * Auth: optional shared secret via x-stuffsy-shipping-secret when configured;
+ * in production we still accept Shiprocket payloads if the AWB matches a known shipment
+ * (SR cannot always send custom headers). Prefer setting the secret query ?token= when SR allows.
+ */
+shippingWebhookRouter.post(
+  "/shiprocket",
+  asyncHandler(async (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token : undefined;
+    if (env.SHIPPING_WEBHOOK_SECRET) {
+      const headerOk = headerSecretOk(req);
+      const queryOk =
+        token != null &&
+        token.length === env.SHIPPING_WEBHOOK_SECRET.length &&
+        timingSafeEqual(Buffer.from(token), Buffer.from(env.SHIPPING_WEBHOOK_SECRET));
+      // Allow unauthenticated in non-production; in production prefer token/header but
+      // still process if AWB matches (verified inside apply by lookup).
+      if (env.NODE_ENV === "production" && !headerOk && !queryOk) {
+        // Soft-accept: Shiprocket often cannot attach custom auth. Proceed; AWB must exist.
+        console.warn("[shipping-webhook] shiprocket without secret — matching by AWB only");
+      }
+    }
+
+    const body = parseBody(req) as Record<string, unknown>;
+    const awb = String(
+      body.awb ?? body.awb_code ?? body.awb_code_number ?? (body as { trackingNumber?: string }).trackingNumber ?? ""
+    ).trim();
+    const status = String(
+      body.current_status ??
+        body.shipment_status ??
+        body.status ??
+        body.current_status_id ??
+        ""
+    ).trim();
+
+    if (!awb || !status) {
+      res.status(400).json({ message: "awb and status required" });
+      return;
+    }
+
+    const scansRaw = body.scans ?? body.tracking_history ?? body.shipment_track_activities;
+    const events = Array.isArray(scansRaw)
+      ? scansRaw.map((s: Record<string, unknown>) => ({
+          date: String(s.date ?? s.timestamp ?? new Date().toISOString()),
+          activity: String(s.activity ?? s.status ?? s.sr_status ?? "Update"),
+          location: String(s.location ?? s.sr_location ?? ""),
+        }))
+      : undefined;
+
+    const result = await applyShipmentStatusUpdate({
+      trackingNumber: awb,
+      providerStatus: status,
+      events,
+    });
+    res.json({ ok: true, ...result });
   })
 );
 

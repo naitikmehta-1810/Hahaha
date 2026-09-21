@@ -19,6 +19,8 @@ import adminRouter from "./routes/admin.js";
 import { env } from "./config/env.js";
 import { startReservationReleaseJob } from "./jobs/release-expired-reservations.js";
 import { startAbandonedCartJob } from "./jobs/find-abandoned-carts.js";
+import { startCartPriceDropJob } from "./jobs/cart-price-drop.js";
+import { startRecentlyViewedDigestJob } from "./jobs/recently-viewed-digest.js";
 import { startInvoiceWorker } from "./jobs/generate-invoice.js";
 import { errorHandler, notFound } from "./middleware/error-handler.js";
 import { pool } from "./config/db.js";
@@ -26,6 +28,7 @@ import { logger } from "./utils/logger.js";
 import * as Sentry from "@sentry/node";
 import analyticsRouter from "./routes/analytics.js";
 import searchRouter from "./routes/search.js";
+import accountRouter from "./routes/account.js";
 
 if (env.SENTRY_DSN) {
   Sentry.init({
@@ -136,6 +139,7 @@ app.use("/api/shipping/webhook", shippingWebhookRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/search", searchRouter);
+app.use("/api/account", accountRouter);
 app.use(notFound);
 app.use(errorHandler);
 
@@ -157,6 +161,8 @@ const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, `Stuffsy backend listening on http://localhost:${env.PORT}`);
   void startReservationReleaseJob();
   void startAbandonedCartJob();
+  void startCartPriceDropJob();
+  void startRecentlyViewedDigestJob();
   try {
     startInvoiceWorker();
   } catch (error) {

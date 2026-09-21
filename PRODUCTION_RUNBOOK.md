@@ -20,8 +20,11 @@
 - `FRONTEND_URL`, `BACKEND_PUBLIC_URL`
 - `PAYMENT_MODE=razorpay` **in production** with `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
 - `SHIPPING_WEBHOOK_SECRET` (≥16 chars) — required for shipping webhook auth in production (`x-stuffsy-shipping-secret` header)
-- Optional: `SENTRY_DSN`, `SHIPROCKET_*`, `OPENWA_*`, `LOG_LEVEL`, `ALLOW_LOADTEST_HELPERS`
+- `SHIPPING_MODE=stub|shiprocket` — default `stub` (local fake AWB). Production: set `shiprocket` with `SHIPROCKET_EMAIL` + `SHIPROCKET_PASSWORD` after KYC
+- Optional: `SENTRY_DSN`, `OPENWA_*`, `LOG_LEVEL`, `ALLOW_LOADTEST_HELPERS`
 - `PAYOUT_ENCRYPTION_KEY` — 32-byte base64 AES key for seller payout_details (required in production when saving payouts)
+- `RESEND_API_KEY` — set on API + email-service for Render (SMTP usually blocked)
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (+ optional `VAPID_SUBJECT`) — browser push
 - Pool tuning: `PG_POOL_MAX`, `PG_IDLE_TIMEOUT_MS`, `PG_CONNECTION_TIMEOUT_MS`, `PG_STATEMENT_TIMEOUT_MS`
 
 Dev-only: `PAYMENT_MODE=stub` auto-captures for local polling UI. Never use stub in production.
@@ -31,55 +34,37 @@ Dev-only: `PAYMENT_MODE=stub` auto-captures for local polling UI. Never use stub
 1. `cd backend && npm ci && npm run migrate`
 2. Start Redis, then API, then email + WhatsApp workers
 3. Configure Razorpay webhook → `POST {BACKEND_PUBLIC_URL}/api/payments/webhook` (raw JSON body)
-4. Configure shipping webhook → `POST {BACKEND_PUBLIC_URL}/api/shipping/webhook` with `x-stuffsy-shipping-secret` (rejects without secret in production)
-5. Confirm Cloudinary delivery URLs are HTTPS CDN fronts for catalog images
-6. Smoke: `GET /api/health` returns `{ ok: true, database: "ok", redis: "ok" }`, place order → paid → invoice download via `GET /api/orders/:id/invoice`
+4. Configure Shiprocket webhook → `POST {BACKEND_PUBLIC_URL}/api/shipping/webhook/shiprocket` (optional `?token={SHIPPING_WEBHOOK_SECRET}`)
+5. Internal shipping tooling still uses `POST /api/shipping/webhook` with `x-stuffsy-shipping-secret`
+6. Confirm Cloudinary delivery URLs are HTTPS CDN fronts for catalog images
+7. Smoke: `GET /api/health` returns `{ ok: true, database: "ok", redis: "ok" }`, place order → paid → seller **Ship now** → buyer tracking shows AWB
 
-**Root install on Vercel:** `packageManager` is pinned to `pnpm@10.15.0`. Keep `pnpm-lock.yaml` in sync with root `package.json` after any dependency change (`npx pnpm@10.15.0 install`). CI still uses `npm ci` for root/backend (keep `package-lock.json` synced too when editing root deps).
+## Shiprocket (manual)
 
-## Wave 1 hardening (done in code)
-
-- Shipping webhook auth; payment double-capture `SAVEPOINT`; invoice `invoice_number_seq`; refund dedupe + `refunded` order status
-- Helmet + compression; catalog Redis cache; slim bestsellers-only sales subquery; pg pool timeouts
-- Verified-purchase reviews only; rate limits on catalog/search/track-view/reviews
-- Account Addresses + Profile tabs wired; Reviews/Payment Methods/Settings show honest unavailable copy
-- If Next shows `global-error.js` Client Manifest errors in dev: delete `.next` and restart `npm run dev`
-
-## Scale honesty
-
-Wave 1 is **not** “millions of users ready.” Still needed for Flipkart-class load: PgBouncer, horizontal API replicas, edge/CDN caching or ISR for catalog, separate invoice worker process, real carrier booking, and load tests with live Razorpay.
-
-## Payments
-
-- Client Checkout success **never** marks paid; API polls until webhook/`stub-capture` sets `paid`
-- Retry: same `pending_payment` order may call `POST /api/payments/create-order` again
-- `payment.failed` fails the payment row only; order stays `pending_payment`
-- Partial unique index: at most one `captured` payment per order
-- COD: `paymentMethod=cod` finalizes via `finalizeCodOrder` (order `paid`, stock captured). Admin collection: `POST /api/payments/:orderId/cod-collected`.
-- Seller `payout_details`: AES-256-GCM when `PAYOUT_ENCRYPTION_KEY` is set (32-byte base64). **Required for payout writes in production.**
-
-## Deploy environments
-
-Configure GitHub **Settings → Environments** on this repo:
-
-- `staging` — used by `.github/workflows/deploy.yml` on every push to `main`/`master` (auto-deploy placeholder).
-- `production` — **add required reviewers** so the production job cannot run without manual approval. Production currently runs via `workflow_dispatch` with `promote_production=true` and `environment: production`.
-
-## Vercel production env checklist
-
-See [docs/vercel-env-audit.md](docs/vercel-env-audit.md) for the full frontend checklist.
-
-- [ ] `NEXT_PUBLIC_BACKEND_URL` = public API origin (not `NEXT_PUBLIC_API_URL`)
-- [ ] OAuth / Razorpay allowlists include the Vercel production domain
-- Backend host: `DATABASE_URL`, `JWT_SECRET`, `REDIS_URL`, `PAYMENT_MODE=razorpay` + keys, `PAYOUT_ENCRYPTION_KEY`, `CLOUDINARY_*`, `EMAIL_*`, `FRONTEND_URL`, `BACKEND_PUBLIC_URL`, optional `SENTRY_DSN` on API + notification workers
+1. Create Shiprocket account + complete KYC
+2. API user email/password → `SHIPROCKET_EMAIL` / `SHIPROCKET_PASSWORD`; set `SHIPPING_MODE=shiprocket`
+3. Create a **pickup location** whose nickname matches each seller’s `pickupLocationName` (or shop name)
+4. Sellers must save **Pickup address** under Shop Setup → Shipping before Ship now works
+5. Flow: payment → pending shipment (no AWB) → seller `/seller/orders/:id` → Ship now → AWB + label + emails
+6. Buyer `/orders/:id` loads live scan timeline via `GET /api/orders/:id/tracking`
 
 ## Notifications
 
-- Auth verify/reset enqueue BullMQ `email` jobs with sync Gmail fallback if Redis is down
+- Lifecycle emails: confirmation → processing → shipped → OFD → delivered (plus invoice / payment-failed)
+- Marketing: abandoned cart (hourly), cart price-drop (hourly), recently-viewed digest (daily), coupon `Send offer` in admin
+- Prefs: `GET/PATCH /api/account/notification-prefs` (Account → Notifications)
+- **Email on Render:** set `RESEND_API_KEY` on **both** API and `email-service` (SMTP is blocked on most Render plans). Verify a domain in Resend and set `EMAIL_FROM=Stuffsy <orders@yourdomain.com>`; until then Resend uses `onboarding@resend.dev` (API + worker).
+- **Browser push:** generate VAPID keys (`npx web-push generate-vapid-keys`), set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, optional `VAPID_SUBJECT=mailto:ops@yourdomain.com` on the API. Users enable push under Account → Notifications. Each email job also mirrors a push (prefs-gated). Auth verify/reset stay email-only.
+- Migrate: `050_push_subscriptions` for stored endpoints
+
+## Notifications (workers)
+
+- Auth verify/reset enqueue BullMQ `email` jobs; worker prefers Resend when `RESEND_API_KEY` is set
 - WhatsApp without `OPENWA_*` logs `skipped_no_gateway` (not fake success)
-- Account notification toggles in the UI are **local/display only** — no preferences API yet
+- Account prefs persist via `GET/PATCH /api/account/notification-prefs`; marketing jobs + push respect prefs
 - Low-stock seller alerts fire after inventory capture; back-in-stock emails fire when a seller restocks from 0
 - Email + WhatsApp workers init `@sentry/node` from optional `SENTRY_DSN` and capture BullMQ `failed` jobs
+- Smoke checklist: `backend/SHIPROCKET_SMOKE_CHECKLIST.md`
 
 ## Ops scripts
 
