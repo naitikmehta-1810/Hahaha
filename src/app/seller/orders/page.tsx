@@ -52,7 +52,11 @@ export default function SellerOrdersPage() {
       </div>
 
       {loading ? <Text color="muted">Loading orders…</Text> : null}
-      {error ? <Text color="danger">{error}</Text> : null}
+      {error ? (
+        <Text color="muted" style={{ color: "#b42318" }}>
+          {error}
+        </Text>
+      ) : null}
 
       {!loading && !error && orders.length === 0 ? (
         <Text color="muted">No orders for your shop yet.</Text>

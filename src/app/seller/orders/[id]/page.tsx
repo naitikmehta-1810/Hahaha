@@ -75,7 +75,9 @@ export default function SellerOrderDetailPage() {
   if (error || !order) {
     return (
       <div className={styles.container}>
-        <Text color="danger">{error ?? "Order not found"}</Text>
+        <Text color="muted" style={{ color: "#b42318" }}>
+          {error ?? "Order not found"}
+        </Text>
         <Button variant="secondary" onClick={() => router.push("/seller/orders")}>
           Back to orders
         </Button>
