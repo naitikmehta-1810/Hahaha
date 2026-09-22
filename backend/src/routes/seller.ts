@@ -1198,8 +1198,16 @@ sellerRouter.get(
       [orderId]
     );
 
-    const items = await pool.query(
-      `select id, product_id, product_title, quantity, unit_price, line_total, variant_label
+    const items = await pool.query<{
+      id: string;
+      product_id: string;
+      product_title: string;
+      quantity: number;
+      unit_price: string;
+      line_total: string;
+      variant_option_values: Record<string, unknown> | null;
+    }>(
+      `select id, product_id, product_title, quantity, unit_price, line_total, variant_option_values
        from public.order_items
        where order_id = $1 and seller_id = $2`,
       [orderId, sellerId]
@@ -1237,7 +1245,11 @@ sellerRouter.get(
           quantity: row.quantity,
           unitPrice: Number(row.unit_price),
           lineTotal: Number(row.line_total),
-          variantLabel: row.variant_label,
+          variantLabel: row.variant_option_values
+            ? Object.entries(row.variant_option_values)
+                .map(([k, v]) => `${k}: ${String(v)}`)
+                .join(" / ") || null
+            : null,
         })),
         shipment: sh
           ? {
