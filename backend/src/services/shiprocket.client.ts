@@ -278,12 +278,16 @@ export async function getServiceableCouriers(opts: {
 }
 
 export async function assignAwb(shipmentId: number, courierId?: number) {
+  const body: Record<string, unknown> = {
+    // Shiprocket accepts both; array form is what their panel/docs often show.
+    shipment_id: [shipmentId],
+  };
+  if (courierId != null) {
+    body.courier_id = courierId;
+  }
   return srFetch<AssignAwbResult>("/courier/assign/awb", {
     method: "POST",
-    body: JSON.stringify({
-      shipment_id: shipmentId,
-      ...(courierId != null ? { courier_id: courierId } : {}),
-    }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -339,13 +343,47 @@ export function extractAwb(result: AssignAwbResult): {
   courierName: string | null;
   error: string | null;
 } {
-  const data = result.response?.data;
-  if (typeof data === "string" && data.trim()) {
-    return { awb: null, courierName: null, error: data.trim() };
+  const raw = result.response?.data as unknown;
+
+  if (typeof raw === "string" && raw.trim()) {
+    return { awb: null, courierName: null, error: raw.trim() };
   }
-  const obj = data && typeof data === "object" ? data : null;
-  const awb = obj?.awb_code ?? result.awb_code ?? null;
-  const courierName = obj?.courier_name ?? result.courier_name ?? null;
+
+  // Some responses wrap a single object in an array.
+  const obj = Array.isArray(raw)
+    ? (raw[0] as Record<string, unknown> | undefined)
+    : raw && typeof raw === "object"
+      ? (raw as Record<string, unknown>)
+      : null;
+
+  const awb =
+    (obj?.awb_code != null ? String(obj.awb_code) : null) ||
+    (result.awb_code != null ? String(result.awb_code) : null) ||
+    null;
+  const courierName =
+    (obj?.courier_name != null ? String(obj.courier_name) : null) ||
+    (result.courier_name != null ? String(result.courier_name) : null) ||
+    null;
+
+  const nestedErrorKeys = [
+    "awb_assign_error",
+    "error",
+    "error_message",
+    "message",
+    "remark",
+    "reason",
+  ];
+  let nestedError: string | null = null;
+  if (obj) {
+    for (const key of nestedErrorKeys) {
+      const val = obj[key];
+      if (typeof val === "string" && val.trim() && key !== "courier_name") {
+        nestedError = val.trim();
+        break;
+      }
+    }
+  }
+
   const msg = Array.isArray(result.message)
     ? result.message.join("; ")
     : typeof result.message === "string"
@@ -353,12 +391,17 @@ export function extractAwb(result: AssignAwbResult): {
       : typeof result.response?.message === "string"
         ? result.response.message
         : null;
-  const failed =
-    result.awb_assign_status === 0 ||
-    (result.awb_assign_status === undefined && !awb);
-  return {
-    awb: awb ? String(awb) : null,
-    courierName: courierName ? String(courierName) : null,
-    error: !awb ? msg ?? (failed ? "AWB assignment rejected by courier" : null) : null,
-  };
+
+  if (awb) {
+    return { awb, courierName, error: null };
+  }
+
+  const error =
+    nestedError ||
+    msg ||
+    (result.awb_assign_status === 0
+      ? "AWB assignment rejected (check Shiprocket wallet, courier activation, and invoice value ≥ ₹50)"
+      : "AWB assignment failed — no AWB in Shiprocket response");
+
+  return { awb: null, courierName, error };
 }

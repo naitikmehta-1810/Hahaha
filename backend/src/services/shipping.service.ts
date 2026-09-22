@@ -219,8 +219,12 @@ async function bookShiprocketAwb(opts: {
     shipping_address: unknown;
     payment_method: string | null;
     created_at: Date;
+    subtotal: string;
+    shipping_amount: string;
+    total_amount: string;
   }>(
-    `select order_number, shipping_address, payment_method, created_at
+    `select order_number, shipping_address, payment_method, created_at,
+            subtotal::text, shipping_amount::text, total_amount::text
      from public.orders where id = $1`,
     [opts.orderId]
   );
@@ -287,7 +291,15 @@ async function bookShiprocketAwb(opts: {
     height += (Number(row.height_cm ?? 5) || 5) * Number(row.quantity);
     subTotal += Number(row.unit_price) * Number(row.quantity);
   }
-  weight = Math.max(0.1, Math.round(weight * 1000) / 1000);
+  weight = Math.max(0.5, Math.round(weight * 1000) / 1000);
+
+  // Couriers often reject ₹1 invoices. Use order total (incl. shipping) with a safe floor.
+  const orderTotal = Number(order.rows[0].total_amount);
+  const declaredValue = Math.max(
+    50,
+    Math.round(Number.isFinite(orderTotal) && orderTotal > 0 ? orderTotal : subTotal),
+    Math.round(subTotal)
+  );
 
   const addr = parseAddressBlob(order.rows[0].shipping_address);
   const billingPhone =
@@ -340,14 +352,20 @@ async function bookShiprocketAwb(opts: {
       billingState: addr.state,
       billingEmail,
       billingPhone,
-      orderItems: items.rows.map((row, i) => ({
-        name: row.product_title.slice(0, 200),
-        sku: `${row.product_id.slice(0, 12)}-${i}`,
-        units: Number(row.quantity),
-        sellingPrice: Number(row.unit_price),
-      })),
+      orderItems: items.rows.map((row, i) => {
+        const line = Number(row.unit_price) * Number(row.quantity);
+        // Spread declared value across lines so Shiprocket/couriers see a valid invoice.
+        const share =
+          subTotal > 0 ? Math.max(1, Math.round((line / subTotal) * declaredValue)) : declaredValue;
+        return {
+          name: row.product_title.slice(0, 200),
+          sku: `${row.product_id.slice(0, 12)}-${i}`,
+          units: Number(row.quantity),
+          sellingPrice: Math.max(1, Math.round(share / Math.max(1, Number(row.quantity)))),
+        };
+      }),
       paymentMethod,
-      subTotal: Math.round(subTotal),
+      subTotal: declaredValue,
       length: Math.ceil(length),
       breadth: Math.ceil(breadth),
       height: Math.min(100, Math.ceil(height)),
@@ -408,13 +426,47 @@ async function bookShiprocketAwb(opts: {
     awb_assign_status: awbResult.awb_assign_status,
     response: awbResult.response,
   });
-  const { awb, courierName, error: awbError } = extractAwb(awbResult);
+  let { awb, courierName, error: awbError } = extractAwb(awbResult);
+
+  // If the cheapest/recommended courier rejects, try the next few options.
+  if (!awb && preferredCourierId != null) {
+    try {
+      const again = await getServiceableCouriers({
+        pickupPostcode: pickup.pincode,
+        deliveryPostcode: addr.pincode,
+        weight,
+        cod: isCod,
+      });
+      const others = (again.data?.available_courier_companies ?? [])
+        .filter((c) => c.courier_company_id !== preferredCourierId)
+        .slice(0, 3);
+      for (const c of others) {
+        const retry = await assignAwb(created.shipment_id, c.courier_company_id);
+        console.info("[shiprocket] assign/awb retry", {
+          courier_id: c.courier_company_id,
+          awb_assign_status: retry.awb_assign_status,
+          response: retry.response,
+        });
+        const extracted = extractAwb(retry);
+        if (extracted.awb) {
+          awb = extracted.awb;
+          courierName = extracted.courierName;
+          awbError = null;
+          break;
+        }
+        awbError = extracted.error ?? awbError;
+      }
+    } catch (error) {
+      console.warn("[shiprocket] courier retry skipped", error);
+    }
+  }
+
   if (!awb) {
     throw new AppError(
       502,
       "AWB_ASSIGN_FAILED",
       awbError ||
-        "Shiprocket did not return an AWB code. Check wallet balance and that couriers serve this pickup→delivery route."
+        "Shiprocket did not return an AWB code. Check wallet balance, courier activation, and avoid ₹1 test invoices (use ≥ ₹50 order)."
     );
   }
 
