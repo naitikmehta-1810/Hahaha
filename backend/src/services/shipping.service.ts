@@ -10,6 +10,7 @@ import {
   extractAwb,
   generateLabel,
   generatePickup,
+  getServiceableCouriers,
   trackByAwb,
 } from "./shiprocket.client.js";
 
@@ -363,10 +364,58 @@ async function bookShiprocketAwb(opts: {
     throw error;
   }
 
-  const awbResult = await assignAwb(created.shipment_id);
-  const { awb, courierName } = extractAwb(awbResult);
+  const isCod = paymentMethod === "COD";
+  let preferredCourierId: number | undefined;
+  try {
+    const serviceability = await getServiceableCouriers({
+      pickupPostcode: pickup.pincode,
+      deliveryPostcode: addr.pincode,
+      weight,
+      cod: isCod,
+    });
+    const companies = serviceability.data?.available_courier_companies ?? [];
+    const recommended = serviceability.data?.recommended_courier_company_id;
+    if (recommended) {
+      preferredCourierId = recommended;
+    } else if (companies.length > 0) {
+      const sorted = [...companies].sort(
+        (a, b) => Number(a.rate ?? 9999) - Number(b.rate ?? 9999)
+      );
+      preferredCourierId = sorted[0]?.courier_company_id;
+    }
+    if (!preferredCourierId) {
+      throw new AppError(
+        502,
+        "NO_COURIER_AVAILABLE",
+        `No Shiprocket courier is available from pickup pincode ${pickup.pincode} to ${addr.pincode}. Check wallet balance, pincodes, and courier activation in Shiprocket.`
+      );
+    }
+    console.info("[shiprocket] serviceability", {
+      pickup: pickup.pincode,
+      delivery: addr.pincode,
+      courierId: preferredCourierId,
+      options: companies.length,
+    });
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    console.warn("[shiprocket] serviceability check failed — assigning without courier_id", error);
+  }
+
+  const awbResult = await assignAwb(created.shipment_id, preferredCourierId);
+  console.info("[shiprocket] assign/awb", {
+    shipment_id: created.shipment_id,
+    courier_id: preferredCourierId,
+    awb_assign_status: awbResult.awb_assign_status,
+    response: awbResult.response,
+  });
+  const { awb, courierName, error: awbError } = extractAwb(awbResult);
   if (!awb) {
-    throw new AppError(502, "AWB_ASSIGN_FAILED", "Shiprocket did not return an AWB code");
+    throw new AppError(
+      502,
+      "AWB_ASSIGN_FAILED",
+      awbError ||
+        "Shiprocket did not return an AWB code. Check wallet balance and that couriers serve this pickup→delivery route."
+    );
   }
 
   try {

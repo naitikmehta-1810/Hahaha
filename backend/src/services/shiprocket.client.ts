@@ -234,16 +234,48 @@ export async function createAdhocOrder(input: ShiprocketAdhocOrderInput) {
 
 export type AssignAwbResult = {
   awb_assign_status?: number;
+  message?: string | string[];
   response?: {
-    data?: {
-      awb_code?: string;
-      courier_name?: string;
-      courier_company_id?: number;
-    };
+    data?:
+      | {
+          awb_code?: string;
+          courier_name?: string;
+          courier_company_id?: number;
+        }
+      | string;
+    message?: string;
   };
   awb_code?: string;
   courier_name?: string;
 };
+
+export type ServiceableCourier = {
+  courier_company_id: number;
+  courier_name: string;
+  rate?: number;
+  estimated_delivery_days?: string;
+};
+
+export async function getServiceableCouriers(opts: {
+  pickupPostcode: string;
+  deliveryPostcode: string;
+  weight: number;
+  cod?: boolean;
+}) {
+  const qs = new URLSearchParams({
+    pickup_postcode: opts.pickupPostcode,
+    delivery_postcode: opts.deliveryPostcode,
+    weight: String(Math.max(0.1, opts.weight)),
+    cod: opts.cod ? "1" : "0",
+  });
+  return srFetch<{
+    data?: {
+      available_courier_companies?: ServiceableCourier[];
+      recommended_courier_company_id?: number;
+    };
+    message?: string;
+  }>(`/courier/serviceability/?${qs.toString()}`, { method: "GET" });
+}
 
 export async function assignAwb(shipmentId: number, courierId?: number) {
   return srFetch<AssignAwbResult>("/courier/assign/awb", {
@@ -305,14 +337,28 @@ export async function cancelShiprocketOrders(ids: number[]) {
 export function extractAwb(result: AssignAwbResult): {
   awb: string | null;
   courierName: string | null;
+  error: string | null;
 } {
-  const awb =
-    result.response?.data?.awb_code ??
-    result.awb_code ??
-    null;
-  const courierName =
-    result.response?.data?.courier_name ??
-    result.courier_name ??
-    null;
-  return { awb: awb ? String(awb) : null, courierName: courierName ? String(courierName) : null };
+  const data = result.response?.data;
+  if (typeof data === "string" && data.trim()) {
+    return { awb: null, courierName: null, error: data.trim() };
+  }
+  const obj = data && typeof data === "object" ? data : null;
+  const awb = obj?.awb_code ?? result.awb_code ?? null;
+  const courierName = obj?.courier_name ?? result.courier_name ?? null;
+  const msg = Array.isArray(result.message)
+    ? result.message.join("; ")
+    : typeof result.message === "string"
+      ? result.message
+      : typeof result.response?.message === "string"
+        ? result.response.message
+        : null;
+  const failed =
+    result.awb_assign_status === 0 ||
+    (result.awb_assign_status === undefined && !awb);
+  return {
+    awb: awb ? String(awb) : null,
+    courierName: courierName ? String(courierName) : null,
+    error: !awb ? msg ?? (failed ? "AWB assignment rejected by courier" : null) : null,
+  };
 }
