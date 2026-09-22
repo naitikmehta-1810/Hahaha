@@ -324,32 +324,44 @@ async function bookShiprocketAwb(opts: {
 
   const channelOrderId = `${order.rows[0].order_number}-${opts.sellerId.slice(0, 8)}`;
 
-  const created = await createAdhocOrder({
-    orderId: channelOrderId,
-    orderDate: new Date(order.rows[0].created_at).toISOString().slice(0, 10),
-    pickupLocation,
-    billingCustomerName: firstName,
-    billingLastName: lastName,
-    billingAddress: addr.line1,
-    billingAddress2: addr.line2,
-    billingCity: addr.city,
-    billingPincode: addr.pincode,
-    billingState: addr.state,
-    billingEmail,
-    billingPhone,
-    orderItems: items.rows.map((row, i) => ({
-      name: row.product_title.slice(0, 200),
-      sku: `${row.product_id.slice(0, 12)}-${i}`,
-      units: Number(row.quantity),
-      sellingPrice: Number(row.unit_price),
-    })),
-    paymentMethod,
-    subTotal: Math.round(subTotal),
-    length: Math.ceil(length),
-    breadth: Math.ceil(breadth),
-    height: Math.min(100, Math.ceil(height)),
-    weight,
-  });
+  let created;
+  try {
+    created = await createAdhocOrder({
+      orderId: channelOrderId,
+      orderDate: new Date(order.rows[0].created_at).toISOString().slice(0, 10),
+      pickupLocation,
+      billingCustomerName: firstName,
+      billingLastName: lastName,
+      billingAddress: addr.line1,
+      billingAddress2: addr.line2,
+      billingCity: addr.city,
+      billingPincode: addr.pincode,
+      billingState: addr.state,
+      billingEmail,
+      billingPhone,
+      orderItems: items.rows.map((row, i) => ({
+        name: row.product_title.slice(0, 200),
+        sku: `${row.product_id.slice(0, 12)}-${i}`,
+        units: Number(row.quantity),
+        sellingPrice: Number(row.unit_price),
+      })),
+      paymentMethod,
+      subTotal: Math.round(subTotal),
+      length: Math.ceil(length),
+      breadth: Math.ceil(breadth),
+      height: Math.min(100, Math.ceil(height)),
+      weight,
+    });
+  } catch (error) {
+    if (error instanceof AppError && error.code === "SHIPROCKET_API_ERROR") {
+      throw new AppError(
+        502,
+        "SHIPROCKET_API_ERROR",
+        `${error.message}. Pickup nickname sent was "${pickupLocation}" — it must match a Shiprocket pickup location nickname exactly (Shop Setup → Shipping).`
+      );
+    }
+    throw error;
+  }
 
   const awbResult = await assignAwb(created.shipment_id);
   const { awb, courierName } = extractAwb(awbResult);
