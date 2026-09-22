@@ -284,14 +284,31 @@ async function bookShiprocketAwb(opts: {
   let height = 5;
   let subTotal = 0;
   for (const row of items.rows) {
-    const w = Number(row.weight ?? 0.5);
-    weight += (Number.isFinite(w) && w > 0 ? w : 0.5) * Number(row.quantity);
-    length = Math.max(length, Number(row.length_cm ?? 10) || 10);
-    breadth = Math.max(breadth, Number(row.width_cm ?? 10) || 10);
-    height += (Number(row.height_cm ?? 5) || 5) * Number(row.quantity);
+    let w = Number(row.weight ?? 0.5);
+    if (!Number.isFinite(w) || w <= 0) w = 0.5;
+    const rowL = Number(row.length_cm ?? 10) || 10;
+    const rowB = Number(row.width_cm ?? 10) || 10;
+    const rowH = Number(row.height_cm ?? 5) || 5;
+    length = Math.max(length, rowL);
+    breadth = Math.max(breadth, rowB);
+    height += rowH * Number(row.quantity);
+    // Sellers sometimes type grams into the kg field (e.g. 50 instead of 0.05).
+    // If dead weight dwarfs volumetric weight for a small box, treat as grams.
+    const volKg = (rowL * rowB * rowH) / 5000;
+    if (w >= 10 && volKg > 0 && w > volKg * 4) {
+      const asKg = w / 1000;
+      if (asKg >= 0.05 && asKg <= 20) {
+        console.warn("[shiprocket] normalizing weight (likely grams entered as kg)", {
+          raw: w,
+          normalized: asKg,
+        });
+        w = asKg;
+      }
+    }
+    weight += w * Number(row.quantity);
     subTotal += Number(row.unit_price) * Number(row.quantity);
   }
-  weight = Math.max(0.5, Math.round(weight * 1000) / 1000);
+  weight = Math.min(30, Math.max(0.5, Math.round(weight * 1000) / 1000));
 
   // Couriers often reject ₹1 invoices. Use order total (incl. shipping) with a safe floor.
   const orderTotal = Number(order.rows[0].total_amount);
