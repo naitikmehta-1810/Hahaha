@@ -1,9 +1,11 @@
 import { Router } from "express";
+import type { Request, Response } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { applyShipmentStatusUpdate } from "../services/shipping.service.js";
 import { env } from "../config/env.js";
+import { AppError } from "../utils/errors.js";
 
 const shippingWebhookRouter = Router();
 
@@ -11,19 +13,28 @@ function secretConfigured() {
   return Boolean(env.SHIPPING_WEBHOOK_SECRET);
 }
 
-function headerSecretOk(req: { get(name: string): string | undefined; headers: Record<string, unknown> }) {
+function safeEqual(a: string, b: string) {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+function headerSecretOk(req: Request) {
   const expected = env.SHIPPING_WEBHOOK_SECRET;
   if (!expected) return false;
+  // Stuffsy internal header + Shiprocket panel "x-api-key" / Authorization bearer
   const provided =
     req.get("x-stuffsy-shipping-secret") ??
-    (typeof req.headers["x-stuffsy-shipping-secret"] === "string"
-      ? String(req.headers["x-stuffsy-shipping-secret"])
-      : undefined);
+    req.get("x-api-key") ??
+    req.get("api-key") ??
+    (() => {
+      const auth = req.get("authorization");
+      if (auth?.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
+      return undefined;
+    })();
   if (!provided) return false;
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  return safeEqual(provided, expected);
 }
 
 function hmacOk(rawBody: string, signatureHeader: string | undefined) {
@@ -32,16 +43,13 @@ function hmacOk(rawBody: string, signatureHeader: string | undefined) {
   const digest = createHmac("sha256", expected).update(rawBody).digest("hex");
   const provided = signatureHeader.replace(/^sha256=/i, "").trim();
   try {
-    const a = Buffer.from(digest, "utf8");
-    const b = Buffer.from(provided, "utf8");
-    if (a.length !== b.length) return false;
-    return timingSafeEqual(a, b);
+    return safeEqual(digest, provided);
   } catch {
     return false;
   }
 }
 
-function parseBody(req: { body: unknown }) {
+function parseBody(req: Request) {
   if (typeof req.body === "string" || Buffer.isBuffer(req.body)) {
     return JSON.parse(String(req.body));
   }
@@ -98,52 +106,53 @@ shippingWebhookRouter.post(
 );
 
 /**
- * Shiprocket panel webhook.
- * Typical payload includes awb / awb_code / current_status / scans.
- * Auth: optional shared secret via x-stuffsy-shipping-secret when configured;
- * in production we still accept Shiprocket payloads if the AWB matches a known shipment
- * (SR cannot always send custom headers). Prefer setting the secret query ?token= when SR allows.
- *
- * Also mounted at POST /tracking — Shiprocket UI asks you not to put "shiprocket" in the URL.
+ * Carrier panel webhook (Shiprocket).
+ * - Accepts x-api-key / x-stuffsy-shipping-secret / ?token=
+ * - Returns HTTP 200 on panel "Test Webhook" pings (empty / unknown AWB)
+ * Mounted at /tracking under this router, and also at /api/hooks/tracking.
  */
-async function handleShiprocketWebhook(
-  req: {
-    body: unknown;
-    query: Record<string, unknown>;
-    get(name: string): string | undefined;
-    headers: Record<string, unknown>;
-  },
-  res: { status(code: number): { json(body: unknown): void }; json(body: unknown): void }
-) {
+export async function handleCarrierTrackingWebhook(req: Request, res: Response) {
   const token = typeof req.query.token === "string" ? req.query.token : undefined;
   if (env.SHIPPING_WEBHOOK_SECRET) {
     const headerOk = headerSecretOk(req);
     const queryOk =
-      token != null &&
-      token.length === env.SHIPPING_WEBHOOK_SECRET.length &&
-      timingSafeEqual(Buffer.from(token), Buffer.from(env.SHIPPING_WEBHOOK_SECRET));
-    // Allow unauthenticated in non-production; in production prefer token/header but
-    // still process if AWB matches (verified inside apply by lookup).
-    if (env.NODE_ENV === "production" && !headerOk && !queryOk) {
-      // Soft-accept: Shiprocket often cannot attach custom auth. Proceed; AWB must exist.
-      console.warn("[shipping-webhook] carrier webhook without secret — matching by AWB only");
+      token != null && safeEqual(token, env.SHIPPING_WEBHOOK_SECRET);
+    if (!headerOk && !queryOk) {
+      // Soft-accept: panel tests / some SR deliveries omit auth. Real updates still need a known AWB.
+      console.warn("[shipping-webhook] carrier webhook without matching secret — continuing");
     }
   }
 
-  const body = parseBody(req) as Record<string, unknown>;
+  let body: Record<string, unknown> = {};
+  try {
+    body = (parseBody(req) ?? {}) as Record<string, unknown>;
+  } catch {
+    // Panel ping may send empty/invalid JSON — acknowledge so Test Webhook passes.
+    res.status(200).json({ ok: true, ping: true });
+    return;
+  }
+
   const awb = String(
-    body.awb ?? body.awb_code ?? body.awb_code_number ?? (body as { trackingNumber?: string }).trackingNumber ?? ""
+    body.awb ??
+      body.awb_code ??
+      body.awb_code_number ??
+      body.trackingNumber ??
+      body.tracking_number ??
+      ""
   ).trim();
   const status = String(
     body.current_status ??
       body.shipment_status ??
       body.status ??
       body.current_status_id ??
+      body.sr_status ??
       ""
   ).trim();
 
+  // Shiprocket "Test Webhook" often sends an empty or incomplete body — must be 200.
   if (!awb || !status) {
-    res.status(400).json({ message: "awb and status required" });
+    console.info("[shipping-webhook] acknowledging ping (missing awb/status)");
+    res.status(200).json({ ok: true, ping: true });
     return;
   }
 
@@ -156,25 +165,35 @@ async function handleShiprocketWebhook(
       }))
     : undefined;
 
-  const result = await applyShipmentStatusUpdate({
-    trackingNumber: awb,
-    providerStatus: status,
-    events,
-  });
-  res.json({ ok: true, ...result });
+  try {
+    const result = await applyShipmentStatusUpdate({
+      trackingNumber: awb,
+      providerStatus: status,
+      events,
+    });
+    res.status(200).json({ ok: true, ...result });
+  } catch (error) {
+    // Unknown AWB on a panel test sample must not fail their connectivity check.
+    if (error instanceof AppError && error.code === "SHIPMENT_NOT_FOUND") {
+      console.info(`[shipping-webhook] unknown AWB=${awb} — acknowledged`);
+      res.status(200).json({ ok: true, ignored: true, reason: "shipment_not_found" });
+      return;
+    }
+    throw error;
+  }
 }
 
 shippingWebhookRouter.post(
   "/shiprocket",
   asyncHandler(async (req, res) => {
-    await handleShiprocketWebhook(req, res);
+    await handleCarrierTrackingWebhook(req, res);
   })
 );
 
 shippingWebhookRouter.post(
   "/tracking",
   asyncHandler(async (req, res) => {
-    await handleShiprocketWebhook(req, res);
+    await handleCarrierTrackingWebhook(req, res);
   })
 );
 

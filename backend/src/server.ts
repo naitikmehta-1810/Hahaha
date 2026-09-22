@@ -14,7 +14,9 @@ import reviewsRouter from "./routes/reviews.js";
 import sellerRouter from "./routes/seller.js";
 import wishlistsRouter from "./routes/wishlists.js";
 import paymentsRouter, { paymentsWebhookHandler } from "./routes/payments.js";
-import shippingWebhookRouter from "./routes/shipping-webhook.js";
+import shippingWebhookRouter, {
+  handleCarrierTrackingWebhook,
+} from "./routes/shipping-webhook.js";
 import adminRouter from "./routes/admin.js";
 import { env } from "./config/env.js";
 import { startReservationReleaseJob } from "./jobs/release-expired-reservations.js";
@@ -23,6 +25,7 @@ import { startCartPriceDropJob } from "./jobs/cart-price-drop.js";
 import { startRecentlyViewedDigestJob } from "./jobs/recently-viewed-digest.js";
 import { startInvoiceWorker } from "./jobs/generate-invoice.js";
 import { errorHandler, notFound } from "./middleware/error-handler.js";
+import { asyncHandler } from "./middleware/async-handler.js";
 import { pool } from "./config/db.js";
 import { logger } from "./utils/logger.js";
 import * as Sentry from "@sentry/node";
@@ -136,6 +139,7 @@ app.use("/api/seller", sellerRouter);
 app.use("/api/wishlists", wishlistsRouter);
 app.use("/api/payments", paymentsRouter);
 app.use("/api/shipping/webhook", shippingWebhookRouter);
+app.post("/api/hooks/tracking", asyncHandler(handleCarrierTrackingWebhook));
 app.use("/api/admin", adminRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/search", searchRouter);
