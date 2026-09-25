@@ -274,7 +274,7 @@ export default function EditProductPage() {
             Update details, stock, images, and collections.
           </Text>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className={styles.buttonRow}>
           <Button
             variant="outline"
             disabled={busy}
@@ -299,38 +299,38 @@ export default function EditProductPage() {
       ) : null}
 
       <div className={styles.card}>
-        <label className={styles.muted}>Product Title* ({form.title.length}/150)</label>
+        <label className={styles.fieldLabel}>Product Title* ({form.title.length}/150)</label>
         <input
           value={form.title}
           maxLength={150}
           onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-          style={inputStyle}
+          className={styles.control}
         />
-        <label className={styles.muted}>
+        <label className={styles.fieldLabel}>
           Short Description* ({form.shortDescription.length}/250)
         </label>
         <textarea
           value={form.shortDescription}
           maxLength={250}
           onChange={(e) => setForm((f) => ({ ...f, shortDescription: e.target.value }))}
-          style={{ ...inputStyle, minHeight: 70 }}
+          className={`${styles.control} ${styles.controlShort}`}
         />
-        <label className={styles.muted}>Full Description*</label>
+        <label className={styles.fieldLabel}>Full Description*</label>
         <textarea
           value={form.description}
           onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-          style={{ ...inputStyle, minHeight: 120 }}
+          className={`${styles.control} ${styles.controlTall}`}
         />
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div className={styles.fieldGrid3}>
           <div>
-            <label className={styles.muted}>Category*</label>
+            <label className={styles.fieldLabel}>Category*</label>
             <select
               value={form.categoryId}
               onChange={(e) =>
                 setForm((f) => ({ ...f, categoryId: e.target.value, subcategoryId: "" }))
               }
-              style={inputStyle}
+              className={styles.control}
             >
               <option value="">Select</option>
               {categories.map((c) => (
@@ -341,11 +341,11 @@ export default function EditProductPage() {
             </select>
           </div>
           <div>
-            <label className={styles.muted}>Subcategory</label>
+            <label className={styles.fieldLabel}>Subcategory</label>
             <select
               value={form.subcategoryId}
               onChange={(e) => setForm((f) => ({ ...f, subcategoryId: e.target.value }))}
-              style={inputStyle}
+              className={styles.control}
             >
               <option value="">Select</option>
               {subcats.map((c) => (
@@ -356,10 +356,10 @@ export default function EditProductPage() {
             </select>
           </div>
           <div>
-            <label className={styles.muted}>Product Type*</label>
-            <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+            <label className={styles.fieldLabel}>Product Type*</label>
+            <div className={styles.choiceRow}>
               {(["physical", "digital"] as const).map((type) => (
-                <label key={type} style={{ fontSize: "0.875rem" }}>
+                <label key={type} className={styles.choice}>
                   <input
                     type="radio"
                     checked={form.productType === type}
@@ -372,61 +372,61 @@ export default function EditProductPage() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div className={styles.fieldGrid3}>
           <div>
-            <label className={styles.muted}>Price* (₹)</label>
+            <label className={styles.fieldLabel}>Price* (₹)</label>
             <input
               value={form.price}
               onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-              style={inputStyle}
+              className={styles.control}
             />
           </div>
           <div>
-            <label className={styles.muted}>Compare at Price</label>
+            <label className={styles.fieldLabel}>Compare at Price</label>
             <input
               value={form.compareAtPrice}
               onChange={(e) => setForm((f) => ({ ...f, compareAtPrice: e.target.value }))}
-              style={inputStyle}
+              className={styles.control}
             />
           </div>
           <div>
-            <label className={styles.muted}>Cost Price (seller-only)</label>
+            <label className={styles.fieldLabel}>Cost Price (seller-only)</label>
             <input
               value={form.costPrice}
               onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
-              style={inputStyle}
+              className={styles.control}
             />
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div className={styles.fieldGrid3}>
           <div>
-            <label className={styles.muted}>SKU</label>
+            <label className={styles.fieldLabel}>SKU</label>
             <input
               value={form.sku}
               onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
-              style={inputStyle}
+              className={styles.control}
             />
           </div>
           <div>
-            <label className={styles.muted}>Stock Quantity*</label>
+            <label className={styles.fieldLabel}>Stock Quantity*</label>
             <input
               value={form.stockQuantity}
               onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
-              style={inputStyle}
+              className={styles.control}
             />
           </div>
           <div>
-            <label className={styles.muted}>Low Stock Alert</label>
+            <label className={styles.fieldLabel}>Low Stock Alert</label>
             <input
               value={form.lowStockAlert}
               onChange={(e) => setForm((f) => ({ ...f, lowStockAlert: e.target.value }))}
-              style={inputStyle}
+              className={styles.control}
             />
           </div>
         </div>
 
-        <label style={{ fontSize: "0.875rem", display: "flex", gap: 8, marginBottom: 12 }}>
+        <label className={styles.checkLabel}>
           <input
             type="checkbox"
             checked={form.continueSelling}
@@ -436,72 +436,63 @@ export default function EditProductPage() {
         </label>
 
         {form.productType === "physical" ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+          <div className={styles.fieldGrid4}>
             <div>
-              <label className={styles.muted}>Weight (kg)*</label>
+              <label className={styles.fieldLabel}>Weight (kg)*</label>
               <input
                 value={form.weight}
                 onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
                 placeholder="0.2 or 200g"
                 inputMode="decimal"
-                style={inputStyle}
+                className={styles.control}
               />
             </div>
             <div>
-              <label className={styles.muted}>Length (cm)*</label>
+              <label className={styles.fieldLabel}>Length (cm)*</label>
               <input
                 value={form.lengthCm}
                 onChange={(e) => setForm((f) => ({ ...f, lengthCm: e.target.value }))}
                 placeholder="15"
                 inputMode="decimal"
-                style={inputStyle}
+                className={styles.control}
               />
             </div>
             <div>
-              <label className={styles.muted}>Width (cm)*</label>
+              <label className={styles.fieldLabel}>Width (cm)*</label>
               <input
                 value={form.widthCm}
                 onChange={(e) => setForm((f) => ({ ...f, widthCm: e.target.value }))}
                 placeholder="20"
                 inputMode="decimal"
-                style={inputStyle}
+                className={styles.control}
               />
             </div>
             <div>
-              <label className={styles.muted}>Height (cm)*</label>
+              <label className={styles.fieldLabel}>Height (cm)*</label>
               <input
                 value={form.heightCm}
                 onChange={(e) => setForm((f) => ({ ...f, heightCm: e.target.value }))}
                 placeholder="20"
                 inputMode="decimal"
-                style={inputStyle}
+                className={styles.control}
               />
             </div>
           </div>
         ) : null}
 
-        <label className={styles.muted}>Tags (comma-separated, max 10)</label>
+        <label className={styles.fieldLabel}>Tags (comma-separated, max 10)</label>
         <input
           value={form.tags}
           onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
-          style={inputStyle}
+          className={styles.control}
         />
 
         <h3 className={styles.cardTitle}>Collections</h3>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <div className={styles.chipList}>
           {collections.map((c) => {
             const checked = selectedCollections.includes(c.id);
             return (
-              <label
-                key={c.id}
-                style={{
-                  fontSize: "0.85rem",
-                  border: "1px solid var(--color-border-dark)",
-                  borderRadius: 8,
-                  padding: "6px 10px",
-                  background: checked ? "var(--color-primary-soft, #f5f3ff)" : "transparent",
-                }}
-              >
+              <label key={c.id} className={`${styles.chip} ${checked ? styles.chipOn : ""}`}>
                 <input
                   type="checkbox"
                   checked={checked}
@@ -510,32 +501,31 @@ export default function EditProductPage() {
                       checked ? prev.filter((id) => id !== c.id) : [...prev, c.id]
                     )
                   }
-                  style={{ marginRight: 6 }}
                 />
                 {c.name}
               </label>
             );
           })}
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <div className={styles.buttonRow}>
           <input
             value={newCollectionName}
             onChange={(e) => setNewCollectionName(e.target.value)}
             placeholder="New collection name"
-            style={{ ...inputStyle, margin: 0 }}
+            className={styles.control}
           />
           <Button variant="outline" onClick={() => void createCollection()}>
             Add
           </Button>
         </div>
 
-        <label className={styles.muted}>Image URL (optional)</label>
+        <label className={styles.fieldLabel}>Image URL (optional)</label>
         <input
           value={form.imageUrl}
           onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
-          style={inputStyle}
+          className={styles.control}
         />
-        <label className={styles.muted}>Upload images via Cloudinary (max 8)</label>
+        <label className={styles.fieldLabel}>Upload images via Cloudinary (max 8)</label>
         <input
           type="file"
           accept="image/*"
@@ -603,8 +593,8 @@ export default function EditProductPage() {
           </ul>
         ) : null}
 
-        <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-          <label style={{ fontSize: "0.875rem" }}>
+        <div className={styles.choiceRow}>
+          <label className={styles.choice}>
             <input
               type="radio"
               checked={form.status === "active"}
@@ -612,7 +602,7 @@ export default function EditProductPage() {
             />{" "}
             Active
           </label>
-          <label style={{ fontSize: "0.875rem" }}>
+          <label className={styles.choice}>
             <input
               type="radio"
               checked={form.status === "draft"}
@@ -625,12 +615,3 @@ export default function EditProductPage() {
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "10px 12px",
-  border: "1px solid var(--color-border-dark)",
-  borderRadius: 8,
-  margin: "6px 0 14px",
-  fontSize: "0.875rem",
-};

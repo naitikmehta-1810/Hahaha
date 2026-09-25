@@ -33,6 +33,7 @@ import {
   removeCoupon,
   updateCartItemQty,
 } from "@/utils/cart";
+import { computeGstAmount, gstSummaryLabel } from "@/utils/gst";
 import {
   fetchProducts,
   productHref,
@@ -158,7 +159,8 @@ export default function CartPage() {
   const shipping =
     freeShipping.qualifies || subtotal >= freeShipping.threshold ? 0 : availableItems.length > 0 ? 49 : 0;
   const taxable = Math.max(subtotal - discountAmount, 0);
-  const tax = Math.round(taxable * 0.18);
+  const tax = computeGstAmount(availableItems, discountAmount);
+  const taxLabel = gstSummaryLabel(availableItems);
   const total = taxable + shipping + tax;
 
   /** Cart payment radio pre-selects method on the dedicated checkout page. */
@@ -392,7 +394,7 @@ export default function CartPage() {
               )}
             </div>
             <div className={styles.row}>
-              <span>Tax</span>
+              <span>{taxLabel}</span>
               <span>₹{tax.toLocaleString("en-IN")}</span>
             </div>
             <div className={styles.rowBold}>

@@ -14,6 +14,10 @@ import {
 import { decryptPayoutDetails, encryptPayoutDetails } from "../utils/payout-crypto.js";
 import { parseDimensionCm, parseWeightKg } from "../utils/product-dims.js";
 import { invalidateCatalogCaches } from "../services/catalog-cache.js";
+import { env } from "../config/env.js";
+import { syncSellerPickupToShiprocket } from "../services/shipping.service.js";
+import { INDIA_STATE_NAMES, verifyGstin } from "../services/gstin.service.js";
+import { samePlace } from "../services/viewer-region.service.js";
 
 const sellerRouter = Router();
 
@@ -42,13 +46,44 @@ async function uniqueShopSlug(base: string) {
   }
 }
 
-const onboardingSchema = z.object({
-  shopName: z.string().trim().min(2).max(50),
-  contactPhone: z.string().trim().min(6).max(20),
-  phoneCountryCode: z.string().trim().min(1).max(8).default("+91"),
-  categories: z.array(z.string().trim().min(1)).min(1).max(20),
-  termsAccepted: z.literal(true),
-});
+const onboardingSchema = z
+  .object({
+    shopName: z.string().trim().min(2).max(50),
+    contactPhone: z.string().trim().min(6).max(20),
+    phoneCountryCode: z.string().trim().min(1).max(8).default("+91"),
+    categories: z.array(z.string().trim().min(1)).min(1).max(20),
+    termsAccepted: z.literal(true),
+    businessRegistered: z.boolean(),
+    gstin: z.string().trim().max(20).optional(),
+    sellingState: z.string().trim().max(80).optional(),
+    sellingCity: z.string().trim().max(80).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.businessRegistered) {
+      if (!data.gstin) {
+        ctx.addIssue({
+          code: "custom",
+          message: "GSTIN is required when the business is registered",
+          path: ["gstin"],
+        });
+      }
+      return;
+    }
+    if (!data.sellingState || !INDIA_STATE_NAMES.has(data.sellingState)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Choose the state where you can sell",
+        path: ["sellingState"],
+      });
+    }
+    if (!data.sellingCity || data.sellingCity.trim().length < 2) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter the city you sell from",
+        path: ["sellingCity"],
+      });
+    }
+  });
 
 /**
  * Creates a sellers row with status `pending`. JWT role is not flipped here —
@@ -85,17 +120,49 @@ sellerRouter.post(
     const ownerName = user.rows[0]?.full_name || parsed.data.shopName;
     const shopSlug = await uniqueShopSlug(slugify(parsed.data.shopName));
 
+    let businessRegistered = false;
+    let gstin: string | null = null;
+    let gstLegalName: string | null = null;
+    let sellingScope = "state";
+    let sellingState = parsed.data.sellingState ?? null;
+    let sellingCity = parsed.data.sellingCity?.trim() || null;
+
+    if (parsed.data.businessRegistered) {
+      const verified = await verifyGstin(parsed.data.gstin ?? "");
+      const taken = await pool.query<{ id: string }>(
+        `select id from public.sellers where gstin = $1 and deleted_at is null limit 1`,
+        [verified.gstin]
+      );
+      if (taken.rows[0]) {
+        throw new AppError(409, "GSTIN_IN_USE", "This GSTIN is already registered on Stuffsy");
+      }
+      businessRegistered = true;
+      gstin = verified.gstin;
+      gstLegalName = verified.legalName;
+      sellingScope = "pan_india";
+      sellingState = verified.state || sellingState;
+      sellingCity = verified.city || sellingCity;
+    }
+
     const inserted = await pool.query<{
       id: string;
       shop_name: string;
       shop_slug: string;
       status: string;
+      selling_scope: string;
+      selling_state: string | null;
     }>(
       `insert into public.sellers
          (id, user_id, shop_name, shop_slug, owner_name, contact_phone,
-          contact_phone_country_code, categories, status, terms_accepted_at, created_at, updated_at)
-       values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'pending', now(), now(), now())
-       returning id, shop_name, shop_slug, status`,
+          contact_phone_country_code, categories, status, terms_accepted_at,
+          business_registered, gstin, gst_legal_name, gst_verified_at,
+          selling_scope, selling_state, selling_city, created_at, updated_at)
+       values (
+         gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'pending', now(),
+         $8, $9, $10, case when $8 then now() else null end,
+         $11, $12, $13, now(), now()
+       )
+       returning id, shop_name, shop_slug, status, selling_scope, selling_state`,
       [
         userId,
         parsed.data.shopName,
@@ -104,6 +171,12 @@ sellerRouter.post(
         parsed.data.contactPhone,
         parsed.data.phoneCountryCode,
         parsed.data.categories,
+        businessRegistered,
+        gstin,
+        gstLegalName,
+        sellingScope,
+        sellingState,
+        sellingCity,
       ]
     );
 
@@ -114,6 +187,8 @@ sellerRouter.post(
         shopName: shop.shop_name,
         shopSlug: shop.shop_slug,
         status: shop.status,
+        sellingScope: shop.selling_scope,
+        sellingState: shop.selling_state,
       },
     });
   })
@@ -143,12 +218,19 @@ sellerRouter.get(
       shop_policies: Record<string, string> | null;
       is_vacation_mode: boolean;
       payout_details: unknown;
+      business_registered: boolean;
+      gstin: string | null;
+      selling_scope: string;
+      selling_state: string | null;
+      selling_city: string | null;
+      pan_india_bypass: boolean;
       created_at: Date;
     }>(
       `select id, shop_name, shop_slug, status, badge, logo_url, shop_tagline, description,
               contact_email, contact_phone, contact_phone_country_code, business_address,
               pickup_address, social_links, seo_title, seo_description, banner_url, shop_policies,
-              is_vacation_mode, payout_details, created_at
+              is_vacation_mode, payout_details, business_registered, gstin, selling_scope,
+              selling_state, selling_city, pan_india_bypass, created_at
        from public.sellers
        where user_id = $1 and deleted_at is null`,
       [req.user!.id]
@@ -180,6 +262,12 @@ sellerRouter.get(
         shopPolicies: row.shop_policies,
         isVacationMode: row.is_vacation_mode,
         payoutDetails: decryptPayoutDetails(row.payout_details),
+        businessRegistered: row.business_registered,
+        gstin: row.gstin,
+        sellingScope: row.selling_scope,
+        sellingState: row.selling_state,
+        sellingCity: row.selling_city,
+        panIndiaBypass: row.pan_india_bypass,
         memberSince: new Date(row.created_at).getFullYear(),
       },
     });
@@ -194,16 +282,25 @@ const shopUpdateSchema = z.object({
   contactPhone: z.string().trim().min(6).max(20).optional(),
   phoneCountryCode: z.string().trim().min(1).max(8).optional(),
   businessAddress: z.string().trim().max(500).optional().nullable(),
+  gstin: z.string().trim().min(15).max(20).optional(),
   pickupAddress: z
     .object({
-      name: z.string().trim().min(2).max(120),
+      /** Shiprocket pickup_location nickname. Letters, numbers, space, hyphen, underscore. */
+      pickupLocationName: z
+        .string()
+        .trim()
+        .min(2)
+        .max(36)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/, "Pickup nickname: letters, numbers, spaces, - or _ only"),
+      name: z.string().trim().min(2).max(80),
+      email: z.string().trim().email().max(120),
       phone: z.string().trim().min(10).max(20),
-      address1: z.string().trim().min(3).max(250),
-      address2: z.string().trim().max(250).optional().nullable(),
-      city: z.string().trim().min(2).max(100),
-      state: z.string().trim().min(2).max(100),
-      pincode: z.string().trim().regex(/^\d{6}$/),
-      pickupLocationName: z.string().trim().max(36).optional().nullable(),
+      address1: z.string().trim().min(5).max(190),
+      address2: z.string().trim().max(190).optional().nullable(),
+      city: z.string().trim().min(2).max(80),
+      state: z.string().trim().min(2).max(80),
+      pincode: z.string().trim().regex(/^\d{6}$/, "Pincode must be 6 digits"),
+      country: z.string().trim().optional(),
     })
     .optional()
     .nullable(),
@@ -251,6 +348,76 @@ sellerRouter.patch(
     const data = parsed.data;
     const sellerId = req.seller!.id;
 
+    type StoredPickup = NonNullable<typeof data.pickupAddress> & {
+      shiprocketSynced?: boolean;
+      shiprocketPickupId?: number | null;
+    };
+    let pickupToStore: StoredPickup | null | undefined = data.pickupAddress;
+    let pickupSync: {
+      synced: boolean;
+      mode: "stub" | "shiprocket";
+      alreadyExists?: boolean;
+      pickupLocation?: string;
+    } | null = null;
+
+    const current = await pool.query<{ selling_scope: string; selling_state: string | null }>(
+      `select selling_scope, selling_state from public.sellers where id = $1`,
+      [sellerId]
+    );
+    const currentScope = current.rows[0];
+
+    let verifiedGst: Awaited<ReturnType<typeof verifyGstin>> | null = null;
+    if (data.gstin) {
+      verifiedGst = await verifyGstin(data.gstin);
+      const taken = await pool.query<{ id: string }>(
+        `select id from public.sellers
+         where gstin = $1 and id <> $2 and deleted_at is null
+         limit 1`,
+        [verifiedGst.gstin, sellerId]
+      );
+      if (taken.rows[0]) {
+        throw new AppError(409, "GSTIN_IN_USE", "This GSTIN is already registered on Stuffsy");
+      }
+    }
+
+    if (pickupToStore) {
+      const phone = pickupToStore.phone.replace(/\D/g, "").slice(-10);
+      if (phone.length !== 10) {
+        throw new AppError(400, "INVALID_PHONE", "Pickup phone must be a 10-digit Indian mobile number");
+      }
+      pickupToStore = {
+        ...pickupToStore,
+        phone,
+        country: "India",
+        pickupLocationName: pickupToStore.pickupLocationName.trim(),
+      };
+      if (
+        !verifiedGst &&
+        currentScope?.selling_scope === "state" &&
+        !samePlace(currentScope.selling_state, pickupToStore.state)
+      ) {
+        throw new AppError(
+          400,
+          "PICKUP_STATE_MISMATCH",
+          `This shop can only sell inside ${currentScope.selling_state}. Pickup must be in that state, or verify a GSTIN to sell across India.`
+        );
+      }
+      if (env.SHIPPING_MODE === "shiprocket") {
+        const sync = await syncSellerPickupToShiprocket({
+          ...pickupToStore,
+          address2: pickupToStore.address2 ?? null,
+        });
+        pickupSync = sync;
+        pickupToStore = {
+          ...pickupToStore,
+          shiprocketSynced: sync.synced,
+          shiprocketPickupId: "pickupId" in sync ? sync.pickupId ?? null : null,
+        };
+      } else {
+        pickupSync = { synced: false, mode: "stub", pickupLocation: pickupToStore.pickupLocationName ?? undefined };
+      }
+    }
+
     const encryptedPayout =
       data.payoutDetails === undefined
         ? null
@@ -296,15 +463,60 @@ sellerRouter.patch(
         data.shopPolicies === undefined ? null : JSON.stringify(data.shopPolicies),
         data.payoutDetails !== undefined,
         encryptedPayout === null ? null : JSON.stringify(encryptedPayout),
-        data.pickupAddress !== undefined,
-        data.pickupAddress === undefined || data.pickupAddress === null
+        pickupToStore !== undefined,
+        pickupToStore === undefined || pickupToStore === null
           ? null
-          : JSON.stringify(data.pickupAddress),
+          : JSON.stringify(pickupToStore),
       ]
     );
 
-    const refreshed = await pool.query(
-      `select shop_name, shop_slug, shop_tagline, status, is_vacation_mode
+    if (verifiedGst) {
+      await pool.query(
+        `update public.sellers set
+           business_registered = true,
+           gstin = $2,
+           gst_legal_name = $3,
+           gst_verified_at = now(),
+           selling_scope = 'pan_india',
+           pan_india_bypass = false,
+           pan_india_bypass_at = null,
+           pan_india_bypass_by = null,
+           selling_state = $4,
+           selling_city = coalesce($5, selling_city),
+           updated_at = now()
+         where id = $1`,
+        [
+          sellerId,
+          verifiedGst.gstin,
+          verifiedGst.legalName,
+          verifiedGst.state,
+          pickupToStore?.city ?? verifiedGst.city,
+        ]
+      );
+    } else if (pickupToStore) {
+      await pool.query(
+        `update public.sellers set
+           selling_city = $2,
+           selling_state = case when selling_scope = 'pan_india' then $3 else selling_state end,
+           updated_at = now()
+         where id = $1`,
+        [sellerId, pickupToStore.city, pickupToStore.state]
+      );
+    }
+
+    const refreshed = await pool.query<{
+      shop_name: string;
+      shop_slug: string;
+      shop_tagline: string | null;
+      status: string;
+      is_vacation_mode: boolean;
+      selling_scope: string;
+      selling_state: string | null;
+      gstin: string | null;
+      business_registered: boolean;
+    }>(
+      `select shop_name, shop_slug, shop_tagline, status, is_vacation_mode,
+              selling_scope, selling_state, gstin, business_registered
        from public.sellers where id = $1`,
       [sellerId]
     );
@@ -315,7 +527,12 @@ sellerRouter.patch(
         tagline: refreshed.rows[0].shop_tagline,
         status: refreshed.rows[0].status,
         isVacationMode: refreshed.rows[0].is_vacation_mode,
+        sellingScope: refreshed.rows[0].selling_scope,
+        sellingState: refreshed.rows[0].selling_state,
+        gstin: refreshed.rows[0].gstin,
+        businessRegistered: refreshed.rows[0].business_registered,
       },
+      pickupSync,
     });
   })
 );

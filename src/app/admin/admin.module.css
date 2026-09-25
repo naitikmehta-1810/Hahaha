@@ -155,27 +155,53 @@
 }
 
 .formRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
   margin-bottom: 16px;
-  align-items: flex-end;
+  align-items: end;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0;
   font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-main);
 }
 
 .field input,
-.field select {
-  padding: 8px 10px;
-  border: 1px solid var(--color-border);
+.field select,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-dark);
   border-radius: var(--radius-md);
+  background: #fff;
+  color: var(--color-text-main);
   font: inherit;
-  min-width: 140px;
+  font-weight: 500;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+
+@media (max-width: 640px) {
+  .formRow {
+    grid-template-columns: 1fr;
+  }
 }
 
 .note {

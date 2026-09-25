@@ -2,6 +2,7 @@ import { apiRequest } from "./api-client";
 
 export type SellerPickupAddress = {
   name: string;
+  email?: string | null;
   phone: string;
   address1: string;
   address2?: string | null;
@@ -9,6 +10,8 @@ export type SellerPickupAddress = {
   state: string;
   pincode: string;
   pickupLocationName?: string | null;
+  country?: string | null;
+  shiprocketSynced?: boolean;
 };
 
 export type SellerProfile = {
@@ -35,6 +38,12 @@ export type SellerProfile = {
     payment?: string;
   } | null;
   isVacationMode?: boolean;
+  businessRegistered?: boolean;
+  gstin?: string | null;
+  sellingScope?: "state" | "pan_india" | string;
+  sellingState?: string | null;
+  sellingCity?: string | null;
+  panIndiaBypass?: boolean;
   memberSince?: number;
 };
 

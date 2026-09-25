@@ -151,6 +151,7 @@ export default function ProductDetailsPage() {
         subtitle: product.makerName || product.shopName,
         price,
         image: images[0] || FALLBACK_IMAGE,
+        gstPercent: product.gstPercent,
       },
       qty
     );
@@ -309,7 +310,9 @@ export default function ProductDetailsPage() {
                 <span className={styles.discount}>-{product.discountPercent}%</span>
               ) : null}
             </div>
-            <span className={styles.priceTax}>Inclusive of all taxes</span>
+            <span className={styles.priceTax}>
+              GST {product.gstPercent ?? 18}% added at checkout
+            </span>
           </div>
 
           {bullets.length > 0 ? (

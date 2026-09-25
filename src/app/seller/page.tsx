@@ -28,17 +28,6 @@ import {
   Settings,
 } from "lucide-react";
 import styles from "./seller.module.css";
-import { FALLBACK_SHOP_LOGO } from "@/utils/media";
-
-const FALLBACK_AVATAR = FALLBACK_SHOP_LOGO;
-
-const NAV = [
-  { href: "/seller", label: "Dashboard" },
-  { href: "/seller/orders", label: "Orders" },
-  { href: "/seller/products", label: "Products" },
-  { href: "/seller/products/new", label: "Add Product" },
-  { href: "/seller/shop-setup", label: "Shop Setup" },
-];
 
 export default function SellerDashboardPage() {
   const router = useRouter();
@@ -101,43 +90,13 @@ export default function SellerDashboardPage() {
   const maxSales = Math.max(1, ...(dash?.salesOverview.map((d) => d.total) ?? [1]));
 
   return (
-    <div className={styles.container}>
+    <>
       <Breadcrumbs>
         <Breadcrumbs.Item href="/">Home</Breadcrumbs.Item>
         <Breadcrumbs.Item active>Seller Dashboard</Breadcrumbs.Item>
       </Breadcrumbs>
 
-      <div className={styles.layout}>
-        <aside className={styles.sidebar}>
-          <div className={styles.sellerBrief}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={seller.logoUrl || FALLBACK_AVATAR}
-              alt=""
-              className={styles.avatar}
-            />
-            <p className={styles.shopName}>{seller.shopName}</p>
-            {seller.badge ? <span className={styles.badge}>{seller.badge}</span> : null}
-            <Link href={`/shops/${seller.shopSlug}`} style={{ fontSize: "0.8125rem", color: "var(--color-primary)" }}>
-              View Shop
-            </Link>
-          </div>
-          <nav className={styles.navList}>
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`${styles.navItem} ${
-                  item.href === "/seller" ? styles.navItemActive : ""
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </aside>
-
-        <main className={styles.main}>
+      <div className={styles.main}>
           <div className={styles.headerRow}>
             <div>
               <Heading level={2}>Dashboard</Heading>
@@ -217,7 +176,7 @@ export default function SellerDashboardPage() {
               </span>
               Manage Inventory
             </Link>
-            <Link href="/seller/products" className={styles.quickAction}>
+            <Link href="/seller/orders" className={styles.quickAction}>
               <span className={styles.quickActionIcon} style={{ background: "#fff7ed", color: "#ea580c" }}>
                 <ShoppingBag size={18} />
               </span>
@@ -259,8 +218,7 @@ export default function SellerDashboardPage() {
             <div className={styles.card}>
               <h3 className={styles.cardTitle}>Sales by Channel</h3>
               <p className={styles.muted} style={{ marginBottom: 12 }}>
-                Attribution from checkout <code>referrerChannel</code> (default: website).
-                Marketplace / social / other populate when checkout sends that field.
+                Paid sales split by where the buyer came from.
               </p>
               {dash?.metrics.salesByChannel ? (
                 <div style={{ display: "grid", gap: 8 }}>
@@ -353,8 +311,7 @@ export default function SellerDashboardPage() {
               )}
             </div>
           </div>
-        </main>
       </div>
-    </div>
+    </>
   );
 }

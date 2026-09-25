@@ -11,6 +11,7 @@ import {
   deriveViewChannel,
   viewChannelToOrderChannel,
 } from "../utils/referrer-channel.js";
+import { resolveViewerRegion } from "../services/viewer-region.service.js";
 
 const analyticsRouter = Router();
 
@@ -115,6 +116,9 @@ analyticsRouter.get(
       return;
     }
 
+    const region = await resolveViewerRegion(req);
+    const viewerState = (region.state ?? "").trim().toLowerCase();
+
     const result = await pool.query<{
       id: string;
       slug: string;
@@ -149,8 +153,12 @@ analyticsRouter.get(
        join public.products p on p.id = r.product_id
        join public.sellers s on s.id = p.seller_id
        where p.deleted_at is null and p.status = 'active'
+         and (
+           coalesce(s.selling_scope, 'pan_india') = 'pan_india'
+           or ($4 <> '' and lower(trim(coalesce(s.selling_state, ''))) = $4)
+         )
        order by r.last_seen desc`,
-      [userId, sessionId, limit]
+      [userId, sessionId, limit, viewerState]
     );
 
     res.json({

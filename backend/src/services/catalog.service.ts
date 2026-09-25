@@ -1,4 +1,5 @@
 import { pool } from "../config/db.js";
+import { appliedGstPercent } from "./gst.js";
 import {
   cacheGetJson,
   cacheSetJson,
@@ -73,6 +74,9 @@ export type ProductListFilters = {
   sort?: ProductSort;
   page?: number;
   pageSize?: number;
+  /** Lowercased elsewhere. Empty means the buyer location is unknown. */
+  viewerCity?: string | null;
+  viewerState?: string | null;
 };
 
 export type ProductCard = {
@@ -193,12 +197,11 @@ function buildFilterClause(filters: ProductListFilters) {
   if (filters.search) {
     const q = filters.search.trim();
     if (q.length < 3) {
-      const term = `%${q}%`;
-      const searchParam = push(term);
+      const searchParam = push(ilikeContains(q));
       conditions.push(`(
-        p.title ilike ${searchParam}
-        or p.short_description ilike ${searchParam}
-        or s.shop_name ilike ${searchParam}
+        p.title ilike ${searchParam} escape '\\'
+        or p.short_description ilike ${searchParam} escape '\\'
+        or s.shop_name ilike ${searchParam} escape '\\'
       )`);
     } else {
       const searchParam = push(q);
@@ -234,7 +237,24 @@ function buildFilterClause(filters: ProductListFilters) {
     conditions.push(IN_STOCK_SQL);
   }
 
+  // State-only shops stay hidden unless the buyer is in that state.
+  // An unknown buyer state hides them (fail closed), including search.
+  const state = (filters.viewerState ?? "").trim().toLowerCase();
+  const stateParam = push(state);
+  conditions.push(`(
+    coalesce(s.selling_scope, 'pan_india') = 'pan_india'
+    or (
+      ${stateParam} <> ''
+      and lower(trim(coalesce(s.selling_state, ''))) = ${stateParam}
+    )
+  )`);
+
   return { where: conditions.join(" and "), params, searchRankSql };
+}
+
+/** User text used in ILIKE, with % and _ treated as literals. */
+function ilikeContains(value: string) {
+  return `%${value.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
 }
 
 export async function listProducts(filters: ProductListFilters = {}) {
@@ -261,9 +281,21 @@ async function listProductsUncached(
   sort: ProductSort
 ) {
   const { where, params, searchRankSql } = buildFilterClause(filters);
-  const orderBy = searchRankSql
+  const listParams: unknown[] = [...params];
+  const city = (filters.viewerCity ?? "").trim().toLowerCase();
+  const state = (filters.viewerState ?? "").trim().toLowerCase();
+  listParams.push(city, state);
+  const cityParam = `$${params.length + 1}`;
+  const stateParam = `$${params.length + 2}`;
+  const proximitySql = `case
+    when ${cityParam} <> '' and lower(trim(coalesce(s.selling_city, ''))) = ${cityParam} then 0
+    when ${stateParam} <> '' and lower(trim(coalesce(s.selling_state, ''))) = ${stateParam} then 1
+    else 2
+  end`;
+  const relevance = searchRankSql
     ? `${searchRankSql} desc, ${PRODUCT_SORTS[sort]}`
     : PRODUCT_SORTS[sort];
+  const orderBy = `${proximitySql}, ${relevance}`;
 
   const needsSalesCount = sort === "bestsellers";
   const salesCountSql = needsSalesCount
@@ -301,7 +333,7 @@ async function listProductsUncached(
     join public.sellers s on s.id = p.seller_id
     where ${where}
     order by ${orderBy}
-    limit $${params.length + 1} offset $${params.length + 2}
+    limit $${params.length + 3} offset $${params.length + 4}
   `;
 
   // Price slider range: same facet filters minus min/max price so the slider stays useful.
@@ -317,7 +349,7 @@ async function listProductsUncached(
 
   const [listResult, countResult, rangeResult] = await Promise.all([
     pool.query<ProductCardRow & { sales_count: string }>(listQuery, [
-      ...params,
+      ...listParams,
       pageSize,
       offset,
     ]),
@@ -361,6 +393,8 @@ export type ProductDetail = ProductCard & {
   tags: string[];
   categoryId: string;
   subcategoryId: string | null;
+  /** Percent added at checkout. Missing category rate is 18. */
+  gstPercent: number;
   breadcrumb: Array<{ id: string; name: string; slug: string }>;
   images: Array<{ id: string; url: string; altText: string | null; isThumbnail: boolean }>;
   variants: Array<{
@@ -379,6 +413,8 @@ export type ProductDetail = ProductCard & {
     badge: string | null;
     rating: number;
     reviewCount: number;
+    sellingScope: string;
+    sellingState: string | null;
   };
 };
 
@@ -432,6 +468,9 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
       badge: string | null;
       shop_rating: string | null;
       shop_review_count: string | null;
+      selling_scope: string | null;
+      selling_state: string | null;
+      gst_rate: string | null;
     }
   >(
     `select
@@ -440,6 +479,8 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
        p.short_description, p.description, p.product_type, p.specs,
        p.processing_days, p.tags, p.category_id, p.subcategory_id,
        s.shop_name, s.shop_slug, s.logo_url, s.badge,
+       s.selling_scope, s.selling_state,
+       coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
        (
          select pi.url from public.product_images pi
          where pi.product_id = p.id
@@ -459,6 +500,8 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
        ) as shop_review_count
      from public.products p
      join public.sellers s on s.id = p.seller_id
+     left join public.categories subc on subc.id = p.subcategory_id
+     left join public.categories cat on cat.id = p.category_id
      where p.slug = $1 and ${PUBLIC_VISIBILITY_SQL}`,
     [slug]
   );
@@ -512,6 +555,7 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
     tags: row.tags ?? [],
     categoryId: row.category_id,
     subcategoryId: row.subcategory_id,
+    gstPercent: appliedGstPercent(row.gst_rate),
     breadcrumb,
     images: imagesResult.rows.map((image) => ({
       id: image.id,
@@ -538,6 +582,8 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
       badge: row.badge,
       rating: money(row.shop_rating),
       reviewCount: Number(row.shop_review_count ?? 0),
+      sellingScope: row.selling_scope ?? "pan_india",
+      sellingState: row.selling_state,
     },
   };
 }
@@ -648,12 +694,15 @@ export async function getCategoryTree(sellerId?: string | null): Promise<Categor
 /**
  * "You may also like" on the cart page and related products elsewhere:
  * same category, excluding a set of products already in the cart.
+ * State-only shops stay hidden unless the viewer is in that state.
  */
 export async function getRelatedProducts(
   categoryIds: string[],
   excludeProductIds: string[],
-  limit = 5
+  limit = 5,
+  viewerState: string | null = null
 ) {
+  const state = (viewerState ?? "").trim().toLowerCase();
   const result = await pool.query<ProductCardRow>(
     `select
        p.id, p.slug, p.title, p.base_price, p.compare_at_price, p.avg_rating,
@@ -671,25 +720,53 @@ export async function getRelatedProducts(
      where ${PUBLIC_VISIBILITY_SQL}
        and (cardinality($1::uuid[]) = 0 or p.category_id = any($1::uuid[]))
        and not (p.id = any($2::uuid[]))
-     order by p.is_bestseller desc, p.review_count desc
+       and (
+         coalesce(s.selling_scope, 'pan_india') = 'pan_india'
+         or (
+           $4 <> ''
+           and lower(trim(coalesce(s.selling_state, ''))) = $4
+         )
+       )
+     order by
+       case
+         when $4 <> '' and lower(trim(coalesce(s.selling_state, ''))) = $4 then 0
+         else 1
+       end,
+       p.is_bestseller desc, p.review_count desc
      limit $3`,
-    [categoryIds, excludeProductIds, limit]
+    [categoryIds, excludeProductIds, limit, state]
   );
 
   return result.rows.map(mapProductCard);
 }
 
 /** Lightweight typeahead: product titles + category names. */
-export async function suggestSearch(q: string, limit = 8) {
+export async function suggestSearch(q: string, limit = 8, viewerState: string | null = null) {
   const term = q.trim();
   if (!term) {
     return { products: [] as { id: string; slug: string; title: string }[], categories: [] as { id: string; slug: string; name: string }[] };
   }
 
   const useFts = term.length >= 3;
-  const products = await pool.query<{ id: string; slug: string; title: string }>(
-    useFts
-      ? `select p.id, p.slug, p.title
+  const state = (viewerState ?? "").trim().toLowerCase();
+  const regionSql = `
+    and (
+      coalesce(s.selling_scope, 'pan_india') = 'pan_india'
+      or ($3 <> '' and lower(trim(coalesce(s.selling_state, ''))) = $3)
+    )`;
+  const ilikeSql = `select p.id, p.slug, p.title
+         from public.products p
+         join public.sellers s on s.id = p.seller_id
+         where ${PUBLIC_VISIBILITY_SQL}
+           and (
+             p.title ilike $1 escape '\\'
+             or p.short_description ilike $1 escape '\\'
+             or s.shop_name ilike $1 escape '\\'
+           )
+           ${regionSql}
+         order by p.review_count desc
+         limit $2`;
+  const ftsSql = `select p.id, p.slug, p.title
          from public.products p
          join public.sellers s on s.id = p.seller_id
          where ${PUBLIC_VISIBILITY_SQL}
@@ -698,30 +775,29 @@ export async function suggestSearch(q: string, limit = 8) {
              or to_tsvector('english', coalesce(s.shop_name, ''))
                   @@ websearch_to_tsquery('english', $1)
            )
+           ${regionSql}
          order by ts_rank(p.search_vector, websearch_to_tsquery('english', $1)) desc
-         limit $2`
-      : `select p.id, p.slug, p.title
-         from public.products p
-         join public.sellers s on s.id = p.seller_id
-         where ${PUBLIC_VISIBILITY_SQL}
-           and (
-             p.title ilike $1
-             or p.short_description ilike $1
-             or s.shop_name ilike $1
-           )
-         order by p.review_count desc
-         limit $2`,
-    useFts ? [term, limit] : [`%${term}%`, limit]
-  );
+         limit $2`;
+
+  let products: { rows: { id: string; slug: string; title: string }[] };
+  if (!useFts) {
+    products = await pool.query(ilikeSql, [ilikeContains(term), limit, state]);
+  } else {
+    try {
+      products = await pool.query(ftsSql, [term, limit, state]);
+    } catch {
+      products = await pool.query(ilikeSql, [ilikeContains(term), limit, state]);
+    }
+  }
 
   const categories = await pool.query<{ id: string; slug: string; name: string }>(
     `select id, slug, name
      from public.categories
      where deleted_at is null and is_active = true
-       and (name ilike $1 or slug ilike $1)
+       and (name ilike $1 escape '\\' or slug ilike $1 escape '\\')
      order by display_order asc, name asc
      limit $2`,
-    [`%${term}%`, Math.min(limit, 5)]
+    [ilikeContains(term), Math.min(limit, 5)]
   );
 
   return {

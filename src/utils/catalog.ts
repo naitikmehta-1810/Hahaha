@@ -39,6 +39,7 @@ export type ProductDetail = ProductCard & {
   tags: string[];
   categoryId: string;
   subcategoryId: string | null;
+  gstPercent: number;
   breadcrumb: Array<{ id: string; name: string; slug: string }>;
   images: Array<{ id: string; url: string; altText: string | null; isThumbnail: boolean }>;
   variants: Array<{

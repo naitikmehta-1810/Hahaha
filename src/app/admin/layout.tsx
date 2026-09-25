@@ -16,6 +16,8 @@ const NAV = [
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/returns", label: "Returns" },
   { href: "/admin/coupons", label: "Coupons" },
+  { href: "/admin/categories", label: "Categories" },
+  { href: "/admin/velocity-flags", label: "Velocity flags" },
   { href: "/admin/stuck-pending-payments", label: "Stuck payments" },
 ];
 

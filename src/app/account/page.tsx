@@ -188,14 +188,7 @@ function NotificationPrefsPanel() {
       {rows.map((row) => (
         <label
           key={row.key}
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 12,
-            padding: "10px 0",
-            borderBottom: "1px solid #eee",
-            cursor: "pointer",
-          }}
+          className={styles.prefRow}
         >
           <input
             type="checkbox"
@@ -206,7 +199,7 @@ function NotificationPrefsPanel() {
           />
           <span>
             <strong>{row.label}</strong>
-            <div style={{ fontSize: 13, opacity: 0.7 }}>{row.hint}</div>
+            <div className={styles.prefHint}>{row.hint}</div>
           </span>
         </label>
       ))}
@@ -542,13 +535,14 @@ function AccountPageInner() {
             >
               Notifications
             </Sidebar.Item>
-            <Sidebar.Item
-              icon={<Store size={18} />}
-              active={activeTab === "seller-dashboard"}
-              onClick={() => router.push("/seller")}
-            >
-              Seller Dashboard
+            <Sidebar.Item icon={<Store size={18} />} href="/seller">
+              Seller panel
             </Sidebar.Item>
+            {sessionUser.role === "admin" ? (
+              <Sidebar.Item icon={<ShieldCheck size={18} />} href="/admin">
+                Admin panel
+              </Sidebar.Item>
+            ) : null}
             <Sidebar.Item
               icon={<SettingsIcon size={18} />}
               active={activeTab === "settings"}
@@ -605,7 +599,7 @@ function AccountPageInner() {
                 <div className={styles.nameRow}>
                   <Heading level={3}>{user.name}</Heading>
                   {user.emailVerified ? (
-                    <span className={styles.verifiedBadge}>Verified</span>
+                  <span className={styles.verifiedBadge}>Verified</span>
                   ) : (
                     <span className={styles.verifiedBadge}>Unverified</span>
                   )}
@@ -738,7 +732,7 @@ function AccountPageInner() {
                 <div className={styles.sectionHeader} style={{ marginTop: 24 }}>
                   <Heading level={4}>Add address</Heading>
                 </div>
-                <div style={{ display: "grid", gap: 8, maxWidth: 480 }}>
+                <div className={styles.formStack}>
                   {(
                     [
                       ["label", "Label"],
@@ -751,18 +745,13 @@ function AccountPageInner() {
                       ["postalCode", "PIN"],
                     ] as const
                   ).map(([key, label]) => (
-                    <label key={key} style={{ display: "grid", gap: 4, fontSize: 13 }}>
+                    <label key={key} className={styles.formField}>
                       {label}
                       <input
                         value={newAddress[key]}
                         onChange={(e) =>
                           setNewAddress((prev) => ({ ...prev, [key]: e.target.value }))
                         }
-                        style={{
-                          padding: "8px 10px",
-                          borderRadius: 8,
-                          border: "1px solid var(--color-border, #e5e7eb)",
-                        }}
                       />
                     </label>
                   ))}
@@ -805,29 +794,19 @@ function AccountPageInner() {
                 <div className={styles.sectionHeader}>
                   <Heading level={4}>Profile Details</Heading>
                 </div>
-                <div style={{ display: "grid", gap: 8, maxWidth: 420 }}>
-                  <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
+                <div className={styles.formStack}>
+                  <label className={styles.formField}>
                     Full name
                     <input
                       value={profileName}
                       onChange={(e) => setProfileName(e.target.value)}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 8,
-                        border: "1px solid var(--color-border, #e5e7eb)",
-                      }}
                     />
                   </label>
-                  <label style={{ display: "grid", gap: 4, fontSize: 13 }}>
+                  <label className={styles.formField}>
                     Phone
                     <input
                       value={profilePhone}
                       onChange={(e) => setProfilePhone(e.target.value)}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 8,
-                        border: "1px solid var(--color-border, #e5e7eb)",
-                      }}
                     />
                   </label>
                   <Text size="sm" color="muted">
@@ -924,10 +903,10 @@ function AccountPageInner() {
                   {activeTab === "orders" ? "Your Orders" : "Recent Orders"}
                 </Heading>
                 {activeTab !== "orders" && (
-                  <Link href="/account?tab=orders" className={styles.viewAllLink}>
-                    <span>View all orders</span>
-                    <ArrowRight size={12} />
-                  </Link>
+                <Link href="/account?tab=orders" className={styles.viewAllLink}>
+                  <span>View all orders</span>
+                  <ArrowRight size={12} />
+                </Link>
                 )}
               </div>
               <div className={styles.ordersList}>

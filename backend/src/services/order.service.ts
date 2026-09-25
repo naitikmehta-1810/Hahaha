@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
+import { appliedGstPercent, taxForLines } from "./gst.js";
 import { clearCartItems, getUserCartForOrder } from "./cart.service.js";
 import { validateCoupon } from "./coupon.service.js";
 import {
@@ -67,6 +68,9 @@ type CartLineForOrder = {
   variant_active: boolean;
   product_status: string;
   seller_status: string;
+  selling_scope: string;
+  selling_state: string | null;
+  gst_rate: string | null;
   is_vacation_mode: boolean;
   variant_deleted: Date | null;
   product_deleted: Date | null;
@@ -191,6 +195,9 @@ async function loadCartLines(client: PoolClient, cartId: string) {
        pv.is_active as variant_active,
        p.status as product_status,
        s.status as seller_status,
+       s.selling_scope,
+       s.selling_state,
+       coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
        s.is_vacation_mode,
        pv.deleted_at as variant_deleted,
        p.deleted_at as product_deleted
@@ -198,6 +205,8 @@ async function loadCartLines(client: PoolClient, cartId: string) {
      join public.product_variants pv on pv.id = ci.variant_id
      join public.products p on p.id = pv.product_id
      join public.sellers s on s.id = p.seller_id
+     left join public.categories subc on subc.id = p.subcategory_id
+     left join public.categories cat on cat.id = p.category_id
      left join public.inventory inv on inv.variant_id = pv.id
      where ci.cart_id = $1 and ci.deleted_at is null
      for update of ci`,
@@ -332,6 +341,21 @@ export async function placeOrder(input: PlaceOrderInput) {
 
     const shippingAddress = await snapshotAddress(client, userId, addressId);
 
+    const outOfState = lines.filter(
+      (line) =>
+        line.selling_scope === "state" &&
+        (!line.selling_state ||
+          line.selling_state.trim().toLowerCase() !== shippingAddress.state.trim().toLowerCase())
+    );
+    if (outOfState.length > 0) {
+      const names = [...new Set(outOfState.map((line) => line.title))].slice(0, 3).join(", ");
+      throw new AppError(
+        400,
+        "SELLER_STATE_RESTRICTED",
+        `These items can only be delivered inside the seller's state: ${names}`
+      );
+    }
+
     const subtotal = roundMoney(
       lines.reduce((sum, line) => sum + money(line.price) * Number(line.quantity), 0)
     );
@@ -367,8 +391,11 @@ export async function placeOrder(input: PlaceOrderInput) {
     }
 
     const shippingAmount = computeShippingAmount(deliveryOption, subtotal);
-    const taxRate = env.TAX_RATE;
-    const taxAmount = computeTaxAmount(subtotal - discountAmount, taxRate);
+    const taxableLines = lines.map((line) => ({
+      gross: roundMoney(money(line.price) * Number(line.quantity)),
+      gstPercent: line.gst_rate,
+    }));
+    const { taxAmount, taxRate } = taxForLines(taxableLines, discountAmount);
     const totalAmount = roundMoney(subtotal - discountAmount + shippingAmount + taxAmount);
     const estimatedDeliveryAt = addDays(new Date(), DELIVERY_ESTIMATE_DAYS[deliveryOption]);
 
@@ -464,11 +491,11 @@ export async function placeOrder(input: PlaceOrderInput) {
         `insert into public.order_items (
            id, order_id, seller_id, variant_id, product_id, product_slug,
            quantity, unit_price, line_total, product_title, product_thumbnail_url,
-           variant_option_values, is_backordered, created_at, updated_at
+           variant_option_values, is_backordered, gst_rate, created_at, updated_at
          ) values (
            gen_random_uuid(), $1, $2, $3, $4, $5,
            $6, $7, $8, $9, $10,
-           $11::jsonb, $12, now(), now()
+           $11::jsonb, $12, $13, now(), now()
          )`,
         [
           orderId,
@@ -483,6 +510,7 @@ export async function placeOrder(input: PlaceOrderInput) {
           line.thumbnail_url,
           JSON.stringify(line.option_values ?? {}),
           backorderedVariantIds.has(line.variant_id),
+          appliedGstPercent(line.gst_rate),
         ]
       );
     }

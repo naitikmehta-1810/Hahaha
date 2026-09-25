@@ -23,6 +23,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import BrandLogo from "@/components/brand/BrandLogo";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
 import { SELL_STEP_IMAGES } from "@/utils/media";
+import { INDIA_STATES } from "@/utils/india-states";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3;
@@ -200,6 +201,11 @@ export default function SellPage() {
   const [submitting,      setSubmitting]      = useState(false);
   const [error,           setError]           = useState<string | null>(null);
   const [authBanner,      setAuthBanner]      = useState(false);
+  const [businessRegistered, setBusinessRegistered] = useState<boolean | null>(null);
+  const [gstin, setGstin] = useState("");
+  const [sellingState, setSellingState] = useState("");
+  const [sellingCity, setSellingCity] = useState("");
+  const [sellingScope, setSellingScope] = useState<string | null>(null);
   const autoSubmitRef = useRef(false);
 
   useEffect(() => {
@@ -212,10 +218,18 @@ export default function SellPage() {
         shopName?: string;
         phone?: string;
         agreed?: boolean;
+        businessRegistered?: boolean | null;
+        gstin?: string;
+        sellingState?: string;
+        sellingCity?: string;
       };
       if (draft.selectedCats?.length) setSelectedCats(draft.selectedCats);
       if (draft.shopName) setShopName(draft.shopName);
       if (draft.phone) setPhone(draft.phone);
+      if (typeof draft.businessRegistered === "boolean") setBusinessRegistered(draft.businessRegistered);
+      if (draft.gstin) setGstin(draft.gstin);
+      if (draft.sellingState) setSellingState(draft.sellingState);
+      if (draft.sellingCity) setSellingCity(draft.sellingCity);
       if (typeof draft.agreed === "boolean") setAgreed(draft.agreed);
       if (draft.step === 1 || draft.step === 2 || draft.step === 3) setStep(draft.step);
     } catch {
@@ -239,7 +253,12 @@ export default function SellPage() {
   // ── Navigation ────────────────────────────────────────────────────────────
   const canNext = () => {
     if (step === 1) return selectedCats.length > 0;
-    if (step === 2) return shopName.trim().length >= 2 && phone.trim().length >= 6;
+    if (step === 2) {
+      const basics = shopName.trim().length >= 2 && phone.trim().length >= 6;
+      if (!basics || businessRegistered === null) return false;
+      if (businessRegistered) return gstin.trim().length === 15;
+      return sellingState.length > 0 && sellingCity.trim().length >= 2;
+    }
     if (step === 3) return agreed;
     return false;
   };
@@ -260,6 +279,10 @@ export default function SellPage() {
       shopName,
       phone,
       agreed,
+      businessRegistered,
+      gstin,
+      sellingState,
+      sellingCity,
     };
     sessionStorage.setItem("stuffsy-sell-draft", JSON.stringify(draft));
     if (pendingSubmit) {
@@ -279,7 +302,13 @@ export default function SellPage() {
     }
     setSubmitting(true);
     const result = await apiRequest<{
-      seller: { id: string; shopName: string; shopSlug: string; status: string };
+      seller: {
+        id: string;
+        shopName: string;
+        shopSlug: string;
+        status: string;
+        sellingScope?: string;
+      };
     }>("POST", "/api/seller/onboarding", {
       body: {
         shopName: shopName.trim(),
@@ -287,6 +316,10 @@ export default function SellPage() {
         phoneCountryCode: "+91",
         categories: selectedCats,
         termsAccepted: true,
+        businessRegistered: businessRegistered === true,
+        gstin: businessRegistered ? gstin.trim().toUpperCase() : undefined,
+        sellingState: businessRegistered ? undefined : sellingState,
+        sellingCity: businessRegistered ? undefined : sellingCity.trim(),
       },
     });
     setSubmitting(false);
@@ -304,6 +337,7 @@ export default function SellPage() {
     sessionStorage.removeItem("stuffsy-sell-draft");
     sessionStorage.removeItem("stuffsy-sell-pending-submit");
     setSellerStatus(result.data.seller.status);
+    setSellingScope(result.data.seller.sellingScope ?? null);
     setShowSuccess(true);
   };
 
@@ -338,13 +372,14 @@ export default function SellPage() {
           {isPending ? (
             <>
               <strong>{shopName}</strong> is registered with status{" "}
-              <strong>pending</strong>. Finish Shop Setup now; selling unlocks once the
-              shop is activated.
+              <strong>pending</strong>. Finish Shop Setup now;               selling unlocks once the shop is activated.{" "}
+              {sellingScope === "pan_india"
+                ? "Your GSTIN is verified, so you can sell across India."
+                : `Without GST you can sell only in ${sellingState}.`}
             </>
           ) : (
             <>
-              Congratulations! <strong>{shopName}</strong> has been created successfully.
-              Start adding your first products now.
+              <strong>{shopName}</strong> is live. You can add products from the seller dashboard.
             </>
           )}
         </p>
@@ -561,6 +596,93 @@ export default function SellPage() {
                   <span className={styles.infoBoxIcon}>
                     <ShieldCheck size={20} />
                   </span>
+                <div className={styles.formGroup}>
+                  <span className={styles.formLabel}>Do you have a registered business?</span>
+                  <div className={styles.choiceRow}>
+                    <button
+                      type="button"
+                      className={`${styles.choice} ${businessRegistered === true ? styles.choiceActive : ""}`}
+                      onClick={() => setBusinessRegistered(true)}
+                    >
+                      Yes — I have a GSTIN and want to sell across India
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.choice} ${businessRegistered === false ? styles.choiceActive : ""}`}
+                      onClick={() => setBusinessRegistered(false)}
+                    >
+                      No — I will sell only in my state
+                    </button>
+                  </div>
+                </div>
+
+                {businessRegistered === true && (
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel} htmlFor="shop-gstin">
+                      GSTIN
+                    </label>
+                    <div className={styles.inputWrapper}>
+                      <input
+                        id="shop-gstin"
+                        type="text"
+                        className={styles.formInput}
+                        placeholder="15-character GSTIN"
+                        value={gstin}
+                        onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/\s/g, ""))}
+                        maxLength={15}
+                      />
+                    </div>
+                    <span className={styles.formHelp}>
+                      We verify this with GST records before the shop is created. A verified GSTIN
+                      lets you sell across India.
+                    </span>
+                  </div>
+                )}
+
+                {businessRegistered === false && (
+                  <>
+                    <div className={styles.formGroup}>
+                      <label className={styles.formLabel} htmlFor="selling-state">
+                        State you sell in
+                      </label>
+                      <div className={styles.inputWrapper}>
+                        <select
+                          id="selling-state"
+                          className={styles.formInput}
+                          value={sellingState}
+                          onChange={(e) => setSellingState(e.target.value)}
+                        >
+                          <option value="">Select state</option>
+                          {INDIA_STATES.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.formLabel} htmlFor="selling-city">
+                        City you sell from
+                      </label>
+                      <div className={styles.inputWrapper}>
+                        <input
+                          id="selling-city"
+                          type="text"
+                          className={styles.formInput}
+                          placeholder="City"
+                          value={sellingCity}
+                          onChange={(e) => setSellingCity(e.target.value)}
+                          maxLength={80}
+                        />
+                      </div>
+                      <span className={styles.formHelp}>
+                        Buyers outside this state will not see or be able to order your products.
+                      </span>
+                    </div>
+                  </>
+                )}
+
                   <p className={styles.infoBoxText}>
                     Don&apos;t worry, you can always change these details later from Shop Settings.
                   </p>

@@ -206,10 +206,15 @@ export const Header = () => {
         <div className={styles.searchSlot}>{SearchField}</div>
 
         <div className={styles.navActions}>
-          <Link href="/sell" className={styles.sellLink}>
+          <Link href={isAuthenticated ? "/seller" : "/sell"} className={styles.sellLink}>
             <Store size={18} />
-            <span className={styles.sellText}>Sell on Stuffsy</span>
+            <span className={styles.sellText}>{isAuthenticated ? "Seller panel" : "Sell on Stuffsy"}</span>
           </Link>
+          {isAuthenticated && user?.role === "admin" ? (
+            <Link href="/admin" className={styles.sellLink}>
+              <span className={styles.sellText}>Admin</span>
+            </Link>
+          ) : null}
 
           <Link
             href={isAuthenticated ? "/account?tab=wishlist" : "/login?next=/account?tab=wishlist"}
@@ -252,9 +257,14 @@ export const Header = () => {
             <Link href="/shop" onClick={() => setMobileOpen(false)}>
               Shop all
             </Link>
-            <Link href="/sell" onClick={() => setMobileOpen(false)}>
-              Sell on Stuffsy
+            <Link href={isAuthenticated ? "/seller" : "/sell"} onClick={() => setMobileOpen(false)}>
+              {isAuthenticated ? "Seller panel" : "Sell on Stuffsy"}
             </Link>
+            {isAuthenticated && user?.role === "admin" ? (
+              <Link href="/admin" onClick={() => setMobileOpen(false)}>
+                Admin
+              </Link>
+            ) : null}
             <Link
               href={isAuthenticated ? "/account?tab=wishlist" : "/login?next=/account?tab=wishlist"}
               onClick={() => setMobileOpen(false)}

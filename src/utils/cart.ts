@@ -12,6 +12,8 @@ export interface CartItem {
   image: string;
   available: boolean;
   availableStock: number;
+  /** GST percent charged on this line. 18 when the category has no rate. */
+  gstPercent?: number;
 }
 
 type ApiCartLine = {
@@ -25,6 +27,7 @@ type ApiCartLine = {
   availableStock: number;
   available: boolean;
   lineTotal: number;
+  gstPercent?: number;
 };
 
 type ApiCart = {
@@ -80,6 +83,7 @@ function mapApiCart(cart: ApiCart): CartItem[] {
     image: line.imageUrl || FALLBACK_PRODUCT_IMAGE,
     available: Boolean(line.available),
     availableStock: Number(line.availableStock ?? 0),
+    gstPercent: Number(line.gstPercent ?? 18),
   }));
 }
 

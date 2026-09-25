@@ -1,3 +1,56 @@
+.shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 28px 24px 64px;
+}
+
+.shellMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.panelMark {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  margin: 0 0 12px;
+}
+
+.viewShop,
+.backToAccount {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.backToAccount {
+  display: block;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 968px) {
+  .shell {
+    flex-direction: column;
+    padding: 16px 14px 40px;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+
+  .navList {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
 .container {
   max-width: 1400px;
   margin: 0 auto;
@@ -281,6 +334,233 @@
   bottom: 0;
   background: var(--color-primary);
   border-radius: 4px 4px 0 0;
+}
+
+.fieldLabel {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-main);
+}
+
+.control {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-dark);
+  border-radius: var(--radius-md);
+  background: #fff;
+  color: var(--color-text-main);
+  font-size: 0.9rem;
+  margin: 0 0 4px;
+}
+
+.control:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+
+.control:read-only {
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+
+textarea.control {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.controlShort {
+  min-height: 72px;
+}
+
+.controlTall {
+  min-height: 120px;
+}
+
+.fieldGrid3,
+.fieldGrid4 {
+  display: grid;
+  gap: 12px 14px;
+  margin-top: 8px;
+}
+
+.fieldGrid3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.fieldGrid4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .fieldGrid4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .fieldGrid3,
+  .fieldGrid4 {
+    grid-template-columns: 1fr;
+  }
+
+  .headerRow .buttonRow,
+  .buttonRow {
+    width: 100%;
+  }
+
+  .buttonRow > * {
+    flex: 1;
+  }
+}
+
+.choiceRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.choice,
+.checkLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-main);
+}
+
+.checkLabel {
+  margin: 12px 0;
+}
+
+.chipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border-dark);
+  border-radius: var(--radius-full);
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.chipOn {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.cardTitleSpaced {
+  margin-top: 24px;
+}
+
+.setupColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(240px, 0.75fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.setupMain,
+.setupSide {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .setupColumns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.labelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.labelRow .fieldLabel {
+  margin-bottom: 6px;
+}
+
+.counter {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.fieldGrid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 14px;
+}
+
+@media (max-width: 640px) {
+  .fieldGrid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.previewBanner {
+  width: 100%;
+  height: 148px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  display: block;
+}
+
+.previewLogo {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-top: -32px;
+  margin-left: 14px;
+  border: 3px solid #fff;
+  background: #fff;
+}
+
+.tips {
+  background: var(--color-primary-light);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+}
+
+.tips ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--color-text-main);
+  font-size: 0.85rem;
+  display: grid;
+  gap: 6px;
+}
+
+.fileInput {
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+  max-width: 100%;
 }
 
 .pendingBanner {

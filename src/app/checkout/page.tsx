@@ -26,11 +26,13 @@ import {
   createAddress,
   fetchAddresses,
   fetchOrderDetail,
+  getCachedDiscountAmount,
   getCachedFreeShipping,
   getCart,
   placeOrder,
   refreshCart,
 } from "@/utils/cart";
+import { computeGstAmount, gstSummaryLabel } from "@/utils/gst";
 import {
   createPaymentOrder,
   openRazorpayCheckout,
@@ -133,6 +135,7 @@ function CheckoutInner() {
     razorpayOrderId?: string;
   } | null>(null);
   const [freeShipping, setFreeShipping] = useState(getCachedFreeShipping());
+  const [discountAmount, setDiscountAmount] = useState(0);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -150,6 +153,7 @@ function CheckoutInner() {
     await refreshCart();
     setCartItems(getCart());
     setFreeShipping(getCachedFreeShipping());
+    setDiscountAmount(getCachedDiscountAmount());
     setCartLoading(false);
   }, []);
 
@@ -210,8 +214,9 @@ function CheckoutInner() {
           ? STANDARD_SHIPPING_BELOW_THRESHOLD
           : 0;
 
-  const tax = Math.round(subtotal * 0.18);
-  const total = subtotal + shippingAmount + tax;
+  const tax = computeGstAmount(availableItems, discountAmount);
+  const taxLabel = gstSummaryLabel(availableItems);
+  const total = Math.max(subtotal - discountAmount, 0) + shippingAmount + tax;
   const savedOnShipping =
     deliveryOption === "standard" && qualifiesFree ? EXPRESS_SHIPPING : 0;
 
@@ -905,6 +910,12 @@ function CheckoutInner() {
               <span>Subtotal</span>
               <span>₹{subtotal.toLocaleString("en-IN")}</span>
             </div>
+            {discountAmount > 0 ? (
+              <div className={styles.row}>
+                <span>Discount</span>
+                <span>−₹{discountAmount.toLocaleString("en-IN")}</span>
+              </div>
+            ) : null}
             <div className={styles.row}>
               <span>Shipping</span>
               <span className={shippingAmount === 0 ? styles.freePrice : undefined}>
@@ -912,7 +923,7 @@ function CheckoutInner() {
               </span>
             </div>
             <div className={styles.row}>
-              <span>Tax (18%)</span>
+              <span>{taxLabel}</span>
               <span>₹{tax.toLocaleString("en-IN")}</span>
             </div>
             <div className={styles.rowBold}>

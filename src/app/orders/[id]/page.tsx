@@ -401,7 +401,7 @@ export default function OrderTrackingPage() {
               </span>
             </div>
             <div className={styles.row}>
-              <span>Tax (18%)</span>
+              <span>GST ({Number(((order.taxRate ?? 0.18) * 100).toFixed(2))}%)</span>
               <span>₹{order.taxAmount.toLocaleString("en-IN")}</span>
             </div>
             <div className={styles.rowBold}>

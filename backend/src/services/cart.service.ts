@@ -5,6 +5,7 @@ import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
 import { baseCookieOptions } from "../utils/cookie-options.js";
 import { loadCartItemsForCoupon, validateCoupon } from "./coupon.service.js";
+import { appliedGstPercent } from "./gst.js";
 import { AppError } from "../utils/errors.js";
 
 export const GUEST_SESSION_COOKIE = "guest_session_id";
@@ -35,6 +36,8 @@ export type CartLineView = {
   /** Why the line is unavailable, so the UI can say more than "no longer available". */
   unavailableReason: "ARCHIVED" | "SELLER_UNAVAILABLE" | "OUT_OF_STOCK" | null;
   allowBackorder: boolean;
+  /** Resolved GST percent for this line. Missing category rate is already 18. */
+  gstPercent: number;
   lineTotal: number;
 };
 
@@ -418,6 +421,7 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
       seller_status: string;
       variant_deleted: Date | null;
       product_deleted: Date | null;
+      gst_rate: string | null;
     }
   >(
     `select
@@ -444,12 +448,15 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
        p.continue_selling_when_out_of_stock as allow_backorder,
        s.is_vacation_mode,
        s.status as seller_status,
+       coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
        pv.deleted_at as variant_deleted,
        p.deleted_at as product_deleted
      from public.cart_items ci
      join public.product_variants pv on pv.id = ci.variant_id
      join public.products p on p.id = pv.product_id
      join public.sellers s on s.id = p.seller_id
+     left join public.categories subc on subc.id = p.subcategory_id
+     left join public.categories cat on cat.id = p.category_id
      left join public.inventory inv on inv.variant_id = pv.id
      where ci.cart_id = $1 and ci.deleted_at is null
      order by ci.created_at asc`,
@@ -497,6 +504,7 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
       available,
       unavailableReason,
       allowBackorder,
+      gstPercent: appliedGstPercent(row.gst_rate),
       lineTotal: available ? unitPrice * quantity : 0,
     };
   });

@@ -9,6 +9,7 @@ import {
   listShopProducts,
   unfollowShop,
 } from "../services/shop.service.js";
+import { resolveViewerRegion } from "../services/viewer-region.service.js";
 
 const shopsRouter = Router();
 
@@ -60,6 +61,7 @@ shopsRouter.get(
       return;
     }
 
+    const region = await resolveViewerRegion(req);
     const result = await listShopProducts(
       String(req.params.slug),
       {
@@ -72,6 +74,8 @@ shopsRouter.get(
         sort: parsed.data.sort,
         page: parsed.data.page,
         pageSize: parsed.data.pageSize,
+        viewerCity: region.city,
+        viewerState: region.state,
       },
       req.user?.id ?? null
     );

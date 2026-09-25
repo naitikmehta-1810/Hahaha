@@ -371,11 +371,11 @@ async function upsertSeller(shop: SeedShop, userId: string) {
        (id, user_id, shop_name, shop_slug, shop_tagline, description, owner_name,
         contact_phone, contact_phone_country_code, contact_email, business_address,
         categories, logo_url, banner_url, social_links, badge, response_rate,
-        status, is_vacation_mode, terms_accepted_at, created_at, updated_at)
+        status, is_vacation_mode, selling_scope, terms_accepted_at, created_at, updated_at)
      values (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
              $7, '+91', $8, $9,
              $10, $11, $12, $13::jsonb, $14, $15,
-             'active', false, now(), now() - interval '4 years', now())
+             'active', false, 'pan_india', now(), now() - interval '4 years', now())
      on conflict (shop_slug) do update set
        shop_name = excluded.shop_name,
        shop_tagline = excluded.shop_tagline,
@@ -389,6 +389,7 @@ async function upsertSeller(shop: SeedShop, userId: string) {
        badge = excluded.badge,
        response_rate = excluded.response_rate,
        status = 'active',
+       selling_scope = 'pan_india',
        created_at = excluded.created_at,
        updated_at = now()
      returning id`,

@@ -12,6 +12,7 @@ type CategoryRow = {
   name: string;
   slug: string;
   parent_id: string | null;
+  gst_rate: string | number | null;
 };
 
 export default function AdminCategoriesPage() {
@@ -22,6 +23,7 @@ export default function AdminCategoriesPage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [parentId, setParentId] = useState("");
+  const [gstRate, setGstRate] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -46,16 +48,24 @@ export default function AdminCategoriesPage() {
     setName("");
     setSlug("");
     setParentId("");
+    setGstRate("");
     setEditingId(null);
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
+    const parsedGst = gstRate.trim() === "" ? null : Number(gstRate);
+    if (parsedGst !== null && (!Number.isFinite(parsedGst) || parsedGst < 0 || parsedGst > 100)) {
+      setSaving(false);
+      setError("GST must be a percent from 0 to 100. Leave it blank to use 18%.");
+      return;
+    }
     const body: Record<string, unknown> = {
       name,
       slug: slug.trim() || undefined,
       parentId: parentId || null,
+      gstRate: parsedGst,
     };
     const result = editingId
       ? await apiRequest("PATCH", `/api/admin/categories/${editingId}`, { body })
@@ -70,7 +80,7 @@ export default function AdminCategoriesPage() {
   }
 
   async function onDelete(id: string) {
-    if (!window.confirm("Soft-delete this category?")) return;
+    if (!window.confirm("Delete this category? It will be hidden from the shop. Products already in it stay put.")) return;
     const result = await apiRequest("DELETE", `/api/admin/categories/${id}`);
     if (result.error) {
       setError(result.error);
@@ -85,7 +95,7 @@ export default function AdminCategoriesPage() {
         <div>
           <Heading level={2}>Categories</Heading>
           <Text size="sm" color="muted">
-            Create, edit, and soft-delete categories
+            Create, edit, and delete categories. Leave GST blank to charge 18% at checkout.
           </Text>
         </div>
       </div>
@@ -116,6 +126,18 @@ export default function AdminCategoriesPage() {
               ))}
           </select>
         </label>
+        <label className={styles.field}>
+          GST %
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step="0.01"
+            value={gstRate}
+            placeholder="18"
+            onChange={(e) => setGstRate(e.target.value)}
+          />
+        </label>
         <Button type="submit" size="sm" variant="primary" disabled={saving}>
           {editingId ? "Update" : "Create"}
         </Button>
@@ -137,6 +159,7 @@ export default function AdminCategoriesPage() {
                 <th>Name</th>
                 <th>Slug</th>
                 <th>Parent</th>
+                <th>GST</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -148,6 +171,7 @@ export default function AdminCategoriesPage() {
                   <td>
                     {categories.find((p) => p.id === c.parent_id)?.name ?? "—"}
                   </td>
+                  <td>{c.gst_rate == null || c.gst_rate === "" ? "18% default" : `${c.gst_rate}%`}</td>
                   <td>
                     <Button
                       size="sm"
@@ -157,6 +181,7 @@ export default function AdminCategoriesPage() {
                         setName(c.name);
                         setSlug(c.slug);
                         setParentId(c.parent_id ?? "");
+                        setGstRate(c.gst_rate == null ? "" : String(c.gst_rate));
                       }}
                     >
                       Edit

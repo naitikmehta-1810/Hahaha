@@ -331,6 +331,59 @@ export async function trackByAwb(awb: string): Promise<{
   return srFetch(`/courier/track/awb/${encodeURIComponent(awb)}`, { method: "GET" });
 }
 
+export type AddPickupInput = {
+  pickupLocation: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  address2?: string | null;
+  city: string;
+  state: string;
+  pinCode: string;
+};
+
+/**
+ * Creates a pickup location on the Shiprocket account.
+ * If the nickname already exists, that is treated as success (re-saving Shop Setup).
+ */
+export async function addPickupLocation(input: AddPickupInput) {
+  const phone = input.phone.replace(/\D/g, "").slice(-10);
+  const payload = {
+    pickup_location: input.pickupLocation,
+    name: input.name,
+    email: input.email,
+    phone,
+    address: input.address,
+    address_2: input.address2?.trim() || "",
+    city: input.city,
+    state: input.state,
+    country: "India",
+    pin_code: input.pinCode,
+  };
+  try {
+    const data = await srFetch<{
+      success?: boolean;
+      pickup_id?: number;
+      address?: { id?: number };
+      message?: string;
+    }>("/settings/company/addpickup", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return {
+      alreadyExists: false,
+      pickupId: data.pickup_id ?? data.address?.id ?? null,
+    };
+  } catch (error) {
+    const msg = error instanceof AppError ? error.message : "";
+    if (/already|exist|taken|duplicate/i.test(msg)) {
+      return { alreadyExists: true, pickupId: null };
+    }
+    throw error;
+  }
+}
+
 export async function cancelShiprocketOrders(ids: number[]) {
   return srFetch<{ message?: string }>("/orders/cancel", {
     method: "POST",

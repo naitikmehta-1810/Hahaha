@@ -35,14 +35,18 @@ export async function cacheSetJson(key: string, value: unknown, ttlSeconds: numb
   }
 }
 
-/** Drop list + category caches after seller mutates catalog. */
+/** Drop list + category caches after seller mutates catalog. Uses SCAN so Redis stays responsive. */
 export async function invalidateCatalogCaches() {
   try {
     const redis = getRedis();
-    const keys = await redis.keys(`${PREFIX}*`);
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    let cursor = "0";
+    do {
+      const [next, keys] = await redis.scan(cursor, "MATCH", `${PREFIX}*`, "COUNT", 200);
+      cursor = next;
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } while (cursor !== "0");
   } catch {
     /* ignore */
   }

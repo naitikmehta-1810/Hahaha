@@ -393,6 +393,57 @@
   line-height: 1.4;
 }
 
+.formStack {
+  display: grid;
+  gap: 12px;
+  max-width: 480px;
+  width: 100%;
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-main);
+}
+
+.formField input,
+.formField select,
+.formField textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-dark);
+  border-radius: var(--radius-md);
+  background: #fff;
+  color: var(--color-text-main);
+  font: inherit;
+  font-weight: 500;
+}
+
+.formField input:focus,
+.formField select:focus,
+.formField textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+
+.prefRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.prefHint {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
 .activeBadge {
   background-color: var(--color-success-bg);
   color: var(--color-success);

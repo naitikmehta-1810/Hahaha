@@ -145,9 +145,10 @@ function buildInvoicePdf(data: InvoiceData): Promise<Buffer> {
       doc.text(`Discount: -${inr(data.discountAmount)}`, { align: "right" });
     }
     doc.text(`Shipping: ${inr(data.shippingAmount)}`, { align: "right" });
-    doc.text(`Tax (${Math.round(data.taxRate * 100)}%): ${inr(data.taxAmount)}`, {
-      align: "right",
-    });
+    doc.text(
+      `GST (${Number((data.taxRate * 100).toFixed(2))}%): ${inr(data.taxAmount)}`,
+      { align: "right" }
+    );
     doc.fillColor("#111827").fontSize(12).text(`Total: ${inr(data.totalAmount)}`, {
       align: "right",
     });

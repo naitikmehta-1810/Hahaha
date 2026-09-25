@@ -4,6 +4,7 @@ import { AppError } from "../utils/errors.js";
 import { transition, type OrderStatus } from "./order-state-machine.js";
 import { enqueueEmailJob, enqueueWhatsAppJob } from "./notify.enqueue.js";
 import {
+  addPickupLocation,
   assignAwb,
   cancelShiprocketOrders,
   createAdhocOrder,
@@ -30,6 +31,7 @@ export type PickupAddress = {
   city: string;
   state: string;
   pincode: string;
+  email?: string | null;
   /** Shiprocket pickup location nickname (defaults to shop name). */
   pickupLocationName?: string | null;
 };
@@ -40,16 +42,49 @@ export type TrackingEvent = {
   location: string;
 };
 
-function isPickupComplete(pickup: PickupAddress | null | undefined): pickup is PickupAddress {
+function isPickupComplete(
+  pickup: PickupAddress | null | undefined
+): pickup is PickupAddress & { email: string; pickupLocationName: string } {
   if (!pickup) return false;
+  const phone = String(pickup.phone ?? "").replace(/\D/g, "");
   return Boolean(
     pickup.name?.trim() &&
-      pickup.phone?.trim() &&
+      pickup.email?.includes("@") &&
+      phone.length >= 10 &&
       pickup.address1?.trim() &&
       pickup.city?.trim() &&
       pickup.state?.trim() &&
+      pickup.pickupLocationName?.trim() &&
       /^\d{6}$/.test(String(pickup.pincode).trim())
   );
+}
+
+/**
+ * Register the seller pickup on Shiprocket (addpickup). Stub mode skips the API.
+ */
+export async function syncSellerPickupToShiprocket(pickup: PickupAddress) {
+  const nickname = pickup.pickupLocationName?.trim() ?? "";
+  if (env.SHIPPING_MODE !== "shiprocket") {
+    return { synced: false as const, mode: "stub" as const, pickupLocation: nickname };
+  }
+  const result = await addPickupLocation({
+    pickupLocation: nickname,
+    name: pickup.name.trim(),
+    email: (pickup.email ?? "").trim(),
+    phone: pickup.phone,
+    address: pickup.address1.trim(),
+    address2: pickup.address2,
+    city: pickup.city.trim(),
+    state: pickup.state.trim(),
+    pinCode: pickup.pincode.trim(),
+  });
+  return {
+    synced: true as const,
+    mode: "shiprocket" as const,
+    alreadyExists: result.alreadyExists,
+    pickupId: result.pickupId,
+    pickupLocation: nickname.trim(),
+  };
 }
 
 function parseAddressBlob(raw: unknown): {
@@ -231,12 +266,11 @@ async function bookShiprocketAwb(opts: {
   if (!order.rows[0]) throw new AppError(404, "ORDER_NOT_FOUND", "Order not found");
 
   const seller = await pool.query<{
-    shop_name: string;
     pickup_address: PickupAddress | null;
     contact_email: string | null;
     contact_phone: string | null;
   }>(
-    `select shop_name, pickup_address, contact_email, contact_phone
+    `select pickup_address, contact_email, contact_phone
      from public.sellers where id = $1`,
     [opts.sellerId]
   );
@@ -245,7 +279,7 @@ async function bookShiprocketAwb(opts: {
     throw new AppError(
       409,
       "PICKUP_ADDRESS_REQUIRED",
-      "Add a complete pickup address (name, phone, address, city, state, 6-digit pincode) in Shop Setup before shipping."
+      "Add a complete pickup address in Shop Setup → Shipping (nickname, contact name, email, 10-digit phone, address, city, state, 6-digit pincode). Saving registers it on Shiprocket."
     );
   }
 
@@ -340,15 +374,18 @@ async function bookShiprocketAwb(opts: {
     throw new AppError(409, "INVALID_PHONE", "A valid 10-digit phone is required to book courier");
   }
 
-  const pickupLocation =
-    pickup.pickupLocationName?.trim() ||
-    seller.rows[0].shop_name.slice(0, 36) ||
-    "Primary";
-
   const nameParts = addr.fullName.split(/\s+/);
   const firstName = nameParts[0] ?? "Customer";
   const lastName = nameParts.slice(1).join(" ") || ".";
 
+  const pickupLocation = pickup.pickupLocationName.trim();
+  if (!pickupLocation) {
+    throw new AppError(
+      409,
+      "PICKUP_LOCATION_REQUIRED",
+      "Set a Shiprocket pickup nickname in Shop Setup → Shipping. Saving the form registers it on Shiprocket."
+    );
+  }
   const paymentMethod =
     order.rows[0].payment_method === "cod" ? ("COD" as const) : ("Prepaid" as const);
 

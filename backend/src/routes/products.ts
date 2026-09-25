@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../config/db.js";
 import { asyncHandler } from "../middleware/async-handler.js";
-import { requireAuth } from "../middleware/requireAuth.js";
+import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
 import {
   getProductBySlug,
   getRelatedProducts,
@@ -11,6 +11,7 @@ import {
 } from "../services/catalog.service.js";
 import { subscribeStockNotification } from "../services/stock-notifications.service.js";
 import { publicReadLimiter } from "../middleware/auth-rate-limit.js";
+import { canSellToState, resolveViewerRegion } from "../services/viewer-region.service.js";
 
 const productsRouter = Router();
 
@@ -53,6 +54,7 @@ const listQuerySchema = z.object({
 
 productsRouter.get(
   "/",
+  optionalAuth,
   asyncHandler(async (req, res) => {
     const parsed = listQuerySchema.safeParse(req.query);
     if (!parsed.success) {
@@ -60,6 +62,7 @@ productsRouter.get(
       return;
     }
 
+    const region = await resolveViewerRegion(req);
     const result = await listProducts({
       categorySlug: parsed.data.category ?? null,
       categoryId: parsed.data.categoryId ?? null,
@@ -73,6 +76,8 @@ productsRouter.get(
       sort: parsed.data.sort as ProductSort | undefined,
       page: parsed.data.page,
       pageSize: parsed.data.pageSize,
+      viewerCity: region.city,
+      viewerState: region.state,
     });
 
     res.json(result);
@@ -86,6 +91,7 @@ productsRouter.get(
  */
 productsRouter.get(
   "/related",
+  optionalAuth,
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
@@ -110,10 +116,12 @@ productsRouter.get(
       categoryIds = categories.rows.map((row) => row.category_id);
     }
 
+    const region = await resolveViewerRegion(req);
     const products = await getRelatedProducts(
       categoryIds,
       productIds,
-      parsed.data.limit ?? 5
+      parsed.data.limit ?? 5,
+      region.state
     );
     res.json({ products });
   })
@@ -144,9 +152,14 @@ productsRouter.post(
 
 productsRouter.get(
   "/:slug",
+  optionalAuth,
   asyncHandler(async (req, res) => {
     const product = await getProductBySlug(String(req.params.slug));
-    if (!product) {
+    const region = await resolveViewerRegion(req);
+    if (
+      !product ||
+      !canSellToState(product.seller.sellingScope, product.seller.sellingState, region.state)
+    ) {
       res.status(404).json({ message: "Product not found" });
       return;
     }

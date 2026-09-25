@@ -455,7 +455,7 @@ export default function OrderDetailsPage() {
               </span>
             </div>
             <div className={styles.row}>
-              <span>Tax ({Math.round(order.taxRate * 100)}%)</span>
+              <span>GST ({Number((order.taxRate * 100).toFixed(2))}%)</span>
               <span>₹{order.taxAmount.toLocaleString("en-IN")}</span>
             </div>
             <div className={styles.rowBold}>
