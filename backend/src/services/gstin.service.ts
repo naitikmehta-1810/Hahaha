@@ -121,7 +121,12 @@ async function lookupGstin(gstin: string): Promise<GstRecord | null> {
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        Origin: "https://www.mastersindia.co",
+        Referer: "https://www.mastersindia.co/",
+        "User-Agent": "Mozilla/5.0",
+      },
     });
     const json = (await res.json().catch(() => null)) as unknown;
     if (!res.ok) {
@@ -144,9 +149,16 @@ async function lookupGstin(gstin: string): Promise<GstRecord | null> {
   }
 }
 
-/** Checksum plus a live GSTIN lookup. Active registrations only. */
+const verifiedCache = new Map<string, { value: VerifiedGstin; at: number }>();
+const VERIFIED_TTL_MS = 30 * 60 * 1000;
+
+/** Checksum plus a live GSTIN lookup. Active registrations only. Successful checks are reused for 30 minutes so shop creation does not call the service again. */
 export async function verifyGstin(raw: string): Promise<VerifiedGstin> {
   const gstin = assertGstinFormat(raw);
+  const cached = verifiedCache.get(gstin);
+  if (cached && Date.now() - cached.at < VERIFIED_TTL_MS) {
+    return cached.value;
+  }
   const record = await lookupGstin(gstin);
   const status = String(record?.sts ?? "").trim();
   const legalName = String(record?.lgnm ?? record?.tradeNam ?? "").trim();
@@ -168,11 +180,13 @@ export async function verifyGstin(raw: string): Promise<VerifiedGstin> {
   }
 
   const addr = record.pradr?.addr;
-  return {
+  const verified: VerifiedGstin = {
     gstin,
     legalName,
     status: status || "Active",
     state: GST_STATE_BY_CODE[gstin.slice(0, 2)] ?? addr?.stcd ?? "",
     city: addr?.dst || addr?.loc || addr?.city || null,
   };
+  verifiedCache.set(gstin, { value: verified, at: Date.now() });
+  return verified;
 }

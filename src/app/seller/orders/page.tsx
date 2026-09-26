@@ -11,6 +11,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
 import { formatOrderStatusLabel } from "@/utils/cart";
 import { fetchSellerOrders, type SellerOrderListItem } from "@/utils/seller";
+import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
 import styles from "../seller.module.css";
 
 export default function SellerOrdersPage() {
@@ -67,25 +68,32 @@ export default function SellerOrdersPage() {
           <Link
             key={order.id}
             href={`/seller/orders/${order.id}`}
-            className={styles.listRow}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 12,
-              padding: "14px 0",
-              borderBottom: "1px solid var(--color-border, #e5e7eb)",
-              textDecoration: "none",
-              color: "inherit",
-            }}
+            className={styles.orderRow}
           >
-            <div>
-              <div style={{ fontWeight: 700 }}>{order.orderNumber}</div>
+            <div className={styles.orderMain}>
+              <div className={styles.orderNumber}>{order.orderNumber}</div>
+              {order.itemNames ? (
+                <div className={styles.orderItems}>{order.itemNames}</div>
+              ) : null}
+              {order.items.length > 0 ? (
+                <div className={styles.orderThumbs}>
+                  {order.items.slice(0, 4).map((item, index) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={`${item.title}-${index}`}
+                      src={item.imageUrl || FALLBACK_PRODUCT_IMAGE}
+                      alt={item.title}
+                      className={styles.orderThumb}
+                    />
+                  ))}
+                </div>
+              ) : null}
               <Text size="sm" color="muted">
                 {formatOrderStatusLabel(order.status)} ·{" "}
                 {new Date(order.createdAt).toLocaleString("en-IN")}
               </Text>
             </div>
-            <div style={{ fontWeight: 700 }}>
+            <div className={styles.orderTotal}>
               ₹{order.sellerLineTotal.toLocaleString("en-IN")}
             </div>
           </Link>

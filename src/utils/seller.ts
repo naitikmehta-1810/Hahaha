@@ -53,7 +53,15 @@ export async function fetchMySeller() {
 }
 
 export async function updateMyShop(body: Record<string, unknown>) {
-  return apiRequest<{ seller: Partial<SellerProfile> }>("PATCH", "/api/seller/shop", { body });
+  return apiRequest<{
+    seller: Partial<SellerProfile>;
+    pickupSync?: {
+      synced?: boolean;
+      alreadyExists?: boolean;
+      pickupLocation?: string;
+      mode?: string;
+    };
+  }>("PATCH", "/api/seller/shop", { body });
 }
 
 export type SellerDashboard = {
@@ -96,6 +104,8 @@ export type SellerOrderListItem = {
   status: string;
   createdAt: string;
   sellerLineTotal: number;
+  itemNames: string;
+  items: Array<{ title: string; imageUrl: string | null }>;
 };
 
 export async function fetchSellerOrders(page = 1) {
@@ -117,6 +127,7 @@ export type SellerOrderDetail = {
     id: string;
     productId: string;
     title: string;
+    imageUrl: string | null;
     quantity: number;
     unitPrice: number;
     lineTotal: number;
@@ -130,12 +141,22 @@ export type SellerOrderDetail = {
     courierUrl: string | null;
     labelUrl: string | null;
     trackingEvents: Array<{ date: string; activity: string; location: string }>;
+    accepted: boolean;
+    canAccept: boolean;
     canShip: boolean;
   } | null;
 };
 
 export async function fetchSellerOrder(orderId: string) {
   return apiRequest<{ order: SellerOrderDetail }>("GET", `/api/seller/orders/${orderId}`);
+}
+
+export async function acceptSellerOrder(orderId: string) {
+  return apiRequest<{ alreadyAccepted: boolean; orderStatus: string }>(
+    "POST",
+    `/api/seller/orders/${orderId}/accept`,
+    { body: {} }
+  );
 }
 
 export async function shipSellerOrder(orderId: string) {

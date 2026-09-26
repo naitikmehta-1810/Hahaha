@@ -9,6 +9,8 @@ import Button from "@/components/ui/Button/Button";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
+import { pickupNicknameFromShop } from "@/utils/pickup";
+import { FALLBACK_SHOP_LOGO } from "@/utils/media";
 import { fetchMySeller, updateMyShop, type SellerProfile } from "@/utils/seller";
 import { shopHref } from "@/utils/catalog";
 import { apiRequest } from "@/utils/api-client";
@@ -40,6 +42,8 @@ export default function ShopSetupPage() {
   const [tab, setTab] = useState<TabKey>("information");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [gstNote, setGstNote] = useState<string | null>(null);
+  const [gstVerified, setGstVerified] = useState<string | null>(null);
   const [uploading, setUploading] = useState<"logo" | "banner" | null>(null);
   const [form, setForm] = useState({
     shopName: "",
@@ -108,7 +112,8 @@ export default function ShopSetupPage() {
         pickupCity: profile.pickupAddress?.city || "",
         pickupState: profile.pickupAddress?.state || "",
         pickupPincode: profile.pickupAddress?.pincode || "",
-        pickupLocationName: profile.pickupAddress?.pickupLocationName || "",
+        pickupLocationName:
+          profile.pickupAddress?.pickupLocationName || pickupNicknameFromShop(profile.shopName),
         pickupEmail: profile.pickupAddress?.email || profile.contactEmail || "",
         gstin: profile.gstin || "",
       });
@@ -149,7 +154,56 @@ export default function ShopSetupPage() {
     }
   };
 
+  useEffect(() => {
+    const value = form.gstin.trim().toUpperCase();
+    const alreadySaved =
+      seller?.gstin &&
+      seller.gstin.toUpperCase() === value &&
+      seller.sellingScope === "pan_india";
+    if (alreadySaved) {
+      setGstVerified(value);
+      setGstNote(null);
+      return;
+    }
+    if (value.length !== 15) {
+      setGstVerified(null);
+      setGstNote(null);
+      return;
+    }
+    let cancelled = false;
+    setGstNote("Checking GSTIN…");
+    setGstVerified(null);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const result = await apiRequest<{ legalName: string; state: string }>(
+          "POST",
+          "/api/seller/gstin/verify",
+          { body: { gstin: value }, skipRefresh: true }
+        );
+        if (cancelled) return;
+        if (result.error || !result.data) {
+          setGstVerified(null);
+          setGstNote(result.error ?? "Could not verify this GSTIN.");
+          return;
+        }
+        setGstVerified(value);
+        setGstNote(`${result.data.legalName} · ${result.data.state}. This shop can sell across India after you save.`);
+      })();
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [form.gstin, seller?.gstin, seller?.sellingScope]);
+
   const save = async () => {
+    const typedGstin = form.gstin.trim().toUpperCase();
+    const gstChanged = Boolean(typedGstin) && typedGstin !== (seller?.gstin ?? "").toUpperCase();
+    if (gstChanged && gstVerified !== typedGstin) {
+      setSaving(false);
+      setMessage(gstNote && gstNote !== "Checking GSTIN…" ? gstNote : "Enter a GSTIN and wait until it is verified.");
+      return;
+    }
     setSaving(true);
     setMessage(null);
     const pickupStarted = Boolean(
@@ -437,9 +491,12 @@ export default function ShopSetupPage() {
                   ) : (
                     <div className={styles.previewBanner} />
                   )}
-                  {form.logoUrl ? (
-                    <img src={form.logoUrl} alt="" className={styles.previewLogo} />
-                  ) : null}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={form.logoUrl || FALLBACK_SHOP_LOGO}
+                    alt=""
+                    className={styles.previewLogo}
+                  />
                   <p>
                     <strong>{form.shopName || seller.shopName}</strong>
                     {form.isVacationMode ? (
@@ -592,6 +649,7 @@ export default function ShopSetupPage() {
                     }
                     className={styles.control}
                   />
+                  {gstNote ? <p className={styles.muted}>{gstNote}</p> : null}
                 </>
               )}
               <h3 className={styles.cardTitle}>Pickup address (courier)</h3>
@@ -611,6 +669,9 @@ export default function ShopSetupPage() {
                 }
                 className={styles.control}
               />
+              <p className={styles.muted}>
+                Starts as your shop name. This is the pickup name shown in Shiprocket.
+              </p>
               <label className={styles.fieldLabel}>Contact name*</label>
               <input
                 value={form.pickupName}

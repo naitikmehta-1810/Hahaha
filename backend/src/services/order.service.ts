@@ -1041,7 +1041,7 @@ export async function restoreInventoryForCancelledOrder(client: PoolClient, orde
   return items.rows.length;
 }
 
-const CANCELLABLE_STATUSES = ["pending_payment", "paid", "processing"] as const;
+const CANCELLABLE_STATUSES = ["pending_payment", "paid", "processing", "accepted"] as const;
 
 export async function cancelOrderForUser(
   userId: string,
@@ -1110,7 +1110,7 @@ export async function cancelOrderForUser(
 
     if (status === "pending_payment") {
       await releaseReservationsForOrder(client, orderId);
-    } else if (status === "paid" || status === "processing") {
+    } else if (status === "paid" || status === "processing" || status === "accepted") {
       await restoreInventoryForCancelledOrder(client, orderId);
     }
 
@@ -1122,7 +1122,7 @@ export async function cancelOrderForUser(
     client.release();
   }
 
-  if (priorStatus === "paid" || priorStatus === "processing") {
+  if (priorStatus === "paid" || priorStatus === "processing" || priorStatus === "accepted") {
     try {
       const { refundPayment } = await import("./payment.service.js");
       await refundPayment(

@@ -23,5 +23,6 @@ export const SELL_STEP_IMAGES = [
 ] as const;
 
 export const FALLBACK_AVATAR_IMAGE = cdnImage("stuffsy/ui/avatar-fallback");
-export const FALLBACK_SHOP_LOGO = cdnImage("stuffsy/ui/shop-logo-fallback");
+/** Shops without an uploaded logo use the Stuffsy mark. */
+export const FALLBACK_SHOP_LOGO = "/brand/stuffsy-logo.png";
 export const FALLBACK_SHOP_BANNER = cdnImage("stuffsy/ui/shop-banner-fallback");

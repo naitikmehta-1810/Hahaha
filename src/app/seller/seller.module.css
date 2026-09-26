@@ -94,8 +94,100 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
+  object-fit: contain;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+}
+
+.orderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  text-decoration: none;
+  color: inherit;
+}
+
+.orderMain {
+  min-width: 0;
+}
+
+.orderNumber {
+  font-weight: 700;
+}
+
+.orderItems {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.orderThumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.orderThumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
   object-fit: cover;
-  background: var(--color-bg);
+  background: #f4f1fa;
+  border: 1px solid var(--color-border);
+}
+
+.orderActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lineItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.lineImage {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #f4f1fa;
+}
+
+.lineBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.lineTitle {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.linePrice {
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.orderTotal {
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .orderRow {
+    flex-direction: column;
+    gap: 6px;
+  }
 }
 
 .shopName {
@@ -535,7 +627,9 @@ textarea.control {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  object-fit: cover;
+  object-fit: contain;
+  padding: 6px;
+  background: #fff;
   margin-top: -32px;
   margin-left: 14px;
   border: 3px solid #fff;

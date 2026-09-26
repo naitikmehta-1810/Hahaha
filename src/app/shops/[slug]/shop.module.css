@@ -48,9 +48,10 @@
   width: 88px;
   height: 88px;
   border-radius: 50%;
-  object-fit: cover;
+  object-fit: contain;
+  padding: 8px;
   border: 3px solid var(--color-primary-light);
-  background: var(--color-bg);
+  background: #fff;
 }
 
 .shopName {

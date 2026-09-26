@@ -1,12 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import {
-  ArrowRight,
   Eye,
+  EyeOff,
   Headset,
   Lock,
   Mail,
@@ -66,6 +67,8 @@ function AuthPageInner({ mode }: AuthPageProps) {
   const { setUser } = useAuth();
   const [status, setStatus] = useState<{ type: "error" | "success"; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [providers, setProviders] = useState<{ google: boolean; facebook: boolean }>({
     google: false,
     facebook: false,
@@ -187,27 +190,15 @@ function AuthPageInner({ mode }: AuthPageProps) {
             </p>
           </div>
 
-          <div
-            className={`${styles.illustration} ${
-              isSignIn ? styles.signInIllustration : styles.signUpIllustration
-            }`}
-          >
-            {isSignIn ? (
-              <>
-                <div className={styles.macrame} />
-                <div className={styles.vase} />
-                <div className={styles.candle} />
-                <div className={styles.pot} />
-              </>
-            ) : (
-              <>
-                <div className={styles.vaseTall} />
-                <div className={styles.lavender} />
-                <div className={styles.bag} />
-                <div className={styles.purpleCandle} />
-              </>
-            )}
-            <span className={styles.dots} />
+          <div className={styles.art}>
+            <Image
+              src={isSignIn ? "/auth/login-decor.png" : "/auth/signup-decor.png"}
+              alt=""
+              width={isSignIn ? 761 : 474}
+              height={isSignIn ? 886 : 554}
+              className={styles.artImage}
+              priority
+            />
           </div>
 
           <ul className={styles.featureList}>
@@ -300,12 +291,19 @@ function AuthPageInner({ mode }: AuthPageProps) {
                   <input
                     required
                     name="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder={isSignIn ? "Enter your password" : "Create a password"}
                     className={styles.input}
+                    autoComplete={isSignIn ? "current-password" : "new-password"}
                   />
-                  <button type="button" className={styles.eyeButton} aria-label="Show password">
-                    <Eye size={18} />
+                  <button
+                    type="button"
+                    className={styles.eyeButton}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((visible) => !visible)}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </label>
@@ -315,15 +313,22 @@ function AuthPageInner({ mode }: AuthPageProps) {
                   <span>Confirm Password</span>
                   <div className={styles.inputWrap}>
                     <Lock className={styles.inputIcon} size={18} />
-                    <input
+                      <input
                       required
                       name="confirmPassword"
-                      type="password"
+                      type={showConfirmPassword ? "text" : "password"}
                       placeholder="Confirm your password"
                       className={styles.input}
+                      autoComplete="new-password"
                     />
-                    <button type="button" className={styles.eyeButton} aria-label="Show confirm password">
-                      <Eye size={18} />
+                    <button
+                      type="button"
+                      className={styles.eyeButton}
+                      aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                      aria-pressed={showConfirmPassword}
+                      onClick={() => setShowConfirmPassword((visible) => !visible)}
+                    >
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
                 </label>
@@ -356,8 +361,7 @@ function AuthPageInner({ mode }: AuthPageProps) {
               )}
 
               <button type="submit" className={styles.primaryButton} disabled={isSubmitting}>
-                <span>{isSubmitting ? "Please wait..." : isSignIn ? "Sign In" : "Create Account"}</span>
-                <ArrowRight size={20} />
+                {isSubmitting ? "Please wait..." : isSignIn ? "Sign In" : "Create Account"}
               </button>
 
               <div className={styles.divider}>
@@ -414,11 +418,19 @@ function AuthPageInner({ mode }: AuthPageProps) {
                 </Link>
               </p>
 
-              <p className={styles.legalText}>
-                {isSignIn
-                  ? "By signing in, you agree to our Terms & Conditions and Privacy Policy."
-                  : "By creating an account, you agree to our Terms & Conditions and Privacy Policy."}
-              </p>
+              {isSignIn && (
+                <p className={styles.legalText}>
+                  By signing in, you agree to our{" "}
+                  <a href="#" className={styles.link}>
+                    Terms &amp; Conditions
+                  </a>{" "}
+                  and{" "}
+                  <a href="#" className={styles.link}>
+                    Privacy Policy
+                  </a>
+                  .
+                </p>
+              )}
             </form>
           </div>
         </section>

@@ -6,6 +6,7 @@ export const ORDER_STATUSES = [
   "pending_payment",
   "paid",
   "processing",
+  "accepted",
   "shipped",
   "out_for_delivery",
   "delivered",
@@ -22,9 +23,10 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
  * `out_for_delivery` is its own state rather than a sub-state of `shipped`, because
  * the tracking stepper has a dedicated stage for it and needs a real status to bind to.
  *
- * Cancellation is legal from pending_payment, paid, and processing. After ship,
- * customers must open a return request instead. Paid/processing cancels restore
- * captured stock and trigger a refund outside the status flip.
+ * After payment the order is processing. The seller accepts it, then ships when
+ * the item is ready. Cancellation is legal through accepted. After ship,
+ * customers must open a return request instead. Paid, processing, and accepted
+ * cancels restore captured stock and trigger a refund outside the status flip.
  *
  * `refunded` is reached after a successful gateway refund from cancelled (buyer cancel)
  * or from returned (return-approved refund). Delivered returns still go delivered→returned first.
@@ -34,7 +36,8 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const ORDER_TRANSITIONS: Readonly<Record<OrderStatus, readonly OrderStatus[]>> = {
   pending_payment: ["paid", "cancelled"],
   paid: ["processing", "cancelled"],
-  processing: ["shipped", "cancelled"],
+  processing: ["accepted", "cancelled"],
+  accepted: ["shipped", "cancelled"],
   shipped: ["out_for_delivery"],
   out_for_delivery: ["delivered"],
   delivered: ["returned"],
@@ -51,6 +54,7 @@ export const ORDER_TRANSITIONS: Readonly<Record<OrderStatus, readonly OrderStatu
 export const ORDER_TRACKING_STAGES = [
   { key: "confirmed", label: "Order Confirmed", statuses: ["pending_payment", "paid"] },
   { key: "processed", label: "Processed", statuses: ["processing"] },
+  { key: "accepted", label: "Accepted", statuses: ["accepted"] },
   { key: "shipped", label: "Shipped", statuses: ["shipped"] },
   { key: "out_for_delivery", label: "Out for Delivery", statuses: ["out_for_delivery"] },
   { key: "delivered", label: "Delivered", statuses: ["delivered"] },
@@ -61,6 +65,7 @@ const STATUS_NOTES: Readonly<Record<OrderStatus, string>> = {
   pending_payment: "We have received your order.",
   paid: "Payment confirmed for your order.",
   processing: "Your order is being prepared.",
+  accepted: "The seller accepted your order and will ship it when it is ready.",
   shipped: "Your order has been shipped.",
   out_for_delivery: "Your order is out for delivery.",
   delivered: "Your order has been delivered.",

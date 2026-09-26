@@ -72,3 +72,13 @@ export const reviewWriteLimiter = rateLimit({
   message: { message: "Too many review submissions. Try again later." },
   ...withStore("review"),
 });
+
+/** Public GSTIN lookup — limited so the seller form can check while typing. */
+export const gstinLookupLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: env.NODE_ENV === "production" ? 20 : 80,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many GST checks. Wait a few minutes and try again." },
+  ...withStore("gstin"),
+});

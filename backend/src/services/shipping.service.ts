@@ -587,7 +587,101 @@ async function bookShiprocketAwb(opts: {
 }
 
 /**
+ * Seller accepts their part of an order. The order moves processing → accepted
+ * only after every seller on the order has accepted. Shipping stays closed until then.
+ */
+export async function acceptSellerOrder(orderId: string, sellerId: string, actorUserId?: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+
+    const order = await client.query<{ status: string }>(
+      `select status from public.orders where id = $1 for update`,
+      [orderId]
+    );
+    const status = order.rows[0]?.status;
+    if (!status) {
+      throw new AppError(404, "ORDER_NOT_FOUND", "Order not found");
+    }
+    if (!["paid", "processing", "accepted"].includes(status)) {
+      throw new AppError(409, "ORDER_NOT_ACCEPTABLE", "This order can no longer be accepted");
+    }
+
+    const shipment = await client.query<{ id: string; accepted_at: Date | null }>(
+      `select id, accepted_at
+       from public.shipments
+       where order_id = $1 and seller_id = $2
+       for update`,
+      [orderId, sellerId]
+    );
+    const row = shipment.rows[0];
+    if (!row) {
+      throw new AppError(
+        409,
+        "ORDER_NOT_READY",
+        "This order is not ready to accept yet. Wait until payment is confirmed."
+      );
+    }
+
+    const alreadyAccepted = Boolean(row.accepted_at);
+    if (!alreadyAccepted) {
+      await client.query(
+        `update public.shipments
+         set accepted_at = now(), updated_at = now()
+         where id = $1`,
+        [row.id]
+      );
+    }
+
+    const remaining = await client.query<{ c: string }>(
+      `select count(*)::text as c
+       from public.shipments
+       where order_id = $1 and accepted_at is null`,
+      [orderId]
+    );
+
+    let orderStatus = status;
+    if (orderStatus === "paid") {
+      await transition(
+        orderId,
+        "processing",
+        {
+          reason: "seller_accept",
+          actorUserId,
+          note: "Order is being prepared.",
+        },
+        client
+      );
+      orderStatus = "processing";
+    }
+
+    if (Number(remaining.rows[0]?.c ?? 1) === 0 && orderStatus === "processing") {
+      await transition(
+        orderId,
+        "accepted",
+        {
+          reason: "seller_accept",
+          actorUserId,
+          note: "The seller accepted the order and will ship it when it is ready.",
+        },
+        client
+      );
+      orderStatus = "accepted";
+    }
+
+    await client.query("commit");
+    return { alreadyAccepted, orderStatus };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Seller Ship now — book AWB (Shiprocket or stub) and mark shipment in transit.
+ * Allowed only after the order has been accepted.
  */
 export async function shipSellerShipment(orderId: string, sellerId: string) {
   const shipment = await pool.query<{
@@ -617,8 +711,12 @@ export async function shipSellerShipment(orderId: string, sellerId: string) {
     `select status from public.orders where id = $1`,
     [orderId]
   );
-  if (!["paid", "processing"].includes(orderStatus.rows[0]?.status ?? "")) {
-    throw new AppError(409, "ORDER_NOT_SHIPPABLE", "Order is not ready to ship");
+  if (orderStatus.rows[0]?.status !== "accepted") {
+    throw new AppError(
+      409,
+      "ORDER_NOT_SHIPPABLE",
+      "Accept the order first. You can ship it once it is ready."
+    );
   }
 
   const booked =

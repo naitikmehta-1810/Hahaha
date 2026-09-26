@@ -10,10 +10,12 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
 import { formatOrderStatusLabel } from "@/utils/cart";
 import {
+  acceptSellerOrder,
   fetchSellerOrder,
   shipSellerOrder,
   type SellerOrderDetail,
 } from "@/utils/seller";
+import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
 import styles from "../../seller.module.css";
 
 export default function SellerOrderDetailPage() {
@@ -23,6 +25,7 @@ export default function SellerOrderDetailPage() {
   const { isAuthenticated, status: authStatus } = useAuth();
   const [order, setOrder] = useState<SellerOrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [accepting, setAccepting] = useState(false);
   const [shipping, setShipping] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -46,6 +49,23 @@ export default function SellerOrderDetailPage() {
     }
     void load();
   }, [authStatus, isAuthenticated, load, orderId]);
+
+  const onAccept = async () => {
+    setAccepting(true);
+    setMessage(null);
+    const result = await acceptSellerOrder(orderId);
+    setAccepting(false);
+    if (result.error) {
+      setMessage(result.error);
+      return;
+    }
+    setMessage(
+      result.data?.orderStatus === "accepted"
+        ? "Order accepted. Ship it when the item is ready."
+        : "You accepted your part of this order."
+    );
+    await load();
+  };
 
   const onShip = async () => {
     setShipping(true);
@@ -98,14 +118,29 @@ export default function SellerOrderDetailPage() {
       <div className={styles.headerRow}>
         <div>
           <Heading level={2}>{order.orderNumber}</Heading>
+          <div className={styles.orderItems}>
+            {order.items.map((item) => item.title).filter(Boolean).join(", ")}
+          </div>
           <Text color="muted">{formatOrderStatusLabel(order.status)}</Text>
         </div>
-        {order.shipment?.canShip ? (
-          <Button variant="primary" disabled={shipping} onClick={() => void onShip()}>
-            {shipping ? "Booking…" : "Ship now"}
-          </Button>
-        ) : null}
+        <div className={styles.orderActions}>
+          {order.shipment?.canAccept ? (
+            <Button variant="primary" disabled={accepting} onClick={() => void onAccept()}>
+              {accepting ? "Accepting…" : "Accept order"}
+            </Button>
+          ) : null}
+          {order.shipment?.canShip ? (
+            <Button variant="primary" disabled={shipping} onClick={() => void onShip()}>
+              {shipping ? "Booking…" : "Ship now"}
+            </Button>
+          ) : null}
+        </div>
       </div>
+      {order.shipment?.accepted && order.status === "processing" ? (
+        <Text size="sm" color="muted">
+          You accepted your items. Shipping opens once every shop on this order has accepted.
+        </Text>
+      ) : null}
 
       {message ? (
         <Text size="sm" style={{ marginBottom: 12 }}>
@@ -116,23 +151,21 @@ export default function SellerOrderDetailPage() {
       <section className={styles.card} style={{ marginBottom: 16 }}>
         <Heading level={4}>Your items</Heading>
         {order.items.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "10px 0",
-              borderBottom: "1px solid #eee",
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 600 }}>{item.title}</div>
+          <div key={item.id} className={styles.lineItem}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={item.imageUrl || FALLBACK_PRODUCT_IMAGE}
+              alt=""
+              className={styles.lineImage}
+            />
+            <div className={styles.lineBody}>
+              <div className={styles.lineTitle}>{item.title}</div>
               <Text size="sm" color="muted">
                 Qty {item.quantity}
                 {item.variantLabel ? ` · ${item.variantLabel}` : ""}
               </Text>
             </div>
-            <div>₹{item.lineTotal.toLocaleString("en-IN")}</div>
+            <div className={styles.linePrice}>₹{item.lineTotal.toLocaleString("en-IN")}</div>
           </div>
         ))}
       </section>

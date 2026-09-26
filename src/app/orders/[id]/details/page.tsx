@@ -211,7 +211,7 @@ export default function OrderDetailsPage() {
               Download Invoice
             </Button>
           )}
-          {["pending_payment", "paid", "processing"].includes(order.status) ? (
+          {["pending_payment", "paid", "processing", "accepted"].includes(order.status) ? (
             <Button
               variant="outline"
               disabled={cancelBusy}

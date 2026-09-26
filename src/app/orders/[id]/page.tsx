@@ -7,6 +7,7 @@ import {
   Check,
   ClipboardCheck,
   CreditCard,
+  Package,
   Truck,
   ShoppingBag,
   Download,
@@ -39,6 +40,7 @@ const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
 const STAGE_ICONS: Record<string, React.ReactNode> = {
   confirmed: <ClipboardCheck size={18} />,
   processed: <CreditCard size={18} />,
+  accepted: <Package size={18} />,
   shipped: <Truck size={18} />,
   out_for_delivery: <ShoppingBag size={18} />,
   delivered: <Check size={18} />,

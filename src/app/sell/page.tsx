@@ -1,47 +1,60 @@
 "use client";
 
+import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
   ArrowLeft,
   Check,
+  CheckCircle2,
+  ChevronDown,
+  Frame,
+  Gamepad2,
+  Gem,
+  Handbag,
+  HeadphonesIcon,
+  LayoutGrid,
+  Lock,
+  Monitor,
+  NotebookPen,
+  Phone,
+  Scissors,
   ShieldCheck,
+  Shirt,
+  ShoppingBag,
+  Sofa,
+  Sparkles,
+  Store,
   TrendingUp,
   User,
-  Store,
-  Phone,
-  ShoppingBag,
-  ChevronDown,
-  Sparkles,
-  Lock,
-  HeadphonesIcon,
-  CheckCircle2,
+  Utensils,
+  type LucideIcon,
 } from "lucide-react";
 import styles from "./sell.module.css";
 import { useAuth } from "@/components/auth/AuthProvider";
 import BrandLogo from "@/components/brand/BrandLogo";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
-import { SELL_STEP_IMAGES } from "@/utils/media";
 import { INDIA_STATES } from "@/utils/india-states";
+import PickupAddressDialog from "@/components/seller/PickupAddressDialog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3;
 
 // ─── Data ────────────────────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: "home-decor",        name: "Home Decor",           icon: "🏠" },
-  { id: "jewelry",           name: "Jewelry",               icon: "💍" },
-  { id: "wall-art",          name: "Wall Art",              icon: "🖼️" },
-  { id: "clothing",          name: "Clothing",              icon: "👕" },
-  { id: "accessories",       name: "Accessories",           icon: "👜" },
-  { id: "beauty",            name: "Beauty & Personal Care",icon: "🧴" },
-  { id: "toys",              name: "Toys & Games",          icon: "🧸" },
-  { id: "kitchen",           name: "Kitchen",               icon: "🍜" },
-  { id: "stationery",        name: "Stationery",            icon: "📝" },
-  { id: "crafts",            name: "Crafts",                icon: "✂️" },
-  { id: "electronics",       name: "Electronics",           icon: "🖥️" },
-  { id: "others",            name: "Others",                icon: "⚙️" },
+const CATEGORIES: { id: string; name: string; Icon: LucideIcon }[] = [
+  { id: "home-decor", name: "Home Decor", Icon: Sofa },
+  { id: "jewelry", name: "Jewelry", Icon: Gem },
+  { id: "wall-art", name: "Wall Art", Icon: Frame },
+  { id: "clothing", name: "Clothing", Icon: Shirt },
+  { id: "accessories", name: "Accessories", Icon: Handbag },
+  { id: "beauty", name: "Beauty & Personal Care", Icon: Sparkles },
+  { id: "toys", name: "Toys & Games", Icon: Gamepad2 },
+  { id: "kitchen", name: "Kitchen", Icon: Utensils },
+  { id: "stationery", name: "Stationery", Icon: NotebookPen },
+  { id: "crafts", name: "Crafts", Icon: Scissors },
+  { id: "electronics", name: "Electronics", Icon: Monitor },
+  { id: "others", name: "Others", Icon: LayoutGrid },
 ];
 
 const STEP_LABELS = ["Categories", "Shop Details", "Terms & Conditions"];
@@ -136,8 +149,7 @@ const SIDEBAR_DATA = [
     badge:   "STEP 2 OF 3",
     heading: (
       <>
-        Let&apos;s set up{" "}
-        <span>your shop</span>
+        Let&apos;s set up <span className={styles.headingAccent}>your shop</span>
       </>
     ),
     desc:    "Add some basic information to get your shop started.",
@@ -183,20 +195,16 @@ const SIDEBAR_DATA = [
   },
 ];
 
-// ─── Illustration placeholder per step ────────────────────────────────────────
-const ILLUSTRATIONS = [
-  ...SELL_STEP_IMAGES,
-];
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SellPage() {
-  const { isAuthenticated, status: authStatus } = useAuth();
+  const { isAuthenticated, status: authStatus, user } = useAuth();
   const [step,            setStep]            = useState<Step>(1);
   const [selectedCats,    setSelectedCats]    = useState<string[]>([]);
   const [shopName,        setShopName]        = useState("");
   const [phone,           setPhone]           = useState("");
   const [agreed,          setAgreed]          = useState(false);
   const [showSuccess,     setShowSuccess]     = useState(false);
+  const [pickupSaved, setPickupSaved] = useState(false);
   const [sellerStatus,    setSellerStatus]    = useState("pending");
   const [submitting,      setSubmitting]      = useState(false);
   const [error,           setError]           = useState<string | null>(null);
@@ -206,6 +214,9 @@ export default function SellPage() {
   const [sellingState, setSellingState] = useState("");
   const [sellingCity, setSellingCity] = useState("");
   const [sellingScope, setSellingScope] = useState<string | null>(null);
+  const [gstStatus, setGstStatus] = useState<"idle" | "checking" | "verified" | "error">("idle");
+  const [gstMessage, setGstMessage] = useState<string | null>(null);
+  const [verifiedGstin, setVerifiedGstin] = useState<string | null>(null);
   const autoSubmitRef = useRef(false);
 
   useEffect(() => {
@@ -243,6 +254,48 @@ export default function SellPage() {
     }
   }, [authStatus, isAuthenticated]);
 
+  useEffect(() => {
+    if (businessRegistered !== true) {
+      setGstStatus("idle");
+      setGstMessage(null);
+      setVerifiedGstin(null);
+      return;
+    }
+    const value = gstin.trim().toUpperCase();
+    if (value.length !== 15) {
+      setGstStatus("idle");
+      setGstMessage(null);
+      setVerifiedGstin(null);
+      return;
+    }
+    let cancelled = false;
+    setGstStatus("checking");
+    setGstMessage(null);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const result = await apiRequest<{ legalName: string; state: string }>(
+          "POST",
+          "/api/seller/gstin/verify",
+          { body: { gstin: value }, skipRefresh: true }
+        );
+        if (cancelled) return;
+        if (result.error || !result.data) {
+          setGstStatus("error");
+          setVerifiedGstin(null);
+          setGstMessage(result.error ?? "Could not verify this GSTIN.");
+          return;
+        }
+        setGstStatus("verified");
+        setVerifiedGstin(value);
+        setGstMessage(`${result.data.legalName} · ${result.data.state}`);
+      })();
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [businessRegistered, gstin]);
+
   // ── Step 1 helpers ────────────────────────────────────────────────────────
   const toggleCategory = (id: string) => {
     setSelectedCats((prev) =>
@@ -256,7 +309,9 @@ export default function SellPage() {
     if (step === 2) {
       const basics = shopName.trim().length >= 2 && phone.trim().length >= 6;
       if (!basics || businessRegistered === null) return false;
-      if (businessRegistered) return gstin.trim().length === 15;
+      if (businessRegistered) {
+        return gstin.trim().length === 15 && verifiedGstin === gstin.trim().toUpperCase();
+      }
       return sellingState.length > 0 && sellingCity.trim().length >= 2;
     }
     if (step === 3) return agreed;
@@ -385,11 +440,25 @@ export default function SellPage() {
         </p>
         <Link
           href={isPending ? "/seller/shop-setup" : "/seller"}
-          className={styles.successBtn}
+          className={`${styles.successBtn} ${pickupSaved ? "" : styles.successBtnLocked}`}
+          aria-disabled={!pickupSaved}
         >
           <ShoppingBag size={18} />
           {isPending ? "Go to Shop Setup" : "Go to Seller Dashboard"}
         </Link>
+        <PickupAddressDialog
+          open={!pickupSaved}
+          defaults={{
+            shopName: shopName.trim(),
+            name: user?.fullName || shopName.trim(),
+            email: user?.email || "",
+            phone: phone.trim() || user?.phoneNumber || "",
+            state: sellingState,
+            sellingScope,
+            sellingState,
+          }}
+          onSaved={() => setPickupSaved(true)}
+        />
       </div>
     );
   }
@@ -398,7 +467,17 @@ export default function SellPage() {
   // MAIN WIZARD
   // ═══════════════════════════════════════════════════════════════
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${step === 3 ? styles.termsPage : ""}`}>
+      <div className={styles.scene} aria-hidden="true">
+        <Image
+          src="/sell/onboarding-room.png"
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className={styles.sceneImage}
+        />
+      </div>
       {/* ── Top Nav ──────────────────────────────────────────── */}
       <nav className={styles.topNav}>
         <Link href="/" className={styles.logoArea}>
@@ -438,29 +517,10 @@ export default function SellPage() {
           {/* Content card */}
           <div className={styles.contentCard}>
             {authBanner ? (
-              <div
-                role="status"
-                style={{
-                  marginBottom: 16,
-                  padding: "12px 14px",
-                  borderRadius: 8,
-                  background: "#fffbeb",
-                  color: "#92400e",
-                  fontSize: "0.875rem",
-                }}
-              >
-                Sign in to create your shop. Your progress on this form is saved when you
-                continue.{" "}
+              <div className={styles.authNotice} role="status">
+                Sign in to create your shop. Your progress is saved when you continue.{" "}
                 <button
                   type="button"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "var(--color-primary)",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    textDecoration: "underline",
-                  }}
                   onClick={() => {
                     sessionStorage.setItem(
                       "stuffsy-sell-draft",
@@ -510,19 +570,20 @@ export default function SellPage() {
                       >
                         {isSelected && (
                           <span className={styles.categoryCheckmark}>
-                            <Check size={12} color="#fff" />
+                            <Check size={12} strokeWidth={3} />
                           </span>
                         )}
-                        <span className={styles.categoryIcon}>{cat.icon}</span>
+                        <span className={styles.categoryIcon} aria-hidden="true">
+                          <cat.Icon size={28} strokeWidth={1.6} />
+                        </span>
                         <span className={styles.categoryName}>{cat.name}</span>
                       </button>
                     );
                   })}
                 </div>
 
-                <p className={styles.changeHint}>You can change this later from your shop settings.</p>
-
-                <div className={styles.actionRow}>
+                <div className={styles.cardFooter}>
+                  <p className={styles.changeHint}>You can change this later from your shop settings.</p>
                   <button
                     id="btn-next-step1"
                     className={styles.btnNext}
@@ -591,27 +652,26 @@ export default function SellPage() {
                   </span>
                 </div>
 
-                {/* Info box */}
-                <div className={styles.infoBox}>
-                  <span className={styles.infoBoxIcon}>
-                    <ShieldCheck size={20} />
-                  </span>
                 <div className={styles.formGroup}>
                   <span className={styles.formLabel}>Do you have a registered business?</span>
-                  <div className={styles.choiceRow}>
+                  <div className={styles.choiceRow} role="group" aria-label="Registered business">
                     <button
                       type="button"
                       className={`${styles.choice} ${businessRegistered === true ? styles.choiceActive : ""}`}
                       onClick={() => setBusinessRegistered(true)}
+                      aria-pressed={businessRegistered === true}
                     >
-                      Yes — I have a GSTIN and want to sell across India
+                      <strong>Yes</strong>
+                      <span>I have a GSTIN and want to sell across India</span>
                     </button>
                     <button
                       type="button"
                       className={`${styles.choice} ${businessRegistered === false ? styles.choiceActive : ""}`}
                       onClick={() => setBusinessRegistered(false)}
+                      aria-pressed={businessRegistered === false}
                     >
-                      No — I will sell only in my state
+                      <strong>No</strong>
+                      <span>I will sell only in my state</span>
                     </button>
                   </div>
                 </div>
@@ -633,9 +693,18 @@ export default function SellPage() {
                       />
                     </div>
                     <span className={styles.formHelp}>
-                      We verify this with GST records before the shop is created. A verified GSTIN
-                      lets you sell across India.
+                      We check this GSTIN as soon as you finish typing it. A verified GSTIN lets
+                      you sell across India.
                     </span>
+                    {gstStatus === "checking" ? (
+                      <span className={styles.formHelp}>Checking GSTIN…</span>
+                    ) : null}
+                    {gstStatus === "verified" && gstMessage ? (
+                      <span className={styles.formOk}>{gstMessage}</span>
+                    ) : null}
+                    {gstStatus === "error" && gstMessage ? (
+                      <span className={styles.formError}>{gstMessage}</span>
+                    ) : null}
                   </div>
                 )}
 
@@ -683,6 +752,10 @@ export default function SellPage() {
                   </>
                 )}
 
+                <div className={styles.infoBox}>
+                  <span className={styles.infoBoxIcon}>
+                    <ShieldCheck size={20} />
+                  </span>
                   <p className={styles.infoBoxText}>
                     Don&apos;t worry, you can always change these details later from Shop Settings.
                   </p>
@@ -751,24 +824,6 @@ export default function SellPage() {
                 </div>
               </>
             )}
-          </div>
-
-          {/* ── Illustration panel ─────────────────────────────── */}
-          <div className={styles.illustrationPanel}>
-            <div className={styles.illustrationBg}>
-              <div className={styles.sparkle} />
-              <div className={styles.sparkle} />
-              <div className={styles.sparkle} />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={ILLUSTRATIONS[step - 1]}
-                alt={`Step ${step} illustration`}
-                onError={(e) => {
-                  // Hide broken image gracefully — bg gradient acts as fallback
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-            </div>
           </div>
         </div>
       </div>

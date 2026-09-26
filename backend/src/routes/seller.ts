@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { gstinLookupLimiter } from "../middleware/auth-rate-limit.js";
 import { requireSeller, requireSellerAnyStatus } from "../middleware/requireSeller.js";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
@@ -20,6 +21,28 @@ import { INDIA_STATE_NAMES, verifyGstin } from "../services/gstin.service.js";
 import { samePlace } from "../services/viewer-region.service.js";
 
 const sellerRouter = Router();
+
+sellerRouter.post(
+  "/gstin/verify",
+  gstinLookupLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({ gstin: z.string().trim().min(15).max(20) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Enter a 15-character GSTIN" });
+      return;
+    }
+    const verified = await verifyGstin(parsed.data.gstin);
+    res.json({
+      gstin: verified.gstin,
+      legalName: verified.legalName,
+      status: verified.status,
+      state: verified.state,
+      city: verified.city,
+    });
+  })
+);
 
 sellerRouter.use(requireAuth);
 
@@ -550,7 +573,7 @@ sellerRouter.get(
       `select
          count(distinct o.id)::text as count,
          coalesce(sum(oi.line_total) filter (
-           where o.status in ('paid','processing','shipped','out_for_delivery','delivered')
+           where o.status in ('paid','processing','accepted','shipped','out_for_delivery','delivered')
          ), 0)::text as paid_sales
        from public.order_items oi
        join public.orders o on o.id = oi.order_id
@@ -591,7 +614,7 @@ sellerRouter.get(
        from public.order_items oi
        join public.orders o on o.id = oi.order_id
        where oi.seller_id = $1
-         and o.status in ('paid','processing','shipped','out_for_delivery','delivered')
+         and o.status in ('paid','processing','accepted','shipped','out_for_delivery','delivered')
        group by oi.product_id, oi.product_title
        order by sum(oi.quantity) desc
        limit 5`,
@@ -604,7 +627,7 @@ sellerRouter.get(
        from public.order_items oi
        join public.orders o on o.id = oi.order_id
        where oi.seller_id = $1
-         and o.status in ('paid','processing','shipped','out_for_delivery','delivered')
+         and o.status in ('paid','processing','accepted','shipped','out_for_delivery','delivered')
          and o.created_at >= now() - interval '14 days'
        group by 1
        order by 1 asc`,
@@ -617,7 +640,7 @@ sellerRouter.get(
        from public.order_items oi
        join public.orders o on o.id = oi.order_id
        where oi.seller_id = $1
-         and o.status in ('paid','processing','shipped','out_for_delivery','delivered')
+         and o.status in ('paid','processing','accepted','shipped','out_for_delivery','delivered')
        group by o.referrer_channel`,
       [sellerId]
     );
@@ -647,7 +670,7 @@ sellerRouter.get(
        from public.orders o
        join public.order_items oi on oi.order_id = o.id
        where oi.seller_id = $1
-         and o.status in ('paid','processing','shipped','out_for_delivery','delivered')`,
+         and o.status in ('paid','processing','accepted','shipped','out_for_delivery','delivered')`,
       [sellerId]
     );
     const paidOrderCount = Number(convertingOrders.rows[0]?.c ?? 0);
@@ -1367,9 +1390,21 @@ sellerRouter.get(
       status: string;
       created_at: Date;
       total: string;
+      item_names: string;
+      items: Array<{ title: string; imageUrl: string | null }> | string;
     }>(
       `select o.id, o.order_number, o.status, o.created_at,
-              sum(oi.line_total)::text as total
+              sum(oi.line_total)::text as total,
+              coalesce(string_agg(distinct oi.product_title, ', '), '') as item_names,
+              coalesce(
+                jsonb_agg(
+                  jsonb_build_object(
+                    'title', oi.product_title,
+                    'imageUrl', oi.product_thumbnail_url
+                  )
+                ),
+                '[]'::jsonb
+              ) as items
        from public.orders o
        join public.order_items oi on oi.order_id = o.id
        where oi.seller_id = $1
@@ -1389,6 +1424,12 @@ sellerRouter.get(
         status: row.status,
         createdAt: new Date(row.created_at).toISOString(),
         sellerLineTotal: Number(row.total),
+        itemNames: row.item_names,
+        items: Array.isArray(row.items)
+          ? row.items
+          : typeof row.items === "string"
+            ? (JSON.parse(row.items) as Array<{ title: string; imageUrl: string | null }>)
+            : [],
       })),
     });
   })
@@ -1419,12 +1460,13 @@ sellerRouter.get(
       id: string;
       product_id: string;
       product_title: string;
+      product_thumbnail_url: string | null;
       quantity: number;
       unit_price: string;
       line_total: string;
       variant_option_values: Record<string, unknown> | null;
     }>(
-      `select id, product_id, product_title, quantity, unit_price, line_total, variant_option_values
+      `select id, product_id, product_title, product_thumbnail_url, quantity, unit_price, line_total, variant_option_values
        from public.order_items
        where order_id = $1 and seller_id = $2`,
       [orderId, sellerId]
@@ -1439,8 +1481,9 @@ sellerRouter.get(
       courier_url: string | null;
       label_url: string | null;
       tracking_events: unknown;
+      accepted_at: Date | null;
     }>(
-      `select id, status, tracking_number, awb_code, carrier, courier_url, label_url, tracking_events
+      `select id, status, tracking_number, awb_code, carrier, courier_url, label_url, tracking_events, accepted_at
        from public.shipments
        where order_id = $1 and seller_id = $2`,
       [orderId, sellerId]
@@ -1459,6 +1502,7 @@ sellerRouter.get(
           id: row.id,
           productId: row.product_id,
           title: row.product_title,
+          imageUrl: row.product_thumbnail_url,
           quantity: row.quantity,
           unitPrice: Number(row.unit_price),
           lineTotal: Number(row.line_total),
@@ -1477,11 +1521,33 @@ sellerRouter.get(
               courierUrl: sh.courier_url,
               labelUrl: sh.label_url,
               trackingEvents: Array.isArray(sh.tracking_events) ? sh.tracking_events : [],
-              canShip: !sh.tracking_number && !sh.awb_code && sh.status === "pending",
+              accepted: Boolean(sh.accepted_at),
+              canAccept:
+                !sh.accepted_at &&
+                (order.rows[0].status === "paid" || order.rows[0].status === "processing"),
+              canShip:
+                Boolean(sh.accepted_at) &&
+                order.rows[0].status === "accepted" &&
+                !sh.tracking_number &&
+                !sh.awb_code &&
+                sh.status === "pending",
             }
           : null,
       },
     });
+  })
+);
+
+sellerRouter.post(
+  "/orders/:id/accept",
+  requireSeller,
+  asyncHandler(async (req, res) => {
+    const orderId = String(req.params.id);
+    const sellerId = req.seller!.id;
+    await assertSellerOwnsOrder(sellerId, orderId);
+    const { acceptSellerOrder } = await import("../services/shipping.service.js");
+    const result = await acceptSellerOrder(orderId, sellerId, req.user?.id);
+    res.json(result);
   })
 );
 

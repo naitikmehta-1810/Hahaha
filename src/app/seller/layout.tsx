@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
+import PickupAddressDialog from "@/components/seller/PickupAddressDialog";
 import { fetchMySeller, type SellerProfile } from "@/utils/seller";
+import { isPickupAddressComplete } from "@/utils/pickup";
 import { FALLBACK_SHOP_LOGO } from "@/utils/media";
 import Text from "@/components/ui/Text/Text";
 import styles from "./seller.module.css";
@@ -28,7 +30,7 @@ function navActive(pathname: string, href: string, exact?: boolean) {
 
 export default function SellerLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { isAuthenticated, status } = useAuth();
+  const { isAuthenticated, status, user } = useAuth();
   const [seller, setSeller] = useState<SellerProfile | null>(null);
 
   useEffect(() => {
@@ -81,6 +83,28 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
         </Link>
       </aside>
       <div className={styles.shellMain}>{children}</div>
+      {seller && !isPickupAddressComplete(seller.pickupAddress) ? (
+        <PickupAddressDialog
+          open
+          defaults={{
+            shopName: seller.shopName,
+            name: user?.fullName || seller.shopName,
+            email: seller.contactEmail || user?.email || "",
+            phone: seller.contactPhone || user?.phoneNumber || "",
+            address1: seller.pickupAddress?.address1 || "",
+            address2: seller.pickupAddress?.address2 || "",
+            city: seller.pickupAddress?.city || seller.sellingCity || "",
+            state: seller.pickupAddress?.state || seller.sellingState || "",
+            pincode: seller.pickupAddress?.pincode || "",
+            pickupLocationName: seller.pickupAddress?.pickupLocationName || "",
+            sellingScope: seller.sellingScope,
+            sellingState: seller.sellingState,
+          }}
+          onSaved={() => {
+            void fetchMySeller().then(setSeller);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
