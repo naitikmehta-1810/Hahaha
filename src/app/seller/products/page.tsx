@@ -29,6 +29,21 @@ export default function SellerProductsPage() {
   const [products, setProducts] = useState<SellerProduct[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const loadProducts = async () => {
+    const result = await apiRequest<{ products: SellerProduct[] }>(
+      "GET",
+      "/api/seller/products"
+    );
+    if (result.error) {
+      setError(result.error);
+    } else {
+      setProducts(result.data?.products ?? []);
+      setError(null);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
     if (authStatus === "loading") return;
@@ -42,18 +57,42 @@ export default function SellerProductsPage() {
         router.push("/sell");
         return;
       }
-      const result = await apiRequest<{ products: SellerProduct[] }>(
-        "GET",
-        "/api/seller/products"
-      );
-      if (result.error) {
-        setError(result.error);
-      } else {
-        setProducts(result.data?.products ?? []);
-      }
-      setLoading(false);
+      await loadProducts();
     })();
   }, [authStatus, isAuthenticated, router]);
+
+  const setStatus = async (product: SellerProduct, status: "active" | "draft") => {
+    setBusyId(product.id);
+    setError(null);
+    const result = await apiRequest("PATCH", `/api/seller/products/${product.id}`, {
+      body: { status },
+    });
+    setBusyId(null);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    await loadProducts();
+  };
+
+  const deleteProduct = async (product: SellerProduct) => {
+    if (
+      !window.confirm(
+        `Delete “${product.title}”? It will leave the shop and stay on past orders.`
+      )
+    ) {
+      return;
+    }
+    setBusyId(product.id);
+    setError(null);
+    const result = await apiRequest("DELETE", `/api/seller/products/${product.id}`);
+    setBusyId(null);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    await loadProducts();
+  };
 
   return (
     <div className={styles.container}>
@@ -93,7 +132,7 @@ export default function SellerProductsPage() {
 
       {products.map((product) => (
         <div key={product.id} className={styles.card} style={{ marginBottom: 12 }}>
-          <div className={styles.row}>
+          <div className={styles.productCardRow}>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
               {product.thumbnailUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -120,15 +159,40 @@ export default function SellerProductsPage() {
                 </div>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div className={styles.productActions}>
               <Link href={`/products/${product.slug}`} style={{ fontSize: "0.85rem" }}>
                 View
               </Link>
               <Button
                 variant="outline"
+                disabled={busyId === product.id}
                 onClick={() => router.push(`/seller/products/${product.id}/edit`)}
               >
                 Edit
+              </Button>
+              {product.status === "active" ? (
+                <Button
+                  variant="outline"
+                  disabled={busyId === product.id}
+                  onClick={() => void setStatus(product, "draft")}
+                >
+                  Make inactive
+                </Button>
+              ) : product.status !== "archived" ? (
+                <Button
+                  variant="outline"
+                  disabled={busyId === product.id}
+                  onClick={() => void setStatus(product, "active")}
+                >
+                  Make active
+                </Button>
+              ) : null}
+              <Button
+                variant="outline"
+                disabled={busyId === product.id}
+                onClick={() => void deleteProduct(product)}
+              >
+                Delete
               </Button>
             </div>
           </div>

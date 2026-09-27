@@ -302,6 +302,41 @@
 }
 
 /* Actions Row */
+.customBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.customLabel {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--color-text-main);
+}
+
+.customInput {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  color: var(--color-text-main);
+  background: #fff;
+}
+
+.customInput:focus {
+  outline: 2px solid color-mix(in srgb, #7c3aed 35%, white);
+  border-color: #7c3aed;
+}
+
+.customHint {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
 .actionsRow {
   display: flex;
   gap: 16px;

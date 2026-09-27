@@ -10,6 +10,7 @@ import {
   renderInvoiceReady,
   renderLowStockAlert,
   renderOrderConfirmation,
+  renderSellerNewOrder,
   renderOrderDelivered,
   renderOrderOutForDelivery,
   renderOrderProcessing,
@@ -43,6 +44,7 @@ export const EMAIL_JOB_NAMES = [
   "password-reset",
   "low-stock-alert",
   "back-in-stock",
+  "seller-new-order",
 ] as const;
 
 export type EmailJobName = (typeof EMAIL_JOB_NAMES)[number];
@@ -186,6 +188,11 @@ export async function processEmailJob(job: Job) {
       }
       const rendered = renderBackInStock(payload);
       return sendMail({ to: payload.to, ...rendered });
+    }
+    case "seller-new-order": {
+      const order = asOrder(job.data);
+      const rendered = renderSellerNewOrder(order);
+      return sendMail({ to: order.to, ...rendered });
     }
     default:
       throw new Error(`Unknown email job name: ${String(name)}`);

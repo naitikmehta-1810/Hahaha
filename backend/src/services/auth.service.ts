@@ -41,6 +41,19 @@ export async function resolveEffectiveRole(userId: string, accountRole: string):
   return "customer";
 }
 
+/** Any shop row, including a pending application. Admins can own a shop too. */
+export async function userHasSellerProfile(userId: string) {
+  const seller = await pool.query(
+    `select 1
+     from public.sellers
+     where user_id = $1
+       and deleted_at is null
+     limit 1`,
+    [userId]
+  );
+  return seller.rows.length > 0;
+}
+
 export async function createUser(input: {
   fullName: string;
   email: string;
@@ -176,6 +189,7 @@ export async function findUserById(id: string): Promise<AuthUser | null> {
   if (!row) return null;
   const user = toAuthUser(row);
   user.role = await resolveEffectiveRole(id, row.role);
+  user.isSeller = await userHasSellerProfile(id);
   return user;
 }
 
@@ -203,6 +217,7 @@ export async function updateUserProfile(
   }
   const user = toAuthUser(row);
   user.role = await resolveEffectiveRole(userId, row.role);
+  user.isSeller = await userHasSellerProfile(userId);
   return user;
 }
 

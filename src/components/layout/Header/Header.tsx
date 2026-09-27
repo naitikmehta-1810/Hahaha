@@ -18,6 +18,7 @@ import { getCart, refreshCart } from "@/utils/cart";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest } from "@/utils/api-client";
 import BrandLogo from "@/components/brand/BrandLogo";
+import OrderNotifications from "@/components/notifications/OrderNotifications";
 
 type SuggestProduct = { id: string; slug: string; title: string };
 type SuggestCategory = { id: string; slug: string; name: string };
@@ -206,15 +207,23 @@ export const Header = () => {
         <div className={styles.searchSlot}>{SearchField}</div>
 
         <div className={styles.navActions}>
-          <Link href={isAuthenticated ? "/seller" : "/sell"} className={styles.sellLink}>
-            <Store size={18} />
-            <span className={styles.sellText}>{isAuthenticated ? "Seller panel" : "Sell on Stuffsy"}</span>
-          </Link>
+          {isAuthenticated && user?.isSeller ? (
+            <Link href="/seller" className={styles.sellLink}>
+              <Store size={18} />
+              <span className={styles.sellText}>Seller panel</span>
+            </Link>
+          ) : (
+            <Link href="/sell" className={styles.sellLink}>
+              <Store size={18} />
+              <span className={styles.sellText}>Sell on Stuffsy</span>
+            </Link>
+          )}
           {isAuthenticated && user?.role === "admin" ? (
             <Link href="/admin" className={styles.sellLink}>
               <span className={styles.sellText}>Admin</span>
             </Link>
           ) : null}
+          {isAuthenticated ? <OrderNotifications /> : null}
 
           <Link
             href={isAuthenticated ? "/account?tab=wishlist" : "/login?next=/account?tab=wishlist"}
@@ -257,9 +266,15 @@ export const Header = () => {
             <Link href="/shop" onClick={() => setMobileOpen(false)}>
               Shop all
             </Link>
-            <Link href={isAuthenticated ? "/seller" : "/sell"} onClick={() => setMobileOpen(false)}>
-              {isAuthenticated ? "Seller panel" : "Sell on Stuffsy"}
-            </Link>
+            {isAuthenticated && user?.isSeller ? (
+              <Link href="/seller" onClick={() => setMobileOpen(false)}>
+                Seller panel
+              </Link>
+            ) : (
+              <Link href="/sell" onClick={() => setMobileOpen(false)}>
+                Sell on Stuffsy
+              </Link>
+            )}
             {isAuthenticated && user?.role === "admin" ? (
               <Link href="/admin" onClick={() => setMobileOpen(false)}>
                 Admin

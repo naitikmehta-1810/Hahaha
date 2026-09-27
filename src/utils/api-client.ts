@@ -8,6 +8,7 @@ export type AuthUser = {
   emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  isSeller?: boolean;
 };
 
 export type ApiResult<T> = {

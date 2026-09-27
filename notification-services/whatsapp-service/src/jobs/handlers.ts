@@ -7,6 +7,7 @@ export const WHATSAPP_JOB_NAMES = [
   "order-out-for-delivery",
   "order-delivered",
   "otp-verification",
+  "seller-new-order",
 ] as const;
 
 export type WhatsAppJobName = (typeof WHATSAPP_JOB_NAMES)[number];
@@ -18,6 +19,7 @@ type BasePayload = {
   trackingNumber?: string | null;
   otp?: string;
   message?: string;
+  shopName?: string;
 };
 
 function requireTo(data: unknown): BasePayload {
@@ -47,6 +49,10 @@ function buildMessage(name: WhatsAppJobName, payload: BasePayload): string {
       return `${greet}your Stuffsy order ${order} is out for delivery.`;
     case "order-delivered":
       return `${greet}your Stuffsy order ${order} has been delivered. Enjoy!`;
+    case "seller-new-order":
+      return `${greet}Stuffsy order ${order} just came in${
+        payload.shopName ? ` for ${payload.shopName}` : ""
+      }. Open the seller panel to accept it.`;
     case "otp-verification":
       if (!payload.otp) {
         throw new Error("otp-verification requires otp");

@@ -40,6 +40,8 @@ export type ProductDetail = ProductCard & {
   categoryId: string;
   subcategoryId: string | null;
   gstPercent: number;
+  isCustomizable: boolean;
+  customizationLabel: string | null;
   breadcrumb: Array<{ id: string; name: string; slug: string }>;
   images: Array<{ id: string; url: string; altText: string | null; isThumbnail: boolean }>;
   variants: Array<{

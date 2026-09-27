@@ -164,6 +164,9 @@ export default function SellerOrderDetailPage() {
                 Qty {item.quantity}
                 {item.variantLabel ? ` · ${item.variantLabel}` : ""}
               </Text>
+              {item.customizationNote ? (
+                <Text size="sm">Buyer customization: {item.customizationNote}</Text>
+              ) : null}
             </div>
             <div className={styles.linePrice}>₹{item.lineTotal.toLocaleString("en-IN")}</div>
           </div>

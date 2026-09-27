@@ -33,7 +33,7 @@ const features = [
   {
     icon: <Truck size={22} />,
     title: "Free Shipping",
-    description: "On orders over ₹999",
+    description: "On orders over ₹499",
   },
   {
     icon: <RefreshCcw size={22} />,

@@ -105,7 +105,7 @@ export type SellerOrderListItem = {
   createdAt: string;
   sellerLineTotal: number;
   itemNames: string;
-  items: Array<{ title: string; imageUrl: string | null }>;
+  items: Array<{ title: string; imageUrl: string | null; customizationNote?: string | null }>;
 };
 
 export async function fetchSellerOrders(page = 1) {
@@ -132,6 +132,7 @@ export type SellerOrderDetail = {
     unitPrice: number;
     lineTotal: number;
     variantLabel: string | null;
+    customizationNote: string | null;
   }>;
   shipment: {
     id: string;

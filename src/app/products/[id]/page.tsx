@@ -54,6 +54,7 @@ export default function ProductDetailsPage() {
   const [qty, setQty] = useState(1);
   const [liked, setLiked] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [customizationNote, setCustomizationNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
@@ -143,6 +144,9 @@ export default function ProductDetailsPage() {
     if (!product || !selectedVariant) {
       throw new Error("No variant selected");
     }
+    if (product.isCustomizable && !customizationNote.trim()) {
+      throw new Error("Tell the seller what you want customized before adding this to the cart");
+    }
     await addToCart(
       {
         id: selectedVariant.id,
@@ -153,7 +157,8 @@ export default function ProductDetailsPage() {
         image: images[0] || FALLBACK_IMAGE,
         gstPercent: product.gstPercent,
       },
-      qty
+      qty,
+      product.isCustomizable ? customizationNote : null
     );
   };
 
@@ -379,6 +384,25 @@ export default function ProductDetailsPage() {
             </div>
           </div>
 
+          {product.isCustomizable ? (
+            <label className={styles.customBox}>
+              <span className={styles.customLabel}>
+                {product.customizationLabel?.trim() || "Add your customization"}
+              </span>
+              <textarea
+                className={styles.customInput}
+                value={customizationNote}
+                maxLength={400}
+                rows={3}
+                placeholder="Colours, text, size notes, or anything the maker should change"
+                onChange={(event) => setCustomizationNote(event.target.value)}
+              />
+              <span className={styles.customHint}>
+                The seller sees this on the order. Required for this product.
+              </span>
+            </label>
+          ) : null}
+
           {actionError ? (
             <Text size="sm" style={{ color: "var(--color-danger)", marginBottom: 8 }}>
               {actionError}
@@ -470,7 +494,7 @@ export default function ProductDetailsPage() {
           <Truck size={20} className={styles.propIcon} />
           <div className={styles.propText}>
             <span className={styles.propTitle}>Free Shipping</span>
-            <span className={styles.propDesc}>On orders over ₹999</span>
+            <span className={styles.propDesc}>On orders over ₹499</span>
           </div>
         </div>
         <div className={styles.propItem}>

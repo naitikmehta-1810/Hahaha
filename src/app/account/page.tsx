@@ -535,9 +535,11 @@ function AccountPageInner() {
             >
               Notifications
             </Sidebar.Item>
-            <Sidebar.Item icon={<Store size={18} />} href="/seller">
-              Seller panel
-            </Sidebar.Item>
+            {sessionUser.isSeller ? (
+              <Sidebar.Item icon={<Store size={18} />} href="/seller">
+                Seller panel
+              </Sidebar.Item>
+            ) : null}
             {sessionUser.role === "admin" ? (
               <Sidebar.Item icon={<ShieldCheck size={18} />} href="/admin">
                 Admin panel
@@ -562,12 +564,14 @@ function AccountPageInner() {
             </Sidebar.Item>
           </Sidebar.Nav>
 
-          <Sidebar.Callout
-            title="Sell on Stuffsy"
-            description="Start your online store and grow your business with us."
-            buttonText="Start Selling"
-            onButtonClick={() => (window.location.href = "/sell")}
-          />
+          {sessionUser.isSeller ? null : (
+            <Sidebar.Callout
+              title="Sell on Stuffsy"
+              description="Start your online store and grow your business with us."
+              buttonText="Start Selling"
+              onButtonClick={() => (window.location.href = "/sell")}
+            />
+          )}
         </Sidebar>
 
         <main className={styles.mainContent}>

@@ -94,6 +94,7 @@ function prefKeyForJob(jobName: string): keyof NotificationPrefs | null {
     case "order-out-for-delivery":
     case "order-delivered":
     case "invoice-ready":
+    case "seller-new-order":
       return "orderUpdates";
     case "coupon-offer":
       return "marketing";
@@ -138,6 +139,18 @@ function buildPushFromEmailJob(
         body: orderNumber ? `Order ${orderNumber} is confirmed.` : "Your order is confirmed.",
         url: frontendOrderUrl,
         tag: `order-${orderNumber ?? "new"}`,
+      };
+    case "seller-new-order":
+      return {
+        title: "New order",
+        body: orderNumber
+          ? `Order ${orderNumber} includes your items.`
+          : "You have a new order.",
+        url:
+          typeof data.frontendOrderUrl === "string"
+            ? data.frontendOrderUrl
+            : `${env.FRONTEND_URL}/seller/orders`,
+        tag: `seller-order-${orderNumber ?? "new"}`,
       };
     case "order-processing":
       return {

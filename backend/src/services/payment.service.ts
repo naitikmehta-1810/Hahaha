@@ -309,6 +309,8 @@ async function enqueuePostCaptureJobs(orderId: string) {
     }
 
     await enqueueInvoiceGeneration(orderId);
+    const { notifyOrderConfirmed } = await import("./order-notifications.service.js");
+    await notifyOrderConfirmed(orderId);
     try {
       await createPendingShipments(orderId);
     } catch (error) {

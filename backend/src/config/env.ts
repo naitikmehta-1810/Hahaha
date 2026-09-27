@@ -47,8 +47,8 @@ const envSchema = z.object({
   PG_STATEMENT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(15_000),
   /** Minutes a pending_payment order may hold inventory before auto-cancel. */
   RESERVATION_TIMEOUT_MINUTES: z.coerce.number().int().positive().default(20),
-  /** "Free Shipping on orders over ₹999" — shown on the cart and every value-prop strip. */
-  FREE_SHIPPING_THRESHOLD: z.coerce.number().nonnegative().default(999),
+  /** Free standard delivery once the cart subtotal reaches this amount. */
+  FREE_SHIPPING_THRESHOLD: z.coerce.number().nonnegative().default(499),
   /**
    * Standard delivery charge applied only below FREE_SHIPPING_THRESHOLD. The designs
    * never show a paid standard rate (the checkout radio always reads "Free"), so this

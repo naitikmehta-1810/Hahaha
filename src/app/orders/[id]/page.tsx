@@ -351,9 +351,11 @@ export default function OrderTrackingPage() {
                 <div className={styles.itemBody}>
                   <p className={styles.itemTitle}>{item.productTitle}</p>
                   <div className={styles.itemMeta}>
-                    {formatOptions(item.variantOptionValues) || "Standard"} · Qty:{" "}
-                    {item.quantity}
+                    {formatOptions(item.variantOptionValues) || "Standard"} · Qty: {item.quantity}
                   </div>
+                  {item.customizationNote ? (
+                    <p className={styles.itemMeta}>Customization: {item.customizationNote}</p>
+                  ) : null}
                 </div>
                 <span className={styles.itemPrice}>
                   ₹{item.lineTotal.toLocaleString("en-IN")}

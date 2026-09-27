@@ -22,6 +22,8 @@ export type AuthUser = {
   emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** True when this account owns a non-deleted shop, including pending setup. */
+  isSeller: boolean;
 };
 
 export function toAuthUser(row: UserRecord): AuthUser {
@@ -35,5 +37,6 @@ export function toAuthUser(row: UserRecord): AuthUser {
     emailVerifiedAt: row.email_verified_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    isSeller: false,
   };
 }

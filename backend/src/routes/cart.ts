@@ -19,6 +19,7 @@ const cartRouter = Router();
 const addItemSchema = z.object({
   variantId: z.string().uuid(),
   quantity: z.number().int().positive().default(1),
+  customizationNote: z.string().trim().max(400).optional().nullable(),
 });
 
 const updateItemSchema = z.object({
@@ -50,7 +51,12 @@ cartRouter.post(
     }
 
     const cart = await getOrCreateCart(req, res);
-    await addItem(cart, parsed.data.variantId, parsed.data.quantity);
+    await addItem(
+      cart,
+      parsed.data.variantId,
+      parsed.data.quantity,
+      parsed.data.customizationNote
+    );
     const view = await getCartView(cart);
     res.status(201).json({ cart: view });
   })

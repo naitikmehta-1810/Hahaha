@@ -160,17 +160,30 @@ export async function createPendingShipments(orderId: string) {
     });
 
     const user = await pool.query<{
+      user_id: string;
       email: string | null;
       phone_number: string | null;
       order_number: string;
       full_name: string | null;
     }>(
-      `select u.email, u.phone_number, u.full_name, o.order_number
+      `select u.id as user_id, u.email, u.phone_number, u.full_name, o.order_number
        from public.orders o
        join public.users u on u.id = o.user_id
        where o.id = $1`,
       [orderId]
     );
+
+    if (user.rows[0]?.user_id) {
+      const { notifyBuyerOrderUpdate } = await import("./order-notifications.service.js");
+      await notifyBuyerOrderUpdate({
+        userId: user.rows[0].user_id,
+        orderId,
+        orderNumber: user.rows[0].order_number,
+        kind: "order-processing",
+        title: "Order processing",
+        body: `Order ${user.rows[0].order_number} is being prepared.`,
+      });
+    }
 
     if (user.rows[0]?.email) {
       await enqueueEmailJob("order-processing", {
@@ -860,6 +873,7 @@ export async function applyShipmentStatusUpdate(input: {
   }
 
   const user = await pool.query<{
+    user_id: string;
     email: string | null;
     phone_number: string | null;
     order_number: string;
@@ -867,7 +881,7 @@ export async function applyShipmentStatusUpdate(input: {
     tracking_number: string | null;
     courier_url: string | null;
   }>(
-    `select u.email, u.phone_number, u.full_name, o.order_number,
+    `select u.id as user_id, u.email, u.phone_number, u.full_name, o.order_number,
             o.tracking_number, o.courier_url
      from public.orders o
      join public.users u on u.id = o.user_id
@@ -883,6 +897,28 @@ export async function applyShipmentStatusUpdate(input: {
         : target === "delivered"
           ? "order-delivered"
           : null;
+
+  if (emailJob && user.rows[0]?.user_id) {
+    const titles: Record<string, string> = {
+      "order-shipped": "Order shipped",
+      "order-out-for-delivery": "Out for delivery",
+      "order-delivered": "Delivered",
+    };
+    const bodies: Record<string, string> = {
+      "order-shipped": `Order ${user.rows[0].order_number} is on the way.`,
+      "order-out-for-delivery": `Order ${user.rows[0].order_number} is out for delivery.`,
+      "order-delivered": `Order ${user.rows[0].order_number} was delivered.`,
+    };
+    const { notifyBuyerOrderUpdate } = await import("./order-notifications.service.js");
+    await notifyBuyerOrderUpdate({
+      userId: user.rows[0].user_id,
+      orderId: row.order_id,
+      orderNumber: user.rows[0].order_number,
+      kind: emailJob,
+      title: titles[emailJob] ?? "Order update",
+      body: bodies[emailJob] ?? `Order ${user.rows[0].order_number} was updated.`,
+    });
+  }
 
   if (emailJob && user.rows[0]?.email) {
     await enqueueEmailJob(emailJob, {

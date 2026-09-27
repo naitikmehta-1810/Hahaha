@@ -395,6 +395,8 @@ export type ProductDetail = ProductCard & {
   subcategoryId: string | null;
   /** Percent added at checkout. Missing category rate is 18. */
   gstPercent: number;
+  isCustomizable: boolean;
+  customizationLabel: string | null;
   breadcrumb: Array<{ id: string; name: string; slug: string }>;
   images: Array<{ id: string; url: string; altText: string | null; isThumbnail: boolean }>;
   variants: Array<{
@@ -471,6 +473,8 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
       selling_scope: string | null;
       selling_state: string | null;
       gst_rate: string | null;
+      is_customizable: boolean;
+      customization_label: string | null;
     }
   >(
     `select
@@ -478,6 +482,7 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
        p.review_count, p.is_bestseller, p.maker_name, p.seller_id,
        p.short_description, p.description, p.product_type, p.specs,
        p.processing_days, p.tags, p.category_id, p.subcategory_id,
+       p.is_customizable, p.customization_label,
        s.shop_name, s.shop_slug, s.logo_url, s.badge,
        s.selling_scope, s.selling_state,
        coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
@@ -556,6 +561,8 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
     categoryId: row.category_id,
     subcategoryId: row.subcategory_id,
     gstPercent: appliedGstPercent(row.gst_rate),
+    isCustomizable: row.is_customizable,
+    customizationLabel: row.customization_label,
     breadcrumb,
     images: imagesResult.rows.map((image) => ({
       id: image.id,

@@ -232,7 +232,7 @@ export default function Home() {
           </div>
           <div className={styles.propText}>
             <span className={styles.propTitle}>Free Shipping</span>
-            <span className={styles.propDesc}>On orders over ₹999</span>
+            <span className={styles.propDesc}>On orders over ₹499</span>
           </div>
         </div>
         <div className={styles.propItem}>

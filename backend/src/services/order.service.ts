@@ -74,6 +74,8 @@ type CartLineForOrder = {
   is_vacation_mode: boolean;
   variant_deleted: Date | null;
   product_deleted: Date | null;
+  customization_note: string | null;
+  is_customizable: boolean;
 };
 
 function money(value: string | number) {
@@ -200,7 +202,9 @@ async function loadCartLines(client: PoolClient, cartId: string) {
        coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
        s.is_vacation_mode,
        pv.deleted_at as variant_deleted,
-       p.deleted_at as product_deleted
+       p.deleted_at as product_deleted,
+       ci.customization_note,
+       p.is_customizable
      from public.cart_items ci
      join public.product_variants pv on pv.id = ci.variant_id
      join public.products p on p.id = pv.product_id
@@ -487,15 +491,24 @@ export async function placeOrder(input: PlaceOrderInput) {
     for (const line of lines) {
       const quantity = Number(line.quantity);
       const unitPrice = money(line.price);
+      const customizationNote = line.customization_note?.trim() || null;
+      if (line.is_customizable && !customizationNote) {
+        throw new AppError(
+          400,
+          "CUSTOMIZATION_REQUIRED",
+          `Add a customization note for ${line.title} before placing the order`
+        );
+      }
       await client.query(
         `insert into public.order_items (
            id, order_id, seller_id, variant_id, product_id, product_slug,
            quantity, unit_price, line_total, product_title, product_thumbnail_url,
-           variant_option_values, is_backordered, gst_rate, created_at, updated_at
+           variant_option_values, is_backordered, gst_rate, customization_note,
+           created_at, updated_at
          ) values (
            gen_random_uuid(), $1, $2, $3, $4, $5,
            $6, $7, $8, $9, $10,
-           $11::jsonb, $12, $13, now(), now()
+           $11::jsonb, $12, $13, $14, now(), now()
          )`,
         [
           orderId,
@@ -511,6 +524,7 @@ export async function placeOrder(input: PlaceOrderInput) {
           JSON.stringify(line.option_values ?? {}),
           backorderedVariantIds.has(line.variant_id),
           appliedGstPercent(line.gst_rate),
+          customizationNote,
         ]
       );
     }
@@ -596,6 +610,8 @@ export type OrderItemDetail = {
   isBackordered: boolean;
   /** True only when delivered and this user has not reviewed this product yet. */
   canReview: boolean;
+  /** Buyer request for a customizable product, snapshotted at checkout. */
+  customizationNote: string | null;
 };
 
 export type OrderDetail = {
@@ -828,6 +844,7 @@ export async function getOrderForUser(
     is_backordered: boolean;
     has_review: boolean;
     variant_purchasable: boolean;
+    customization_note: string | null;
   }>(
     `select oi.id,
             oi.seller_id,
@@ -863,7 +880,8 @@ export async function getOrderForUser(
               join public.sellers s on s.id = p.seller_id
               left join public.inventory inv on inv.variant_id = pv.id
               where pv.id = oi.variant_id
-            ), false) as variant_purchasable
+            ), false) as variant_purchasable,
+            oi.customization_note
      from public.order_items oi
      where oi.order_id = $1
      order by oi.created_at asc`,
@@ -902,6 +920,7 @@ export async function getOrderForUser(
     variantOptionValues: item.variant_option_values ?? {},
     isBackordered: item.is_backordered,
     canReview: row.status === "delivered" && !item.has_review,
+    customizationNote: item.customization_note,
   }));
 
   const { returnEligible, returnWindowClosesAt } = computeReturnWindow(

@@ -12,10 +12,30 @@ import {
   isWebPushConfigured,
   upsertPushSubscription,
 } from "../services/push.service.js";
+import {
+  listUserNotifications,
+  markUserNotificationsRead,
+} from "../services/order-notifications.service.js";
 
 const accountRouter = Router();
 
 accountRouter.use(requireAuth);
+
+accountRouter.get(
+  "/notifications",
+  asyncHandler(async (req, res) => {
+    const result = await listUserNotifications(req.user!.id);
+    res.json(result);
+  })
+);
+
+accountRouter.post(
+  "/notifications/read",
+  asyncHandler(async (req, res) => {
+    await markUserNotificationsRead(req.user!.id);
+    res.json({ ok: true });
+  })
+);
 
 accountRouter.get(
   "/notification-prefs",

@@ -14,6 +14,7 @@ export interface CartItem {
   availableStock: number;
   /** GST percent charged on this line. 18 when the category has no rate. */
   gstPercent?: number;
+  customizationNote?: string | null;
 }
 
 type ApiCartLine = {
@@ -28,6 +29,7 @@ type ApiCartLine = {
   available: boolean;
   lineTotal: number;
   gstPercent?: number;
+  customizationNote?: string | null;
 };
 
 type ApiCart = {
@@ -50,8 +52,8 @@ let cachedCart: CartItem[] = [];
 let cachedCouponCode: string | null = null;
 let cachedDiscountAmount = 0;
 let cachedFreeShipping = {
-  threshold: 999,
-  remaining: 999,
+    threshold: 499,
+    remaining: 499,
   qualifies: false,
   subtotal: 0,
 };
@@ -84,6 +86,7 @@ function mapApiCart(cart: ApiCart): CartItem[] {
     available: Boolean(line.available),
     availableStock: Number(line.availableStock ?? 0),
     gstPercent: Number(line.gstPercent ?? 18),
+    customizationNote: line.customizationNote ?? null,
   }));
 }
 
@@ -97,7 +100,7 @@ function applyCartResponse(cart: ApiCart) {
   cachedCouponCode = cart.couponCode;
   cachedDiscountAmount = Number(cart.discountAmount ?? 0);
   cachedFreeShipping = {
-    threshold: Number(cart.freeShippingThreshold ?? 999),
+    threshold: Number(cart.freeShippingThreshold ?? 499),
     remaining: Number(cart.freeShippingRemaining ?? 0),
     qualifies: Boolean(cart.qualifiesForFreeShipping),
     subtotal: Number(cart.subtotal ?? 0),
@@ -149,11 +152,16 @@ export const addToCart = async (
   item: Omit<CartItem, "qty" | "available" | "availableStock" | "variantId"> & {
     variantId?: string;
   },
-  qty: number
+  qty: number,
+  customizationNote?: string | null
 ) => {
   const variantId = item.variantId ?? item.id;
   const result = await apiRequest<CartResponse>("POST", "/api/cart/items", {
-    body: { variantId, quantity: qty },
+    body: {
+      variantId,
+      quantity: qty,
+      customizationNote: customizationNote?.trim() || null,
+    },
     skipRefresh: true,
   });
 
@@ -441,6 +449,7 @@ export type OrderDetail = {
     variantOptionValues: Record<string, unknown>;
     isBackordered: boolean;
     canReview: boolean;
+    customizationNote?: string | null;
   }>;
   timeline: Array<{ status: string; note: string | null; createdAt: string }>;
   trackingStages: Array<{

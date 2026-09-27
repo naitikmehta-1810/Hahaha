@@ -45,6 +45,26 @@ function inr(amount: number) {
   return `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+type InvoiceLine = {
+  title: string;
+  variant: string | null;
+  note: string | null;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  gstPercent: number;
+};
+
+type InvoiceSellerGroup = {
+  shopName: string;
+  address: string | null;
+  gstin: string | null;
+  legalName: string | null;
+  state: string | null;
+  gstRegistered: boolean;
+  items: InvoiceLine[];
+};
+
 type InvoiceData = {
   invoiceNumber: string;
   orderNumber: string;
@@ -53,15 +73,8 @@ type InvoiceData = {
   paymentReference: string | null;
   customerName: string;
   shippingLines: string[];
-  sellerName: string;
-  sellerAddress: string | null;
-  items: Array<{
-    title: string;
-    variant: string | null;
-    quantity: number;
-    unitPrice: number;
-    lineTotal: number;
-  }>;
+  buyerState: string | null;
+  groups: InvoiceSellerGroup[];
   subtotal: number;
   discountAmount: number;
   shippingAmount: number;
@@ -70,93 +83,211 @@ type InvoiceData = {
   totalAmount: number;
 };
 
+function sameState(left: string | null, right: string | null) {
+  if (!left || !right) return false;
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+function moneyRound(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
 function buildInvoicePdf(data: InvoiceData): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const doc = new PDFDocument({ size: "A4", margin: 36 });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    doc.fillColor("#5b21b6").fontSize(22).text("Stuffsy", { continued: false });
-    doc.fillColor("#111827").fontSize(11).text("Tax Invoice / Bill of Supply", { align: "right" });
-    doc.moveDown(0.5);
-    doc.fontSize(10).fillColor("#4b5563");
-    doc.text(`Invoice: ${data.invoiceNumber}`);
-    doc.text(`Order: ${data.orderNumber}`);
-    doc.text(`Date: ${data.orderDate}`);
-    doc.moveDown();
+    const registered = data.groups.filter((group) => group.gstRegistered);
+    const unregistered = data.groups.filter((group) => !group.gstRegistered);
+    const documentTitle =
+      registered.length > 0 && unregistered.length === 0
+        ? "Tax Invoice"
+        : registered.length === 0
+          ? "Bill of Supply"
+          : "Invoice";
 
-    doc.fillColor("#111827").fontSize(12).text("Bill To", { underline: true });
-    doc.fontSize(10).fillColor("#374151");
-    doc.text(data.customerName);
-    for (const line of data.shippingLines) {
-      if (line) doc.text(line);
-    }
-    doc.moveDown();
-
-    doc.fillColor("#111827").fontSize(12).text("Sold By", { underline: true });
-    doc.fontSize(10).fillColor("#374151");
-    doc.text(data.sellerName);
-    if (data.sellerAddress) doc.text(data.sellerAddress);
-    doc.moveDown();
-
-    const isCod = data.paymentMethod === "cod";
-    doc.fillColor("#111827").fontSize(11).text(
-      `Payment method: ${isCod ? "Cash on Delivery" : data.paymentMethod.toUpperCase()}`
-    );
-    if (!isCod && data.paymentReference) {
-      doc.fontSize(10).fillColor("#4b5563").text(`Transaction reference: ${data.paymentReference}`);
-    } else if (isCod) {
-      doc.fontSize(10).fillColor("#4b5563").text("Amount due on delivery — no gateway transaction ID.");
-    }
-    doc.moveDown();
-
-    const tableTop = doc.y;
-    doc.fillColor("#111827").fontSize(10);
-    doc.text("Item", 50, tableTop, { width: 220 });
-    doc.text("Qty", 280, tableTop, { width: 40 });
-    doc.text("Unit", 330, tableTop, { width: 80 });
-    doc.text("Total", 420, tableTop, { width: 100 });
-    doc
-      .moveTo(50, tableTop + 14)
-      .lineTo(545, tableTop + 14)
-      .strokeColor("#e5e7eb")
-      .stroke();
-
-    let y = tableTop + 22;
-    for (const item of data.items) {
-      const label = item.variant ? `${item.title} (${item.variant})` : item.title;
-      doc.fillColor("#111827").text(label, 50, y, { width: 220 });
-      doc.text(String(item.quantity), 280, y, { width: 40 });
-      doc.text(inr(item.unitPrice), 330, y, { width: 80 });
-      doc.text(inr(item.lineTotal), 420, y, { width: 100 });
-      y += 28;
-      if (y > 700) {
-        doc.addPage();
-        y = 50;
-      }
-    }
-
-    doc.y = y + 10;
-    doc.fillColor("#374151").fontSize(10);
-    doc.text(`Subtotal: ${inr(data.subtotal)}`, { align: "right" });
-    if (data.discountAmount > 0) {
-      doc.text(`Discount: -${inr(data.discountAmount)}`, { align: "right" });
-    }
-    doc.text(`Shipping: ${inr(data.shippingAmount)}`, { align: "right" });
-    doc.text(
-      `GST (${Number((data.taxRate * 100).toFixed(2))}%): ${inr(data.taxAmount)}`,
-      { align: "right" }
-    );
-    doc.fillColor("#111827").fontSize(12).text(`Total: ${inr(data.totalAmount)}`, {
+    doc.rect(0, 0, doc.page.width, 78).fill("#7C3AED");
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(22).text("Stuffsy", 36, 22);
+    doc.font("Helvetica").fontSize(10).text("Handmade marketplace", 36, 48);
+    doc.font("Helvetica-Bold").fontSize(13).text(documentTitle, 320, 22, {
+      width: 239,
+      align: "right",
+    });
+    doc.font("Helvetica").fontSize(9).fillColor("#ede9fe");
+    doc.text(data.invoiceNumber, 320, 42, { width: 239, align: "right" });
+    doc.text(`${data.orderDate}  ·  Order ${data.orderNumber}`, 320, 56, {
+      width: 239,
       align: "right",
     });
 
-    doc.moveDown(2);
-    doc.fillColor("#6b7280").fontSize(9);
-    doc.text("Thank you for shopping on Stuffsy.", { align: "center" });
-    doc.text("Support: support@stuffsy.in · This is a computer-generated invoice.", {
+    doc.fillColor("#111827");
+    let y = 98;
+    const drawCard = (x: number, title: string, lines: string[]) => {
+      const height = 22 + lines.length * 13;
+      doc.roundedRect(x, y, 250, height, 8).fillAndStroke("#faf8ff", "#ece7f5");
+      doc.fillColor("#7C3AED").font("Helvetica-Bold").fontSize(9).text(title, x + 12, y + 10);
+      doc.fillColor("#374151").font("Helvetica").fontSize(9);
+      lines.forEach((line, index) => {
+        doc.text(line, x + 12, y + 24 + index * 13, { width: 226 });
+      });
+      return height;
+    };
+
+    const billLines = [data.customerName, ...data.shippingLines.filter(Boolean)];
+    if (data.buyerState) billLines.push(`Place of supply: ${data.buyerState}`);
+    const leftHeight = drawCard(36, "BILL TO", billLines);
+    const isCod = data.paymentMethod === "cod";
+    const payLines = [
+      isCod ? "Cash on Delivery" : data.paymentMethod.toUpperCase(),
+      isCod
+        ? "Amount due on delivery"
+        : data.paymentReference
+          ? `Ref ${data.paymentReference}`
+          : "Paid online",
+    ];
+    const rightHeight = drawCard(309, "PAYMENT", payLines);
+    y += Math.max(leftHeight, rightHeight) + 18;
+
+    const ensureRoom = (needed: number) => {
+      if (y + needed > doc.page.height - 50) {
+        doc.addPage();
+        y = 40;
+      }
+    };
+
+    for (const group of data.groups) {
+      ensureRoom(90);
+      doc.roundedRect(36, y, 523, 8).fill(group.gstRegistered ? "#7C3AED" : "#f59e0b");
+      y += 16;
+      doc.fillColor("#111827").font("Helvetica-Bold").fontSize(12).text(group.shopName, 36, y);
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .fillColor(group.gstRegistered ? "#7C3AED" : "#b45309")
+        .text(group.gstRegistered ? "TAX INVOICE" : "BILL OF SUPPLY", 400, y, {
+          width: 159,
+          align: "right",
+        });
+      y = doc.y + 2;
+      doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
+      if (group.legalName && group.gstRegistered) doc.text(`Legal name: ${group.legalName}`, 36, y);
+      y = doc.y;
+      if (group.address) doc.text(group.address, 36, y, { width: 360 });
+      y = doc.y;
+      doc.text(
+        group.gstRegistered && group.gstin
+          ? `GSTIN ${group.gstin}${group.state ? `  ·  ${group.state}` : ""}`
+          : "Not registered under GST. GST is not charged by this seller.",
+        36,
+        y,
+        { width: 500 }
+      );
+      y = doc.y + 8;
+
+      const gstCols = group.gstRegistered;
+      const headers = gstCols
+        ? ["Item", "Qty", "Rate", "Taxable", "GST", "Amount"]
+        : ["Item", "Qty", "Rate", "Amount"];
+      const widths = gstCols ? [190, 40, 70, 70, 70, 73] : [280, 50, 90, 103];
+      ensureRoom(36);
+      doc.rect(36, y, 523, 18).fill("#f5f3ff");
+      doc.fillColor("#5b21b6").font("Helvetica-Bold").fontSize(8);
+      let hx = 42;
+      headers.forEach((header, index) => {
+        doc.text(header, hx, y + 5, { width: widths[index] - 6 });
+        hx += widths[index];
+      });
+      y += 22;
+
+      for (const item of group.items) {
+        const label = [
+          item.variant ? `${item.title} (${item.variant})` : item.title,
+          item.note ? `Customization: ${item.note}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        const gstAmount = gstCols ? moneyRound((item.lineTotal * item.gstPercent) / 100) : 0;
+        const amount = gstCols ? moneyRound(item.lineTotal + gstAmount) : item.lineTotal;
+        const cells = gstCols
+          ? [
+              label,
+              String(item.quantity),
+              inr(item.unitPrice),
+              inr(item.lineTotal),
+              `${item.gstPercent}%`,
+              inr(amount),
+            ]
+          : [label, String(item.quantity), inr(item.unitPrice), inr(amount)];
+        ensureRoom(36);
+        doc.fillColor("#111827").font("Helvetica").fontSize(8);
+        const labelHeight = doc.heightOfString(cells[0] ?? "", { width: widths[0] - 8 });
+        const rowHeight = Math.max(18, labelHeight + 6);
+        let cx = 42;
+        cells.forEach((cell, index) => {
+          doc.text(cell, cx, y, { width: widths[index] - 8 });
+          cx += widths[index];
+        });
+        y += rowHeight;
+        doc.moveTo(36, y - 4).lineTo(559, y - 4).strokeColor("#f3e8ff").stroke();
+      }
+      y += 8;
+    }
+
+    ensureRoom(120);
+    const summaryX = 330;
+    doc.fillColor("#374151").font("Helvetica").fontSize(10);
+    const row = (label: string, value: string, bold = false) => {
+      doc.font(bold ? "Helvetica-Bold" : "Helvetica").fillColor(bold ? "#111827" : "#374151");
+      doc.fontSize(bold ? 12 : 10);
+      doc.text(label, summaryX, y, { width: 110 });
+      doc.text(value, summaryX + 110, y, { width: 110, align: "right" });
+      y += bold ? 20 : 16;
+    };
+    row("Subtotal", inr(data.subtotal));
+    if (data.discountAmount > 0) row("Discount", `-${inr(data.discountAmount)}`);
+    row("Shipping", inr(data.shippingAmount));
+
+    if (registered.length > 0 && unregistered.length === 0 && data.taxAmount > 0) {
+      const oneState = registered.every(
+        (group) => sameState(group.state, registered[0]?.state ?? null)
+      );
+      const intra = oneState && sameState(registered[0]?.state ?? null, data.buyerState);
+      if (intra) {
+        const half = moneyRound(data.taxAmount / 2);
+        row("CGST", inr(half));
+        row("SGST", inr(moneyRound(data.taxAmount - half)));
+      } else if (data.buyerState) {
+        row("IGST", inr(data.taxAmount));
+      } else {
+        row(`GST (${Number((data.taxRate * 100).toFixed(2))}%)`, inr(data.taxAmount));
+      }
+    } else if (data.taxAmount > 0) {
+      row("Tax on order", inr(data.taxAmount));
+    } else if (unregistered.length === data.groups.length) {
+      row("GST", "Not charged");
+    }
+
+    doc.moveTo(summaryX, y).lineTo(555, y).strokeColor("#e5e7eb").stroke();
+    y += 8;
+    row("Total", inr(data.totalAmount), true);
+
+    y += 16;
+    doc.fillColor("#6b7280").font("Helvetica").fontSize(8);
+    doc.text(
+      registered.length > 0
+        ? "GST figures use the tax stored on this order. Intra-state orders split GST into CGST and SGST. Inter-state orders show IGST."
+        : "This is a bill of supply. The seller is not registered under GST, so GST is not charged on these goods.",
+      36,
+      y,
+      { width: 523 }
+    );
+    y = doc.y + 14;
+    doc.text("Thank you for shopping on Stuffsy.", 36, y, { width: 523, align: "center" });
+    doc.text("support@stuffsy.in  ·  This is a computer-generated document.", 36, doc.y + 2, {
+      width: 523,
       align: "center",
     });
 
@@ -210,26 +341,61 @@ async function loadInvoiceData(
     quantity: number;
     unit_price: string;
     line_total: string;
+    gst_rate: string | null;
     variant_option_values: Record<string, unknown> | null;
+    customization_note: string | null;
     seller_id: string;
   }>(
-    `select product_title, quantity, unit_price, line_total, variant_option_values, seller_id
+    `select product_title, quantity, unit_price, line_total, gst_rate, variant_option_values,
+            customization_note, seller_id
      from public.order_items where order_id = $1`,
     [orderId]
   );
 
-  const sellerId = items.rows[0]?.seller_id;
-  let sellerName = "Stuffsy Seller";
-  let sellerAddress: string | null = null;
-  if (sellerId) {
-    const seller = await pool.query<{ shop_name: string; business_address: string | null }>(
-      `select shop_name, business_address from public.sellers where id = $1`,
-      [sellerId]
-    );
-    if (seller.rows[0]) {
-      sellerName = seller.rows[0].shop_name;
-      sellerAddress = seller.rows[0].business_address;
+  const sellerIds = [...new Set(items.rows.map((item) => item.seller_id).filter(Boolean))];
+  const sellers = sellerIds.length
+    ? await pool.query<{
+        id: string;
+        shop_name: string;
+        business_address: string | null;
+        gstin: string | null;
+        gst_legal_name: string | null;
+        gst_verified_at: Date | null;
+        selling_state: string | null;
+      }>(
+        `select id, shop_name, business_address, gstin, gst_legal_name, gst_verified_at, selling_state
+         from public.sellers where id = any($1::uuid[])`,
+        [sellerIds]
+      )
+    : { rows: [] };
+
+  const sellerById = new Map(sellers.rows.map((seller) => [seller.id, seller]));
+  const groups = new Map<string, InvoiceSellerGroup>();
+  for (const item of items.rows) {
+    const seller = sellerById.get(item.seller_id);
+    const key = item.seller_id || "unknown";
+    if (!groups.has(key)) {
+      groups.set(key, {
+        shopName: seller?.shop_name || "Stuffsy Seller",
+        address: seller?.business_address ?? null,
+        gstin: seller?.gstin ?? null,
+        legalName: seller?.gst_legal_name ?? null,
+        state: seller?.selling_state ?? null,
+        gstRegistered: Boolean(seller?.gstin && seller.gst_verified_at),
+        items: [],
+      });
     }
+    groups.get(key)!.items.push({
+      title: item.product_title,
+      variant: item.variant_option_values
+        ? Object.values(item.variant_option_values).filter(Boolean).join(" / ") || null
+        : null,
+      note: item.customization_note,
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unit_price),
+      lineTotal: Number(item.line_total),
+      gstPercent: Number(item.gst_rate ?? 0),
+    });
   }
 
   const address = row.shipping_address ?? {};
@@ -247,17 +413,8 @@ async function loadInvoiceData(
         [address.city, address.state, address.postalCode].filter(Boolean).join(", "),
         address.country || "IN",
       ],
-      sellerName,
-      sellerAddress,
-      items: items.rows.map((item) => ({
-        title: item.product_title,
-        variant: item.variant_option_values
-          ? Object.values(item.variant_option_values).filter(Boolean).join(" / ") || null
-          : null,
-        quantity: Number(item.quantity),
-        unitPrice: Number(item.unit_price),
-        lineTotal: Number(item.line_total),
-      })),
+      buyerState: address.state ?? null,
+      groups: [...groups.values()],
       subtotal: Number(row.subtotal),
       discountAmount: Number(row.discount_amount),
       shippingAmount: Number(row.shipping_amount),

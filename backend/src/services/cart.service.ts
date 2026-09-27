@@ -39,6 +39,7 @@ export type CartLineView = {
   /** Resolved GST percent for this line. Missing category rate is already 18. */
   gstPercent: number;
   lineTotal: number;
+  customizationNote: string | null;
 };
 
 export type CartView = {
@@ -220,7 +221,16 @@ async function lockInventoryAvailable(
 export type VariantSellability = {
   /** products.continue_selling_when_out_of_stock — a real backorder mode. */
   allowBackorder: boolean;
+  isCustomizable: boolean;
 };
+
+const CUSTOMIZATION_NOTE_MAX = 400;
+
+function normalizeCustomizationNote(value: string | null | undefined) {
+  const trimmed = (value ?? "").replace(/\s+/g, " ").trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, CUSTOMIZATION_NOTE_MAX);
+}
 
 /**
  * Throws unless the variant can currently be sold. A line is blocked when the
@@ -238,6 +248,7 @@ async function assertVariantSellable(
     deleted_at: Date | null;
     product_deleted_at: Date | null;
     continue_selling_when_out_of_stock: boolean;
+    is_customizable: boolean;
     is_vacation_mode: boolean;
     seller_status: string;
   }>(
@@ -246,6 +257,7 @@ async function assertVariantSellable(
             pv.deleted_at,
             p.deleted_at as product_deleted_at,
             p.continue_selling_when_out_of_stock,
+            p.is_customizable,
             s.is_vacation_mode,
             s.status as seller_status
      from public.product_variants pv
@@ -270,7 +282,10 @@ async function assertVariantSellable(
     );
   }
 
-  return { allowBackorder: row.continue_selling_when_out_of_stock };
+  return {
+    allowBackorder: row.continue_selling_when_out_of_stock,
+    isCustomizable: row.is_customizable,
+  };
 }
 
 function insufficientStock(available: number, requested: number) {
@@ -282,7 +297,12 @@ function insufficientStock(available: number, requested: number) {
   );
 }
 
-export async function addItem(cart: CartRow, variantId: string, quantity: number) {
+export async function addItem(
+  cart: CartRow,
+  variantId: string,
+  quantity: number,
+  customizationNote?: string | null
+) {
   if (!Number.isInteger(quantity) || quantity < 1) {
     throw new AppError(400, "INVALID_QUANTITY", "Quantity must be a positive integer");
   }
@@ -290,19 +310,35 @@ export async function addItem(cart: CartRow, variantId: string, quantity: number
   const client = await pool.connect();
   try {
     await client.query("begin");
-    const { allowBackorder } = await assertVariantSellable(client, variantId);
+    const { allowBackorder, isCustomizable } = await assertVariantSellable(client, variantId);
+    const note = isCustomizable ? normalizeCustomizationNote(customizationNote) : null;
+    if (isCustomizable && !note) {
+      throw new AppError(
+        400,
+        "CUSTOMIZATION_REQUIRED",
+        "Add the customization you want the seller to make"
+      );
+    }
     const stock = await lockInventoryAvailable(client, variantId);
 
     const existing = await client.query<{ id: string; quantity: number }>(
       `select id, quantity
        from public.cart_items
-       where cart_id = $1 and variant_id = $2 and deleted_at is null
+       where cart_id = $1
+         and variant_id = $2
+         and deleted_at is null
+         and coalesce(customization_note, '') = coalesce($3, '')
        limit 1`,
-      [cart.id, variantId]
+      [cart.id, variantId, note]
     );
 
-    const currentQty = existing.rows[0]?.quantity ?? 0;
-    const nextQty = currentQty + quantity;
+    const held = await client.query<{ quantity: string }>(
+      `select coalesce(sum(quantity), 0)::text as quantity
+       from public.cart_items
+       where cart_id = $1 and variant_id = $2 and deleted_at is null`,
+      [cart.id, variantId]
+    );
+    const nextQty = Number(held.rows[0]?.quantity ?? 0) + quantity;
     if (!allowBackorder && nextQty > stock.available) {
       throw insufficientStock(stock.available, nextQty);
     }
@@ -310,9 +346,9 @@ export async function addItem(cart: CartRow, variantId: string, quantity: number
     if (existing.rows[0]) {
       await client.query(
         `update public.cart_items
-         set quantity = $1, updated_at = now()
+         set quantity = quantity + $1, updated_at = now()
          where id = $2`,
-        [nextQty, existing.rows[0].id]
+        [quantity, existing.rows[0].id]
       );
     } else {
       const priceRow = await client.query<{ price: string }>(
@@ -321,9 +357,9 @@ export async function addItem(cart: CartRow, variantId: string, quantity: number
       );
       await client.query(
         `insert into public.cart_items
-           (id, cart_id, variant_id, quantity, unit_price_snapshot, created_at, updated_at)
-         values (gen_random_uuid(), $1, $2, $3, $4, now(), now())`,
-        [cart.id, variantId, quantity, priceRow.rows[0]?.price ?? null]
+           (id, cart_id, variant_id, quantity, unit_price_snapshot, customization_note, created_at, updated_at)
+         values (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now())`,
+        [cart.id, variantId, quantity, priceRow.rows[0]?.price ?? null, note]
       );
     }
 
@@ -363,8 +399,15 @@ export async function updateItemQuantity(cart: CartRow, itemId: string, quantity
 
     if (!allowBackorder && quantity > item.rows[0].quantity) {
       const stock = await lockInventoryAvailable(client, variantId);
-      if (quantity > stock.available) {
-        throw insufficientStock(stock.available, quantity);
+      const siblings = await client.query<{ quantity: string }>(
+        `select coalesce(sum(quantity), 0)::text as quantity
+         from public.cart_items
+         where cart_id = $1 and variant_id = $2 and id <> $3 and deleted_at is null`,
+        [cart.id, variantId, itemId]
+      );
+      const nextQty = Number(siblings.rows[0]?.quantity ?? 0) + quantity;
+      if (nextQty > stock.available) {
+        throw insufficientStock(stock.available, nextQty);
       }
     }
 
@@ -422,6 +465,7 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
       variant_deleted: Date | null;
       product_deleted: Date | null;
       gst_rate: string | null;
+      customization_note: string | null;
     }
   >(
     `select
@@ -449,6 +493,7 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
        s.is_vacation_mode,
        s.status as seller_status,
        coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
+       ci.customization_note,
        pv.deleted_at as variant_deleted,
        p.deleted_at as product_deleted
      from public.cart_items ci
@@ -506,6 +551,7 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
       allowBackorder,
       gstPercent: appliedGstPercent(row.gst_rate),
       lineTotal: available ? unitPrice * quantity : 0,
+      customizationNote: row.customization_note,
     };
   });
 
@@ -563,8 +609,12 @@ export async function mergeGuestCartIntoUserCart(
   try {
     await client.query("begin");
 
-    const guestItems = await client.query<{ variant_id: string; quantity: number }>(
-      `select variant_id, quantity
+    const guestItems = await client.query<{
+      variant_id: string;
+      quantity: number;
+      customization_note: string | null;
+    }>(
+      `select variant_id, quantity, customization_note
        from public.cart_items
        where cart_id = $1 and deleted_at is null`,
       [guestCart.id]
@@ -597,16 +647,30 @@ export async function mergeGuestCartIntoUserCart(
       const existing = await client.query<{ id: string; quantity: number }>(
         `select id, quantity
          from public.cart_items
-         where cart_id = $1 and variant_id = $2 and deleted_at is null
+         where cart_id = $1
+           and variant_id = $2
+           and deleted_at is null
+           and coalesce(customization_note, '') = coalesce($3, '')
          for update`,
-        [userCart.id, line.variant_id]
+        [userCart.id, line.variant_id, line.customization_note]
       );
 
       const currentQty = existing.rows[0]?.quantity ?? 0;
       const requested = currentQty + Number(line.quantity);
+      const others = await client.query<{ quantity: string }>(
+        `select coalesce(sum(quantity), 0)::text as quantity
+         from public.cart_items
+         where cart_id = $1
+           and variant_id = $2
+           and deleted_at is null
+           and coalesce(customization_note, '') <> coalesce($3, '')`,
+        [userCart.id, line.variant_id, line.customization_note]
+      );
+      const heldByOtherNotes = Number(others.rows[0]?.quantity ?? 0);
+      const room = stock.available - heldByOtherNotes;
       // Clamp to stock so the merge never silently creates an over-quantity line,
       // except for backorderable products which have no ceiling.
-      const merged = allowBackorder ? requested : Math.min(requested, stock.available);
+      const merged = allowBackorder ? requested : Math.min(requested, Math.max(0, room));
       if (merged < 1) {
         continue;
       }
@@ -618,9 +682,10 @@ export async function mergeGuestCartIntoUserCart(
         );
       } else {
         await client.query(
-          `insert into public.cart_items (id, cart_id, variant_id, quantity, created_at, updated_at)
-           values (gen_random_uuid(), $1, $2, $3, now(), now())`,
-          [userCart.id, line.variant_id, merged]
+          `insert into public.cart_items
+             (id, cart_id, variant_id, quantity, customization_note, created_at, updated_at)
+           values (gen_random_uuid(), $1, $2, $3, $4, now(), now())`,
+          [userCart.id, line.variant_id, merged, line.customization_note]
         );
       }
     }

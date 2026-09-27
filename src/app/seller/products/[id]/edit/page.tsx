@@ -42,6 +42,8 @@ type SellerProductDetail = {
   tags: string[];
   imageUrls: string[];
   collectionIds: string[];
+  isCustomizable: boolean;
+  customizationLabel: string | null;
 };
 
 export default function EditProductPage() {
@@ -75,6 +77,8 @@ export default function EditProductPage() {
     widthCm: "",
     heightCm: "",
     status: "active" as "active" | "draft",
+    isCustomizable: false,
+    customizationLabel: "",
     tags: "",
     imageUrl: "",
     imageUrls: [] as string[],
@@ -130,6 +134,8 @@ export default function EditProductPage() {
         widthCm: p.widthCm != null ? String(p.widthCm) : "",
         heightCm: p.heightCm != null ? String(p.heightCm) : "",
         status: p.status === "draft" ? "draft" : "active",
+        isCustomizable: Boolean(p.isCustomizable),
+        customizationLabel: p.customizationLabel ?? "",
         tags: (p.tags ?? []).join(", "),
         imageUrl: "",
         imageUrls: p.imageUrls ?? [],
@@ -237,6 +243,8 @@ export default function EditProductPage() {
           widthCm,
           heightCm,
           status,
+          isCustomizable: form.isCustomizable,
+          customizationLabel: form.isCustomizable ? form.customizationLabel.trim() || null : null,
           tags,
           imageUrls,
           collectionIds: selectedCollections,
@@ -592,6 +600,34 @@ export default function EditProductPage() {
             ))}
           </ul>
         ) : null}
+
+        <div className={styles.sectionCard} style={{ marginBottom: 16 }}>
+          <h2 className={styles.sectionTitle}>Customization</h2>
+          <label className={styles.checkLabel}>
+            <input
+              type="checkbox"
+              checked={form.isCustomizable}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, isCustomizable: e.target.checked }))
+              }
+            />
+            Buyers can request a customization
+          </label>
+          {form.isCustomizable ? (
+            <>
+              <label className={styles.fieldLabel}>Prompt shown to buyers</label>
+              <input
+                value={form.customizationLabel}
+                maxLength={120}
+                placeholder="Example: Name to engrave, colour mix, or size note"
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, customizationLabel: e.target.value }))
+                }
+                className={styles.control}
+              />
+            </>
+          ) : null}
+        </div>
 
         <div className={styles.choiceRow}>
           <label className={styles.choice}>

@@ -750,6 +750,8 @@ const productCreateSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
   imageUrls: z.array(z.string().min(1).max(500)).max(8).default([]),
   collectionIds: z.array(z.string().uuid()).max(20).default([]),
+  isCustomizable: z.boolean().optional(),
+  customizationLabel: z.string().trim().max(120).optional().nullable(),
 });
 
 sellerRouter.get(
@@ -845,11 +847,14 @@ sellerRouter.get(
       width_cm: string | null;
       height_cm: string | null;
       continue_selling_when_out_of_stock: boolean;
+      is_customizable: boolean;
+      customization_label: string | null;
     }>(
       `select id, title, slug, short_description, description, category_id, subcategory_id,
               product_type, base_price::text, compare_at_price::text, cost_price::text,
               status, tags, weight::text, weight_unit, length_cm::text, width_cm::text,
-              height_cm::text, continue_selling_when_out_of_stock
+              height_cm::text, continue_selling_when_out_of_stock,
+              is_customizable, customization_label
        from public.products
        where id = $1`,
       [productId]
@@ -906,6 +911,8 @@ sellerRouter.get(
         widthCm: row.width_cm != null ? Number(row.width_cm) : null,
         heightCm: row.height_cm != null ? Number(row.height_cm) : null,
         status: row.status,
+        isCustomizable: row.is_customizable,
+        customizationLabel: row.customization_label,
         tags: row.tags ?? [],
         imageUrls: images.rows.map((img) => img.url),
         collectionIds: collections.rows.map((c) => c.collection_id),
@@ -955,11 +962,12 @@ sellerRouter.post(
            (id, seller_id, category_id, subcategory_id, title, slug, description, short_description,
             maker_name, base_price, compare_at_price, cost_price, status, product_type, tags,
             weight, weight_unit, length_cm, width_cm, height_cm,
-            continue_selling_when_out_of_stock, created_at, updated_at)
+            continue_selling_when_out_of_stock, is_customizable, customization_label,
+            created_at, updated_at)
          values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7,
                  $8, $9, $10, $11, $12, $13, $14,
                  $15, $16, $17, $18, $19,
-                 $20, now(), now())
+                 $20, $21, $22, now(), now())
          returning id, slug`,
         [
           sellerId,
@@ -982,6 +990,8 @@ sellerRouter.post(
           data.widthCm ?? null,
           data.heightCm ?? null,
           data.continueSellingWhenOutOfStock,
+          data.isCustomizable ?? false,
+          data.isCustomizable ? data.customizationLabel?.trim() || null : null,
         ]
       );
 
@@ -1182,6 +1192,8 @@ sellerRouter.patch(
            width_cm = coalesce($16, width_cm),
            height_cm = coalesce($17, height_cm),
            continue_selling_when_out_of_stock = coalesce($18, continue_selling_when_out_of_stock),
+           is_customizable = coalesce($19, is_customizable),
+           customization_label = case when $20::boolean then $21 else customization_label end,
            updated_at = now()
          where id = $1`,
         [
@@ -1203,6 +1215,13 @@ sellerRouter.patch(
           data.widthCm === undefined ? null : data.widthCm,
           data.heightCm === undefined ? null : data.heightCm,
           data.continueSellingWhenOutOfStock ?? null,
+          data.isCustomizable ?? null,
+          data.isCustomizable !== undefined || data.customizationLabel !== undefined,
+          data.isCustomizable
+            ? data.customizationLabel?.trim() || null
+            : data.customizationLabel === undefined
+              ? null
+              : data.customizationLabel?.trim() || null,
         ]
       );
 
@@ -1324,9 +1343,14 @@ sellerRouter.delete(
       return;
     }
 
-    await pool.query(`delete from public.products where id = $1`, [productId]);
+    await pool.query(
+      `update public.products
+       set status = 'archived', deleted_at = now(), updated_at = now()
+       where id = $1`,
+      [productId]
+    );
     void invalidateCatalogCaches();
-    res.status(204).send();
+    res.json({ softDeleted: true });
   })
 );
 
@@ -1400,7 +1424,8 @@ sellerRouter.get(
                 jsonb_agg(
                   jsonb_build_object(
                     'title', oi.product_title,
-                    'imageUrl', oi.product_thumbnail_url
+                    'imageUrl', oi.product_thumbnail_url,
+                    'customizationNote', oi.customization_note
                   )
                 ),
                 '[]'::jsonb
@@ -1465,8 +1490,10 @@ sellerRouter.get(
       unit_price: string;
       line_total: string;
       variant_option_values: Record<string, unknown> | null;
+      customization_note: string | null;
     }>(
-      `select id, product_id, product_title, product_thumbnail_url, quantity, unit_price, line_total, variant_option_values
+      `select id, product_id, product_title, product_thumbnail_url, quantity, unit_price, line_total,
+              variant_option_values, customization_note
        from public.order_items
        where order_id = $1 and seller_id = $2`,
       [orderId, sellerId]
@@ -1511,6 +1538,7 @@ sellerRouter.get(
                 .map(([k, v]) => `${k}: ${String(v)}`)
                 .join(" / ") || null
             : null,
+          customizationNote: row.customization_note,
         })),
         shipment: sh
           ? {

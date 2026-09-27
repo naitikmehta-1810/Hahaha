@@ -285,6 +285,9 @@ export default function CartPage() {
                 <div className={styles.itemDetails}>
                   <h4 className={styles.itemTitle}>{item.title}</h4>
                   <span className={styles.itemSubtitle}>{item.subtitle}</span>
+                  {item.customizationNote ? (
+                    <span className={styles.itemSubtitle}>For the maker: {item.customizationNote}</span>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void handleRemoveItem(item.id)}
@@ -341,7 +344,7 @@ export default function CartPage() {
               <Truck size={18} className={styles.propIcon} />
               <div className={styles.propText}>
                 <span className={styles.propTitle}>Free Shipping</span>
-                <span className={styles.propDesc}>On orders over ₹999</span>
+                <span className={styles.propDesc}>On orders over ₹499</span>
               </div>
             </div>
             <div className={styles.propItem}>

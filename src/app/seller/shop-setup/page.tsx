@@ -14,6 +14,15 @@ import { FALLBACK_SHOP_LOGO } from "@/utils/media";
 import { fetchMySeller, updateMyShop, type SellerProfile } from "@/utils/seller";
 import { shopHref } from "@/utils/catalog";
 import { apiRequest } from "@/utils/api-client";
+import {
+  CreditCard,
+  FileText,
+  Image as ImageIcon,
+  Palmtree,
+  Search,
+  Store,
+  Truck,
+} from "lucide-react";
 import styles from "../seller.module.css";
 
 type TabKey =
@@ -25,14 +34,14 @@ type TabKey =
   | "seo"
   | "vacation";
 
-const TABS: Array<{ key: TabKey; label: string }> = [
-  { key: "information", label: "Shop Information" },
-  { key: "branding", label: "Branding" },
-  { key: "policies", label: "Shop Policies" },
-  { key: "shipping", label: "Shipping & Return" },
-  { key: "payment", label: "Payment & Billing" },
-  { key: "seo", label: "SEO & Discoverability" },
-  { key: "vacation", label: "Vacation Mode" },
+const TABS: Array<{ key: TabKey; label: string; Icon: typeof Store }> = [
+  { key: "information", label: "Shop Information", Icon: Store },
+  { key: "branding", label: "Branding", Icon: ImageIcon },
+  { key: "policies", label: "Shop Policies", Icon: FileText },
+  { key: "shipping", label: "Shipping & Return", Icon: Truck },
+  { key: "payment", label: "Payment & Billing", Icon: CreditCard },
+  { key: "seo", label: "SEO & Discoverability", Icon: Search },
+  { key: "vacation", label: "Vacation Mode", Icon: Palmtree },
 ];
 
 export default function ShopSetupPage() {
@@ -303,11 +312,13 @@ export default function ShopSetupPage() {
     );
   }
 
+  const previewPlace = [seller.sellingCity, seller.sellingState].filter(Boolean).join(", ");
+
   return (
-    <div className={styles.container}>
+    <div className={styles.setupPage}>
       <Breadcrumbs>
         <Breadcrumbs.Item href="/">Home</Breadcrumbs.Item>
-        <Breadcrumbs.Item href="/seller">Seller</Breadcrumbs.Item>
+        <Breadcrumbs.Item href="/seller">Shop Settings</Breadcrumbs.Item>
         <Breadcrumbs.Item active>Shop Setup</Breadcrumbs.Item>
       </Breadcrumbs>
 
@@ -325,28 +336,25 @@ export default function ShopSetupPage() {
 
       {message ? <Text size="sm">{message}</Text> : null}
 
-      <div className={styles.layout}>
-        <aside className={styles.sidebar}>
-          <nav className={styles.navList}>
-            {TABS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={`${styles.navItem} ${
-                  tab === item.key ? styles.navItemActive : ""
-                }`}
-                onClick={() => setTab(item.key)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </aside>
+      <div className={styles.setupBoard}>
+        <nav className={styles.settingsNav} aria-label="Shop settings">
+          {TABS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`${styles.settingsItem} ${tab === item.key ? styles.settingsItemActive : ""}`}
+              aria-current={tab === item.key ? "true" : undefined}
+              onClick={() => setTab(item.key)}
+            >
+              <item.Icon size={16} aria-hidden="true" />
+              {item.label}
+            </button>
+          ))}
+        </nav>
 
-        <main className={styles.main}>
+        <div className={styles.setupMain}>
           {tab === "information" ? (
-            <div className={styles.setupColumns}>
-              <div className={styles.setupMain}>
+            <>
                 <div className={styles.card}>
                   <h3 className={styles.cardTitle}>Shop Information</h3>
                   <p className={styles.muted}>Basic information about your shop.</p>
@@ -440,7 +448,7 @@ export default function ShopSetupPage() {
 
                 <div className={styles.card}>
                   <h3 className={styles.cardTitle}>Social Links</h3>
-                  <p className={styles.muted}>Add links so customers can reach you.</p>
+                  <p className={styles.muted}>Add social media links to connect with your customers.</p>
                   <div className={styles.fieldGrid3}>
                     <div>
                       <label className={styles.fieldLabel} htmlFor="shop-instagram">
@@ -480,61 +488,7 @@ export default function ShopSetupPage() {
                     </div>
                   </div>
                 </div>
-              </div>
-
-              <aside className={styles.setupSide}>
-                <div className={styles.card}>
-                  <h3 className={styles.cardTitle}>Shop Preview</h3>
-                  <p className={styles.muted}>This is how your shop will appear to customers.</p>
-                  {form.bannerUrl ? (
-                    <img src={form.bannerUrl} alt="" className={styles.previewBanner} />
-                  ) : (
-                    <div className={styles.previewBanner} />
-                  )}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={form.logoUrl || FALLBACK_SHOP_LOGO}
-                    alt=""
-                    className={styles.previewLogo}
-                  />
-                  <p>
-                    <strong>{form.shopName || seller.shopName}</strong>
-                    {form.isVacationMode ? (
-                      <span className={styles.muted}> · On vacation</span>
-                    ) : null}
-                  </p>
-                  <p className={styles.muted}>{form.tagline || "Your tagline appears here."}</p>
-                  <Link href={shopHref(seller.shopSlug)}>
-                    <Button variant="outline">View Shop Preview</Button>
-                  </Link>
-                </div>
-                <div className={styles.card}>
-                  <h3 className={styles.cardTitle}>Shop Logo</h3>
-                  <p className={styles.muted}>Upload a logo that represents your brand. 512×512 recommended.</p>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className={styles.fileInput}
-                    disabled={uploading !== null}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void uploadBranding("logo", file);
-                      e.target.value = "";
-                    }}
-                  />
-                  {uploading === "logo" ? <p className={styles.muted}>Uploading logo…</p> : null}
-                </div>
-                <div className={styles.tips}>
-                  <h3 className={styles.cardTitle}>Tips for a great shop</h3>
-                  <ul>
-                    <li>Use a clear and memorable shop name.</li>
-                    <li>Upload a professional logo and banner.</li>
-                    <li>Write a description about what you make.</li>
-                    <li>Add social links so buyers can reach you.</li>
-                  </ul>
-                </div>
-              </aside>
-            </div>
+            </>
           ) : null}
 
           {tab === "branding" ? (
@@ -784,22 +738,76 @@ export default function ShopSetupPage() {
             </div>
           ) : null}
 
-          {tab !== "information" ? (
-            <div className={styles.card}>
-              <h3 className={styles.cardTitle}>Shop Preview</h3>
-              <p>
-                <strong>{form.shopName || seller.shopName}</strong>
-                {form.isVacationMode ? (
-                  <span className={styles.muted}> · On vacation</span>
-                ) : null}
-              </p>
-              <p className={styles.muted}>{form.tagline || "Your tagline appears here."}</p>
-              <Link href={shopHref(seller.shopSlug)}>
-                <Button variant="outline">View Shop Preview</Button>
-              </Link>
+        </div>
+
+        <aside className={styles.setupSide}>
+          <div className={styles.card}>
+            <h3 className={styles.cardTitle}>Shop Preview</h3>
+            <p className={styles.muted}>This is how your shop will appear to customers.</p>
+            <div className={styles.previewStage}>
+              {form.bannerUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.bannerUrl} alt="" className={styles.previewBanner} />
+              ) : (
+                <div className={styles.previewBanner} />
+              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={form.logoUrl || FALLBACK_SHOP_LOGO}
+                alt=""
+                className={styles.previewLogo}
+              />
             </div>
-          ) : null}
-        </main>
+            <p className={styles.previewName}>
+              <strong>{form.shopName || seller.shopName}</strong>
+              {seller.badge ? <span className={styles.previewBadge}>{seller.badge}</span> : null}
+            </p>
+            <p className={styles.muted}>{form.tagline || "Your tagline appears here."}</p>
+            {previewPlace || form.isVacationMode || seller.memberSince ? (
+              <p className={styles.previewFacts}>
+                {previewPlace ? <span>{previewPlace}</span> : null}
+                {form.isVacationMode ? <span>On vacation</span> : null}
+                {seller.memberSince ? <span>On Stuffsy since {seller.memberSince}</span> : null}
+              </p>
+            ) : null}
+            <Link href={shopHref(seller.shopSlug)} className={styles.previewLink}>
+              View Shop Preview
+            </Link>
+          </div>
+          <div className={styles.card}>
+            <h3 className={styles.cardTitle}>Shop Logo</h3>
+            <p className={styles.muted}>Upload a logo that represents your brand.</p>
+            <div className={styles.logoRow}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={form.logoUrl || FALLBACK_SHOP_LOGO} alt="" className={styles.logoPreview} />
+              <div>
+                <label className={styles.uploadLogoBtn}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={uploading !== null}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void uploadBranding("logo", file);
+                      e.target.value = "";
+                    }}
+                  />
+                  {uploading === "logo" ? "Uploading…" : "Upload Logo"}
+                </label>
+                <p className={styles.muted}>Recommended size: 512×512px (JPG, PNG)</p>
+              </div>
+            </div>
+          </div>
+          <div className={styles.tips}>
+            <h3 className={styles.cardTitle}>Tips for a great shop</h3>
+            <ul>
+              <li>Use a clear and memorable shop name.</li>
+              <li>Upload a professional logo and banner.</li>
+              <li>Write a description about what you make.</li>
+              <li>Add social links so buyers can reach you.</li>
+            </ul>
+          </div>
+        </aside>
       </div>
     </div>
   );

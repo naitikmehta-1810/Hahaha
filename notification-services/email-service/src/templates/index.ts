@@ -39,6 +39,7 @@ export type OrderEmailPayload = {
   invoiceUrl?: string | null;
   estimatedDeliveryAt?: string | null;
   frontendOrderUrl?: string;
+  shopName?: string;
 };
 
 export type CartEmailItem = {
@@ -513,6 +514,23 @@ export function renderLowStockAlert(payload: LowStockAlertPayload) {
     subject: `Low stock · ${payload.productTitle}`,
     text: `${payload.productTitle} is low on stock (${payload.quantityOnHand} left).`,
     html: layout({ title: "Low stock", body, preheader: "Restock soon" }),
+  };
+}
+
+export function renderSellerNewOrder(order: OrderEmailPayload) {
+  const shop = order.shopName ? escapeHtml(order.shopName) : "Your shop";
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:22px;">New order for ${shop}</h1>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:#4b5563;">
+      Order <strong>#${escapeHtml(order.orderNumber)}</strong> includes items from ${shop}.
+      Open the seller panel to accept and ship it.
+    </p>
+    ${order.frontendOrderUrl ? cta(order.frontendOrderUrl, "View orders") : ""}
+  `;
+  return {
+    subject: `New order · #${order.orderNumber}`,
+    text: `New Stuffsy order #${order.orderNumber} for ${order.shopName || "your shop"}.`,
+    html: layout({ title: "New seller order", body }),
   };
 }
 

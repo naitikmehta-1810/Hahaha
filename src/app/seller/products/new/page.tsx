@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ImagePlus, Lightbulb } from "lucide-react";
 import Heading from "@/components/ui/Heading/Heading";
 import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
@@ -20,6 +21,7 @@ type Collection = { id: string; name: string; slug: string };
 
 export default function AddProductPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { isAuthenticated, status: authStatus } = useAuth();
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -46,6 +48,8 @@ export default function AddProductPage() {
     widthCm: "",
     heightCm: "",
     status: "active" as "active" | "draft",
+    isCustomizable: false,
+    customizationLabel: "",
     tags: "",
     imageUrl: "",
     imageUrls: [] as string[],
@@ -124,6 +128,26 @@ export default function AddProductPage() {
     return result.data.url;
   };
 
+  const addFiles = async (files: File[]) => {
+    if (!files.length) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const uploaded: string[] = [];
+      for (const file of files.slice(0, 8 - form.imageUrls.length)) {
+        uploaded.push(await uploadFile(file));
+      }
+      setForm((current) => ({
+        ...current,
+        imageUrls: [...current.imageUrls, ...uploaded].slice(0, 8),
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submit = async (status: "draft" | "active") => {
     setBusy(true);
     setError(null);
@@ -176,6 +200,8 @@ export default function AddProductPage() {
           widthCm,
           heightCm,
           status,
+          isCustomizable: form.isCustomizable,
+          customizationLabel: form.isCustomizable ? form.customizationLabel.trim() || null : null,
           tags,
           imageUrls,
           collectionIds: selectedCollections,
@@ -191,7 +217,7 @@ export default function AddProductPage() {
   };
 
   return (
-    <div className={styles.container}>
+    <div className={styles.productPage}>
       <Breadcrumbs>
         <Breadcrumbs.Item href="/">Home</Breadcrumbs.Item>
         <Breadcrumbs.Item href="/seller">Products</Breadcrumbs.Item>
@@ -229,304 +255,383 @@ export default function AddProductPage() {
         </Text>
       ) : null}
 
-      <div className={styles.card}>
-        <label className={styles.fieldLabel}>Product Title* ({form.title.length}/150)</label>
-        <input
-          value={form.title}
-          maxLength={150}
-          onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-          className={styles.control}
-        />
-        <label className={styles.fieldLabel}>
-          Short Description* ({form.shortDescription.length}/250)
-        </label>
-        <textarea
-          value={form.shortDescription}
-          maxLength={250}
-          onChange={(e) => setForm((f) => ({ ...f, shortDescription: e.target.value }))}
-          className={`${styles.control} ${styles.controlShort}`}
-        />
-        <label className={styles.fieldLabel}>Full Description*</label>
-        <textarea
-          value={form.description}
-          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-          className={`${styles.control} ${styles.controlTall}`}
-        />
-
-        <div className={styles.fieldGrid3}>
-          <div>
-            <label className={styles.fieldLabel}>Category*</label>
-            <select
-              value={form.categoryId}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, categoryId: e.target.value, subcategoryId: "" }))
-              }
-              className={styles.control}
-            >
-              <option value="">Select</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={styles.fieldLabel}>Subcategory</label>
-            <select
-              value={form.subcategoryId}
-              onChange={(e) => setForm((f) => ({ ...f, subcategoryId: e.target.value }))}
-              className={styles.control}
-            >
-              <option value="">Select</option>
-              {subcats.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={styles.fieldLabel}>Product Type*</label>
-            <div className={styles.choiceRow}>
-              {(["physical", "digital"] as const).map((type) => (
-                <label key={type} className={styles.choice}>
-                  <input
-                    type="radio"
-                    checked={form.productType === type}
-                    onChange={() => setForm((f) => ({ ...f, productType: type }))}
-                  />{" "}
-                  {type[0].toUpperCase() + type.slice(1)}
-                </label>
-              ))}
+      <div className={styles.productColumns}>
+        <div className={styles.productMain}>
+          <section className={styles.sectionCard}>
+            <h2 className={styles.sectionTitle}>Product Information</h2>
+            <div className={styles.labelRow}>
+              <label className={styles.fieldLabel}>Product Title*</label>
+              <span className={styles.charCount}>{form.title.length}/150</span>
             </div>
-          </div>
-        </div>
-
-        <div className={styles.fieldGrid3}>
-          <div>
-            <label className={styles.fieldLabel}>Price* (₹)</label>
             <input
-              value={form.price}
-              onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+              value={form.title}
+              maxLength={150}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
               className={styles.control}
             />
-          </div>
-          <div>
-            <label className={styles.fieldLabel}>Compare at Price</label>
-            <input
-              value={form.compareAtPrice}
-              onChange={(e) => setForm((f) => ({ ...f, compareAtPrice: e.target.value }))}
-              className={styles.control}
-            />
-          </div>
-          <div>
-            <label className={styles.fieldLabel}>Cost Price (seller-only)</label>
-            <input
-              value={form.costPrice}
-              onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
-              className={styles.control}
-            />
-          </div>
-        </div>
-
-        <div className={styles.fieldGrid3}>
-          <div>
-            <label className={styles.fieldLabel}>SKU</label>
-            <input
-              value={form.sku}
-              onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
-              className={styles.control}
-            />
-          </div>
-          <div>
-            <label className={styles.fieldLabel}>Stock Quantity*</label>
-            <input
-              value={form.stockQuantity}
-              onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
-              className={styles.control}
-            />
-          </div>
-          <div>
-            <label className={styles.fieldLabel}>Low Stock Alert</label>
-            <input
-              value={form.lowStockAlert}
-              onChange={(e) => setForm((f) => ({ ...f, lowStockAlert: e.target.value }))}
-              className={styles.control}
-            />
-          </div>
-        </div>
-
-        <label className={styles.checkLabel}>
-          <input
-            type="checkbox"
-            checked={form.continueSelling}
-            onChange={(e) => setForm((f) => ({ ...f, continueSelling: e.target.checked }))}
-          />
-          Continue selling when out of stock
-        </label>
-
-        {form.productType === "physical" ? (
-          <div className={styles.fieldGrid4}>
-            <div>
-              <label className={styles.fieldLabel}>Weight (kg)*</label>
-              <input
-                value={form.weight}
-                onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
-                placeholder="0.2 or 200g"
-                inputMode="decimal"
-                className={styles.control}
-              />
+            <div className={styles.labelRow}>
+              <label className={styles.fieldLabel}>Short Description*</label>
+              <span className={styles.charCount}>{form.shortDescription.length}/250</span>
             </div>
-            <div>
-              <label className={styles.fieldLabel}>Length (cm)*</label>
-              <input
-                value={form.lengthCm}
-                onChange={(e) => setForm((f) => ({ ...f, lengthCm: e.target.value }))}
-                placeholder="15"
-                inputMode="decimal"
-                className={styles.control}
-              />
-            </div>
-            <div>
-              <label className={styles.fieldLabel}>Width (cm)*</label>
-              <input
-                value={form.widthCm}
-                onChange={(e) => setForm((f) => ({ ...f, widthCm: e.target.value }))}
-                placeholder="20"
-                inputMode="decimal"
-                className={styles.control}
-              />
-            </div>
-            <div>
-              <label className={styles.fieldLabel}>Height (cm)*</label>
-              <input
-                value={form.heightCm}
-                onChange={(e) => setForm((f) => ({ ...f, heightCm: e.target.value }))}
-                placeholder="20"
-                inputMode="decimal"
-                className={styles.control}
-              />
-            </div>
-          </div>
-        ) : null}
+            <textarea
+              value={form.shortDescription}
+              maxLength={250}
+              onChange={(e) => setForm((f) => ({ ...f, shortDescription: e.target.value }))}
+              className={`${styles.control} ${styles.controlShort}`}
+            />
+            <label className={styles.fieldLabel}>Full Description*</label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              className={`${styles.control} ${styles.controlTall}`}
+            />
 
-        <label className={styles.fieldLabel}>Tags (comma-separated, max 10)</label>
-        <input
-          value={form.tags}
-          onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
-          className={styles.control}
-        />
-
-        <h3 className={styles.cardTitle}>Collections</h3>
-        <div className={styles.chipList}>
-          {collections.map((c) => {
-            const checked = selectedCollections.includes(c.id);
-            return (
-              <label key={c.id} className={`${styles.chip} ${checked ? styles.chipOn : ""}`}>
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() =>
-                    setSelectedCollections((prev) =>
-                      checked ? prev.filter((id) => id !== c.id) : [...prev, c.id]
-                    )
+            <div className={styles.fieldGrid3}>
+              <div>
+                <label className={styles.fieldLabel}>Category*</label>
+                <select
+                  value={form.categoryId}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, categoryId: e.target.value, subcategoryId: "" }))
                   }
-                />
-                {c.name}
-              </label>
-            );
-          })}
-        </div>
-        <div className={styles.buttonRow}>
-          <input
-            value={newCollectionName}
-            onChange={(e) => setNewCollectionName(e.target.value)}
-            placeholder="New collection name"
-            className={styles.control}
-          />
-          <Button variant="outline" onClick={() => void createCollection()}>
-            Add
-          </Button>
-        </div>
-
-        <label className={styles.fieldLabel}>Image URL (optional)</label>
-        <input
-          value={form.imageUrl}
-          onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
-          className={styles.control}
-        />
-        <label className={styles.fieldLabel}>
-          Upload images via Cloudinary (max 8)
-        </label>
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          disabled={busy}
-          onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
-            if (!files.length) return;
-            void (async () => {
-              setBusy(true);
-              setError(null);
-              try {
-                const uploaded: string[] = [];
-                for (const file of files.slice(0, 8 - form.imageUrls.length)) {
-                  uploaded.push(await uploadFile(file));
-                }
-                setForm((f) => ({
-                  ...f,
-                  imageUrls: [...f.imageUrls, ...uploaded].slice(0, 8),
-                }));
-              } catch (err) {
-                setError(err instanceof Error ? err.message : "Upload failed");
-              } finally {
-                setBusy(false);
-                e.target.value = "";
-              }
-            })();
-          }}
-          style={{ marginBottom: 12 }}
-        />
-        {form.imageUrls.length > 0 ? (
-          <ul style={{ fontSize: "0.8rem", marginBottom: 12 }}>
-            {form.imageUrls.map((url) => (
-              <li key={url}>
-                {url}{" "}
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm((f) => ({
-                      ...f,
-                      imageUrls: f.imageUrls.filter((u) => u !== url),
-                    }))
-                  }
+                  className={styles.control}
                 >
-                  remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+                  <option value="">Select</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={styles.fieldLabel}>Subcategory</label>
+                <select
+                  value={form.subcategoryId}
+                  onChange={(e) => setForm((f) => ({ ...f, subcategoryId: e.target.value }))}
+                  className={styles.control}
+                >
+                  <option value="">Select</option>
+                  {subcats.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={styles.fieldLabel}>Product Type*</label>
+                <div className={styles.radioLine}>
+                  {(["physical", "digital"] as const).map((type) => (
+                    <label key={type} className={styles.choice}>
+                      <input
+                        type="radio"
+                        checked={form.productType === type}
+                        onChange={() => setForm((f) => ({ ...f, productType: type }))}
+                      />
+                      {type[0].toUpperCase() + type.slice(1)}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
 
-        <div className={styles.choiceRow}>
-          <label className={styles.choice}>
+          <section className={styles.sectionCard}>
+            <h2 className={styles.sectionTitle}>Pricing &amp; Inventory</h2>
+            <div className={styles.fieldGrid3}>
+              <div>
+                <label className={styles.fieldLabel}>Price* (₹)</label>
+                <input
+                  value={form.price}
+                  onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                  className={styles.control}
+                />
+              </div>
+              <div>
+                <label className={styles.fieldLabel}>Compare at Price</label>
+                <input
+                  value={form.compareAtPrice}
+                  onChange={(e) => setForm((f) => ({ ...f, compareAtPrice: e.target.value }))}
+                  className={styles.control}
+                />
+              </div>
+              <div>
+                <label className={styles.fieldLabel}>Cost Price (seller-only)</label>
+                <input
+                  value={form.costPrice}
+                  onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
+                  className={styles.control}
+                />
+              </div>
+            </div>
+            <div className={styles.fieldGrid3}>
+              <div>
+                <label className={styles.fieldLabel}>SKU</label>
+                <input
+                  value={form.sku}
+                  onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+                  className={styles.control}
+                />
+              </div>
+              <div>
+                <label className={styles.fieldLabel}>Stock Quantity*</label>
+                <input
+                  value={form.stockQuantity}
+                  onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
+                  className={styles.control}
+                />
+              </div>
+              <div>
+                <label className={styles.fieldLabel}>Low Stock Alert</label>
+                <input
+                  value={form.lowStockAlert}
+                  onChange={(e) => setForm((f) => ({ ...f, lowStockAlert: e.target.value }))}
+                  className={styles.control}
+                />
+              </div>
+            </div>
+            <label className={styles.checkLabel}>
+              <input
+                type="checkbox"
+                checked={form.continueSelling}
+                onChange={(e) => setForm((f) => ({ ...f, continueSelling: e.target.checked }))}
+              />
+              Continue selling when out of stock
+            </label>
+          </section>
+
+          {form.productType === "physical" ? (
+            <section className={styles.sectionCard}>
+              <h2 className={styles.sectionTitle}>Shipping Details</h2>
+              <div className={styles.fieldGrid4}>
+                <div>
+                  <label className={styles.fieldLabel}>Weight (kg)*</label>
+                  <input
+                    value={form.weight}
+                    onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
+                    placeholder="0.2 or 200g"
+                    inputMode="decimal"
+                    className={styles.control}
+                  />
+                </div>
+                <div>
+                  <label className={styles.fieldLabel}>Length (cm)*</label>
+                  <input
+                    value={form.lengthCm}
+                    onChange={(e) => setForm((f) => ({ ...f, lengthCm: e.target.value }))}
+                    placeholder="15"
+                    inputMode="decimal"
+                    className={styles.control}
+                  />
+                </div>
+                <div>
+                  <label className={styles.fieldLabel}>Width (cm)*</label>
+                  <input
+                    value={form.widthCm}
+                    onChange={(e) => setForm((f) => ({ ...f, widthCm: e.target.value }))}
+                    placeholder="20"
+                    inputMode="decimal"
+                    className={styles.control}
+                  />
+                </div>
+                <div>
+                  <label className={styles.fieldLabel}>Height (cm)*</label>
+                  <input
+                    value={form.heightCm}
+                    onChange={(e) => setForm((f) => ({ ...f, heightCm: e.target.value }))}
+                    placeholder="20"
+                    inputMode="decimal"
+                    className={styles.control}
+                  />
+                </div>
+              </div>
+            </section>
+          ) : null}
+        </div>
+
+        <div className={styles.productSide}>
+          <section className={styles.sectionCard}>
+            <h2 className={styles.sectionTitle}>Product Images*</h2>
+            <p className={styles.sectionHint}>
+              Add up to 8 images. First image will be your product thumbnail.
+            </p>
+            <div
+              className={styles.dropZone}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                void addFiles(Array.from(event.dataTransfer.files));
+              }}
+            >
+              <ImagePlus size={22} />
+              <p>Drag &amp; drop images here</p>
+              <span>or</span>
+              <Button
+                variant="outline"
+                disabled={busy || form.imageUrls.length >= 8}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Upload Images
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                disabled={busy}
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  e.target.value = "";
+                  void addFiles(files);
+                }}
+              />
+            </div>
+            <p className={styles.sectionHint}>{form.imageUrls.length} / 8 images added</p>
+            {form.imageUrls.length > 0 ? (
+              <div className={styles.imageGrid}>
+                {form.imageUrls.map((url) => (
+                  <figure key={url} className={styles.imageThumb}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          imageUrls: f.imageUrls.filter((item) => item !== url),
+                        }))
+                      }
+                    >
+                      Remove
+                    </button>
+                  </figure>
+                ))}
+              </div>
+            ) : null}
+            <label className={styles.fieldLabel}>Image URL (optional)</label>
             <input
-              type="radio"
-              checked={form.status === "active"}
-              onChange={() => setForm((f) => ({ ...f, status: "active" }))}
-            />{" "}
-            Active
-          </label>
-          <label className={styles.choice}>
+              value={form.imageUrl}
+              onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
+              className={styles.control}
+            />
+          </section>
+
+          <section className={styles.sectionCard}>
+            <h2 className={styles.sectionTitle}>Customization</h2>
+            <label className={styles.checkLabel}>
+              <input
+                type="checkbox"
+                checked={form.isCustomizable}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, isCustomizable: e.target.checked }))
+                }
+              />
+              Buyers can request a customization
+            </label>
+            {form.isCustomizable ? (
+              <>
+                <label className={styles.fieldLabel}>Prompt shown to buyers</label>
+                <input
+                  value={form.customizationLabel}
+                  maxLength={120}
+                  placeholder="Example: Name to engrave, colour mix, or size note"
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, customizationLabel: e.target.value }))
+                  }
+                  className={styles.control}
+                />
+              </>
+            ) : (
+              <p style={{ margin: "8px 0 0", color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
+                Leave this off for products that ship exactly as listed.
+              </p>
+            )}
+          </section>
+
+          <section className={styles.sectionCard}>
+            <h2 className={styles.sectionTitle}>Product Status</h2>
+            <label className={styles.statusOption}>
+              <input
+                type="radio"
+                checked={form.status === "active"}
+                onChange={() => setForm((f) => ({ ...f, status: "active" }))}
+              />
+              <span>
+                <strong>Active</strong>
+                <small>Visible to everyone</small>
+              </span>
+            </label>
+            <label className={styles.statusOption}>
+              <input
+                type="radio"
+                checked={form.status === "draft"}
+                onChange={() => setForm((f) => ({ ...f, status: "draft" }))}
+              />
+              <span>
+                <strong>Draft</strong>
+                <small>Only visible to you</small>
+              </span>
+            </label>
+          </section>
+
+          <section className={styles.sectionCard}>
+            <h2 className={styles.sectionTitle}>Product Tags</h2>
             <input
-              type="radio"
-              checked={form.status === "draft"}
-              onChange={() => setForm((f) => ({ ...f, status: "draft" }))}
-            />{" "}
-            Draft
-          </label>
+              value={form.tags}
+              onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
+              className={styles.control}
+            />
+            <p className={styles.sectionHint}>Comma-separated, max 10.</p>
+          </section>
+
+          <section className={styles.sectionCard}>
+            <h2 className={styles.sectionTitle}>Collections</h2>
+            <div className={styles.chipList}>
+              {collections.map((c) => {
+                const checked = selectedCollections.includes(c.id);
+                return (
+                  <label key={c.id} className={`${styles.chip} ${checked ? styles.chipOn : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setSelectedCollections((prev) =>
+                          checked ? prev.filter((id) => id !== c.id) : [...prev, c.id]
+                        )
+                      }
+                    />
+                    {c.name}
+                  </label>
+                );
+              })}
+            </div>
+            <label className={styles.fieldLabel}>New collection name</label>
+            <div className={styles.inlineAdd}>
+              <input
+                value={newCollectionName}
+                onChange={(e) => setNewCollectionName(e.target.value)}
+                placeholder="New collection name"
+                className={styles.control}
+              />
+              <Button variant="outline" onClick={() => void createCollection()}>
+                Add
+              </Button>
+            </div>
+          </section>
+
+          <section className={styles.tipsCard}>
+            <h2 className={styles.sectionTitle}>
+              <Lightbulb size={16} /> Tips for better visibility
+            </h2>
+            <ul>
+              <li>Use high quality images</li>
+              <li>Write a clear and detailed description</li>
+              <li>Set competitive pricing</li>
+              <li>Choose the right category</li>
+            </ul>
+          </section>
         </div>
       </div>
     </div>

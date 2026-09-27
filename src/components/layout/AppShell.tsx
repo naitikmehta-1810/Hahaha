@@ -18,7 +18,8 @@ export default function AppShell({
     pathname === "/forgot-password" ||
     pathname === "/reset-password";
   const isSellOnboarding = pathname === "/sell" || pathname.startsWith("/sell/");
-  const hideChrome = isAuthRoute || isSellOnboarding;
+  const isSellerPortal = pathname === "/seller" || pathname.startsWith("/seller/");
+  const hideChrome = isAuthRoute || isSellOnboarding || isSellerPortal;
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", flexDirection: "column" }}>

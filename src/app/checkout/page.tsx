@@ -791,6 +791,7 @@ function CheckoutInner() {
                         <div className={styles.summaryItemTitle}>{item.title}</div>
                         <div className={styles.summaryItemMeta}>
                           {item.subtitle} · Qty: {item.qty}
+                          {item.customizationNote ? ` · ${item.customizationNote}` : ""}
                         </div>
                       </div>
                       <div className={styles.summaryItemPrice}>
@@ -893,7 +894,10 @@ function CheckoutInner() {
                   <img src={item.image} alt="" className={styles.summaryThumb} />
                   <div className={styles.summaryItemBody}>
                     <p className={styles.summaryItemTitle}>{item.title}</p>
-                    <div className={styles.summaryItemMeta}>Qty: {item.qty}</div>
+                    <div className={styles.summaryItemMeta}>
+                      Qty: {item.qty}
+                      {item.customizationNote ? ` · ${item.customizationNote}` : ""}
+                    </div>
                   </div>
                   <span className={styles.summaryItemPrice}>
                     ₹{(item.price * item.qty).toLocaleString("en-IN")}
@@ -965,7 +969,7 @@ function CheckoutInner() {
           <Truck size={18} className={styles.propIcon} />
           <div>
             <div className={styles.propTitle}>Free Shipping</div>
-            <div className={styles.propDesc}>On orders over ₹999</div>
+            <div className={styles.propDesc}>On orders over ₹499</div>
           </div>
         </div>
         <div className={styles.propItem}>
