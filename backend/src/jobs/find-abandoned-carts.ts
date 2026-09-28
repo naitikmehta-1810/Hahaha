@@ -1,7 +1,7 @@
 import { Queue, Worker } from "bullmq";
-import { Redis } from "ioredis";
 import { env } from "../config/env.js";
-import { queueConnection, queuePrefix } from "../config/queue.js";
+import { createBullConnection, queuePrefix } from "../config/queue.js";
+import { createRedisProbe } from "../config/redis.js";
 import { pool } from "../config/db.js";
 import { enqueueEmailJob } from "../services/notify.enqueue.js";
 
@@ -103,13 +103,7 @@ export async function processAbandonedCarts() {
 }
 
 async function isRedisReachable() {
-  const client = new Redis(env.REDIS_URL, {
-    maxRetriesPerRequest: 1,
-    connectTimeout: 1500,
-    lazyConnect: true,
-    enableOfflineQueue: false,
-    retryStrategy: () => null,
-  });
+  const client = createRedisProbe();
 
   try {
     await client.connect();
@@ -153,15 +147,18 @@ export async function startAbandonedCartJob() {
   }
 
   try {
-    queue = new Queue(QUEUE_NAME, { connection: queueConnection, prefix: queuePrefix });
+    queue = new Queue(QUEUE_NAME, { connection: createBullConnection(), prefix: queuePrefix });
     worker = new Worker(
       QUEUE_NAME,
       async () => processAbandonedCarts(),
-      { connection: queueConnection, prefix: queuePrefix }
+      { connection: createBullConnection(), prefix: queuePrefix }
     );
 
     worker.on("failed", (job, err) => {
       console.error(`[abandoned-carts] job failed id=${job?.id}`, err);
+    });
+    worker.on("error", (err) => {
+      console.error("[abandoned-carts] redis error", err);
     });
 
     await queue.upsertJobScheduler(

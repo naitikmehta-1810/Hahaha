@@ -1,8 +1,28 @@
 import * as Sentry from "@sentry/node";
 import { Worker } from "bullmq";
-import type { ConnectionOptions } from "bullmq";
+import { Redis } from "ioredis";
 import { env, QUEUE_NAME, QUEUE_PREFIX, isOpenWaConfigured } from "./config/env.js";
 import { processWhatsAppJob } from "./jobs/handlers.js";
+
+function redisUsesTls(url: string) {
+  if (url.startsWith("rediss://")) return true;
+  try {
+    return new URL(url).hostname.endsWith(".upstash.io");
+  } catch {
+    return false;
+  }
+}
+
+function createConnection() {
+  return new Redis(env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    connectTimeout: 10_000,
+    family: 4,
+    retryStrategy: (times) => Math.min(500 * times, 10_000),
+    ...(redisUsesTls(env.REDIS_URL) ? { tls: { rejectUnauthorized: false } } : {}),
+  });
+}
 
 if (env.SENTRY_DSN) {
   Sentry.init({
@@ -12,13 +32,8 @@ if (env.SENTRY_DSN) {
   });
 }
 
-const connection: ConnectionOptions = {
-  url: env.REDIS_URL,
-  maxRetriesPerRequest: null,
-};
-
 const worker = new Worker(QUEUE_NAME, processWhatsAppJob, {
-  connection,
+  connection: createConnection(),
   prefix: QUEUE_PREFIX,
   concurrency: 2,
 });

@@ -1,5 +1,5 @@
 import { Queue, Worker } from "bullmq";
-import { getRedis } from "../config/redis.js";
+import { createBullConnection } from "../config/queue.js";
 import { pool } from "../config/db.js";
 import { enqueueEmailJob } from "../services/notify.enqueue.js";
 import { userAllows } from "../services/notification-prefs.service.js";
@@ -68,8 +68,7 @@ async function sendDigests() {
 
 export async function startRecentlyViewedDigestJob() {
   try {
-    const connection = getRedis();
-    const queue = new Queue(QUEUE_NAME, { connection });
+    const queue = new Queue(QUEUE_NAME, { connection: createBullConnection() });
     await queue.upsertJobScheduler(
       JOB_NAME,
       { every: 24 * 60 * 60 * 1000 },
@@ -82,8 +81,12 @@ export async function startRecentlyViewedDigestJob() {
         },
       }
     );
-    // eslint-disable-next-line no-new
-    new Worker(QUEUE_NAME, async () => sendDigests(), { connection });
+    const digestWorker = new Worker(QUEUE_NAME, async () => sendDigests(), {
+      connection: createBullConnection(),
+    });
+    digestWorker.on("error", (err) => {
+      console.error("[recently-viewed] redis error", err);
+    });
     console.log("[recently-viewed] BullMQ worker started (daily)");
   } catch (error) {
     console.warn("[recently-viewed] failed to start", error);

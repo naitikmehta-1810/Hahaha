@@ -1,7 +1,28 @@
 import * as Sentry from "@sentry/node";
 import { Worker } from "bullmq";
+import { Redis } from "ioredis";
 import { env, QUEUE_NAME, QUEUE_PREFIX } from "./config/env.js";
 import { processEmailJob } from "./jobs/handlers.js";
+
+function redisUsesTls(url: string) {
+  if (url.startsWith("rediss://")) return true;
+  try {
+    return new URL(url).hostname.endsWith(".upstash.io");
+  } catch {
+    return false;
+  }
+}
+
+function createConnection() {
+  return new Redis(env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    connectTimeout: 10_000,
+    family: 4,
+    retryStrategy: (times) => Math.min(500 * times, 10_000),
+    ...(redisUsesTls(env.REDIS_URL) ? { tls: { rejectUnauthorized: false } } : {}),
+  });
+}
 
 if (env.SENTRY_DSN) {
   Sentry.init({
@@ -12,11 +33,12 @@ if (env.SENTRY_DSN) {
 }
 
 const worker = new Worker(QUEUE_NAME, processEmailJob, {
-  connection: {
-    url: env.REDIS_URL,
-    maxRetriesPerRequest: null,
-  },
+  connection: createConnection(),
   prefix: QUEUE_PREFIX,
+});
+
+worker.on("error", (err) => {
+  console.error("[email-service] redis error", err);
 });
 
 worker.on("failed", (job, err) => {
@@ -33,4 +55,4 @@ worker.on("completed", (job) => {
   console.log(`[email-service] completed job=${job.name} id=${job.id}`);
 });
 
-console.log(`[email-service] listening on queue=${QUEUE_NAME} redis=${env.REDIS_URL}`);
+console.log(`[email-service] listening on queue=${QUEUE_NAME}`);

@@ -1,21 +1,15 @@
-import type { ConnectionOptions } from "bullmq";
-import { env } from "./env.js";
+import { createBullRedis } from "./redis.js";
 
 /**
- * Base BullMQ connection options shared by all queues and workers.
- * Actual queues are defined per-service in later phases.
+ * Fresh BullMQ connection. Call once per Queue and once per Worker.
+ * Works for Upstash (rediss://) and Redis Cloud (redis://).
  *
- * maxRetriesPerRequest must be null for BullMQ blocking commands.
+ * maxRetriesPerRequest is null inside createBullRedis, which BullMQ requires
+ * for blocking commands.
  */
-export const queueConnection: ConnectionOptions = {
-  url: env.REDIS_URL,
-  maxRetriesPerRequest: null,
-  family: 4,
-  ...(env.REDIS_URL.startsWith("rediss://")
-    ? { tls: { rejectUnauthorized: false } }
-    : {}),
-};
+export function createBullConnection() {
+  return createBullRedis();
+}
 
 /** Prefix BullMQ keys so Stuffsy doesn't collide with other apps on a shared Redis. */
 export const queuePrefix = "{stuffsy}";
-

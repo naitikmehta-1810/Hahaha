@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 import { Queue, Worker } from "bullmq";
 import { pool } from "../config/db.js";
-import { queueConnection, queuePrefix } from "../config/queue.js";
+import { createBullConnection, queuePrefix } from "../config/queue.js";
 import { uploadRawFile } from "../services/media.service.js";
 import { enqueueEmailJob } from "../services/notify.enqueue.js";
 
@@ -12,7 +12,7 @@ let invoiceQueue: Queue | null = null;
 function getQueue() {
   if (!invoiceQueue) {
     invoiceQueue = new Queue(QUEUE_NAME, {
-      connection: queueConnection,
+      connection: createBullConnection(),
       prefix: queuePrefix,
       defaultJobOptions: {
         attempts: 3,
@@ -527,10 +527,13 @@ export function startInvoiceWorker() {
         await generateInvoiceForOrder(String(job.data.orderId));
       }
     },
-    { connection: queueConnection, prefix: queuePrefix }
+    { connection: createBullConnection(), prefix: queuePrefix }
   );
   worker.on("failed", (job, err) => {
     console.error(`[invoice] job failed id=${job?.id}`, err);
+  });
+  worker.on("error", (err) => {
+    console.error("[invoice] redis error", err);
   });
   console.log("[invoice] BullMQ worker started");
 }

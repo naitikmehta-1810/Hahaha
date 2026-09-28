@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import { queueConnection, queuePrefix } from "../config/queue.js";
+import { createBullConnection, queuePrefix } from "../config/queue.js";
 import { pool } from "../config/db.js";
 
 const EMAIL_QUEUE = "email";
@@ -18,7 +18,7 @@ let whatsappQueue: Queue | null = null;
 function getEmailQueue() {
   if (!emailQueue) {
     emailQueue = new Queue(EMAIL_QUEUE, {
-      connection: queueConnection,
+      connection: createBullConnection(),
       prefix: queuePrefix,
       defaultJobOptions: defaultJobOpts,
     });
@@ -29,7 +29,7 @@ function getEmailQueue() {
 function getWhatsAppQueue() {
   if (!whatsappQueue) {
     whatsappQueue = new Queue(WHATSAPP_QUEUE, {
-      connection: queueConnection,
+      connection: createBullConnection(),
       prefix: queuePrefix,
       defaultJobOptions: defaultJobOpts,
     });

@@ -22,6 +22,12 @@ function withStore(prefix: string) {
 }
 
 /**
+ * When Upstash rejects commands (quota, outage), skip the limiter and serve
+ * the request. A closed Redis store was turning every catalog call into 429.
+ */
+const failOpen = { passOnStoreError: true as const };
+
+/**
  * 10 requests / 15 minutes / IP for login and signup.
  */
 export const authWriteLimiter = rateLimit({
@@ -30,6 +36,7 @@ export const authWriteLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many attempts. Try again in 15 minutes." },
+  ...failOpen,
   ...withStore("auth"),
 });
 
@@ -42,6 +49,7 @@ export const checkoutLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many checkout attempts. Try again in 15 minutes." },
+  ...failOpen,
   ...withStore("checkout"),
 });
 
@@ -52,6 +60,7 @@ export const publicReadLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many requests. Slow down." },
+  ...failOpen,
   ...withStore("public"),
 });
 
@@ -61,6 +70,7 @@ export const trackViewLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many view events." },
+  ...failOpen,
   ...withStore("track"),
 });
 
@@ -70,6 +80,7 @@ export const reviewWriteLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many review submissions. Try again later." },
+  ...failOpen,
   ...withStore("review"),
 });
 
@@ -80,5 +91,6 @@ export const gstinLookupLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many GST checks. Wait a few minutes and try again." },
+  ...failOpen,
   ...withStore("gstin"),
 });

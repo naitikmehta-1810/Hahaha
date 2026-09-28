@@ -122,7 +122,9 @@ app.get("/api/health", async (_req, res) => {
     checks.redis = "error";
   }
 
-  const ok = checks.database === "ok" && checks.redis === "ok";
+  // Redis is optional for storefront reads. Only a dead database should fail health,
+  // otherwise Render stops routing while Upstash is over its command cap.
+  const ok = checks.database === "ok";
   res.status(ok ? 200 : 503).json({ ok, ...checks });
 });
 

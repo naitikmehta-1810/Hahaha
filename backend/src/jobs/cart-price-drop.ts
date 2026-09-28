@@ -1,5 +1,5 @@
 import { Queue, Worker } from "bullmq";
-import { getRedis } from "../config/redis.js";
+import { createBullConnection } from "../config/queue.js";
 import { pool } from "../config/db.js";
 import { enqueueEmailJob } from "../services/notify.enqueue.js";
 import { userAllows } from "../services/notification-prefs.service.js";
@@ -84,8 +84,7 @@ async function scanPriceDrops() {
 
 export async function startCartPriceDropJob() {
   try {
-    const connection = getRedis();
-    const queue = new Queue(QUEUE_NAME, { connection });
+    const queue = new Queue(QUEUE_NAME, { connection: createBullConnection() });
     await queue.upsertJobScheduler(
       JOB_NAME,
       { every: 60 * 60 * 1000 },
@@ -98,8 +97,12 @@ export async function startCartPriceDropJob() {
         },
       }
     );
-    // eslint-disable-next-line no-new
-    new Worker(QUEUE_NAME, async () => scanPriceDrops(), { connection });
+    const priceWorker = new Worker(QUEUE_NAME, async () => scanPriceDrops(), {
+      connection: createBullConnection(),
+    });
+    priceWorker.on("error", (err) => {
+      console.error("[cart-price-drop] redis error", err);
+    });
     console.log("[cart-price-drop] BullMQ worker started (hourly)");
   } catch (error) {
     console.warn("[cart-price-drop] failed to start", error);

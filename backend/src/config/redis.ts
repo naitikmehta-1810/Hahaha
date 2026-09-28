@@ -1,33 +1,76 @@
-import { Redis } from "ioredis";
+import { Redis, type RedisOptions } from "ioredis";
 import { env } from "./env.js";
 
 /**
- * Shared Redis connection options derived from REDIS_URL.
- * Use createRedisClient() for app-level caching/sessions.
- * BullMQ workers must use queueConnection from config/queue.ts instead
- * (maxRetriesPerRequest must be null for BullMQ).
- *
- * Upstash / Redis Cloud require `rediss://` (TLS). Plain `redis://` to those
- * hosts usually fails with ECONNRESET from Render.
+ * One REDIS_URL serves both hosts:
+ * - Upstash: rediss:// (TLS). A redis:// URL on *.upstash.io is upgraded to TLS.
+ * - Redis Cloud and local Redis: redis:// as copied from the dashboard.
  */
-export const redisOptions = {
-  maxRetriesPerRequest: 3,
-  enableReadyCheck: true,
-  lazyConnect: true,
-  // Prefer IPv4 on some PaaS networks where IPv6 routes reset.
-  family: 4,
-} as const;
+export function redisUsesTls(url: string): boolean {
+  if (url.startsWith("rediss://")) return true;
+  try {
+    return new URL(url).hostname.endsWith(".upstash.io");
+  } catch {
+    return false;
+  }
+}
 
-export function createRedisClient(): Redis {
-  const url = env.REDIS_URL;
-  const needsTls = url.startsWith("rediss://");
+function tlsOptions(url: string): Pick<RedisOptions, "tls"> {
+  return redisUsesTls(url) ? { tls: { rejectUnauthorized: false } } : {};
+}
+
+/** Back off instead of reconnecting in a tight loop, which fills the heap. */
+function retryStrategy(times: number): number {
+  return Math.min(500 * times, 10_000);
+}
+
+/**
+ * Cache, rate limit, and health checks. Fail the command when Redis is down
+ * so callers can skip it. An open offline queue was retaining every failed
+ * command until the process ran out of memory.
+ */
+export function createRedisClient(url = env.REDIS_URL): Redis {
   return new Redis(url, {
-    ...redisOptions,
-    ...(needsTls ? { tls: { rejectUnauthorized: false } } : {}),
+    maxRetriesPerRequest: 2,
+    enableReadyCheck: true,
+    enableOfflineQueue: false,
+    lazyConnect: true,
+    connectTimeout: 8_000,
+    family: 4,
+    retryStrategy,
+    ...tlsOptions(url),
   });
 }
 
-/** Lazy singleton for general-purpose Redis access. */
+/**
+ * A new client per BullMQ queue or worker. Do not share instances: BullMQ
+ * opens a second blocking connection, and a shared options object reconnects
+ * in a loop under native ESM.
+ */
+export function createBullRedis(url = env.REDIS_URL): Redis {
+  return new Redis(url, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    connectTimeout: 10_000,
+    family: 4,
+    retryStrategy,
+    ...tlsOptions(url),
+  });
+}
+
+/** Short-lived ping used before starting a worker. */
+export function createRedisProbe(url = env.REDIS_URL): Redis {
+  return new Redis(url, {
+    maxRetriesPerRequest: 1,
+    connectTimeout: 2_000,
+    lazyConnect: true,
+    enableOfflineQueue: false,
+    family: 4,
+    retryStrategy: () => null,
+    ...tlsOptions(url),
+  });
+}
+
 let redisSingleton: Redis | undefined;
 
 export function getRedis(): Redis {
