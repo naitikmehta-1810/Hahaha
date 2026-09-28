@@ -1,12 +1,13 @@
 import { rateLimit } from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import { env } from "../config/env.js";
-import { getRedis } from "../config/redis.js";
+import { getRedis, whenRedisReady } from "../config/redis.js";
 
 function makeRedisStore(prefix: string) {
   return new RedisStore({
     prefix: `rl:${prefix}:`,
     sendCommand: async (...args: string[]) => {
+      await whenRedisReady();
       const result = await getRedis().call(args[0], ...args.slice(1));
       return result as string | number | boolean | (string | number | boolean)[];
     },

@@ -72,10 +72,40 @@ export function createRedisProbe(url = env.REDIS_URL): Redis {
 }
 
 let redisSingleton: Redis | undefined;
+let connecting: Promise<void> | undefined;
 
 export function getRedis(): Redis {
   if (!redisSingleton) {
     redisSingleton = createRedisClient();
   }
   return redisSingleton;
+}
+
+/** Wait until the shared client can accept commands. Safe to call in parallel. */
+export function whenRedisReady(): Promise<void> {
+  const redis = getRedis();
+  if (redis.status === "ready") return Promise.resolve();
+  if (!connecting) {
+    connecting = (async () => {
+      if (redis.status === "wait") {
+        try {
+          await redis.connect();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+          if (!message.toLowerCase().includes("already")) throw error;
+        }
+      }
+      if (redis.status === "ready") return;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Redis not ready")), 8_000);
+        redis.once("ready", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    })().finally(() => {
+      connecting = undefined;
+    });
+  }
+  return connecting;
 }
