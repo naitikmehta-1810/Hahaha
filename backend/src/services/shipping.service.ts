@@ -357,13 +357,10 @@ async function bookShiprocketAwb(opts: {
   }
   weight = Math.min(30, Math.max(0.5, Math.round(weight * 1000) / 1000));
 
-  // Couriers often reject ₹1 invoices. Use order total (incl. shipping) with a safe floor.
-  const orderTotal = Number(order.rows[0].total_amount);
-  const declaredValue = Math.max(
-    50,
-    Math.round(Number.isFinite(orderTotal) && orderTotal > 0 ? orderTotal : subTotal),
-    Math.round(subTotal)
-  );
+  // One booking per seller. Declare only this seller's goods, not the whole order,
+  // so a second shop's shipment does not invoice or collect the other shop's total.
+  // Couriers reject ₹1 invoices, so keep a ₹50 floor.
+  const declaredValue = Math.max(50, Math.round(subTotal));
 
   const addr = parseAddressBlob(order.rows[0].shipping_address);
   const billingPhone =

@@ -45,12 +45,22 @@ adminRouter.get(
       sellers: string;
       pending_sellers: string;
       orders: string;
+      paid_orders: string;
+      open_orders: string;
+      gmv: string;
+      tax_collected: string;
+      open_returns: string;
     }>(
       `select
          (select count(*)::text from public.users) as users,
          (select count(*)::text from public.sellers where deleted_at is null) as sellers,
          (select count(*)::text from public.sellers where deleted_at is null and status = 'pending') as pending_sellers,
-         (select count(*)::text from public.orders) as orders`
+         (select count(*)::text from public.orders) as orders,
+         (select count(*)::text from public.orders where status not in ('pending_payment', 'cancelled')) as paid_orders,
+         (select count(*)::text from public.orders where status in ('paid', 'processing', 'accepted', 'shipped', 'out_for_delivery')) as open_orders,
+         (select coalesce(sum(total_amount), 0)::text from public.orders where status not in ('pending_payment', 'cancelled')) as gmv,
+         (select coalesce(sum(tax_amount), 0)::text from public.orders where status not in ('pending_payment', 'cancelled')) as tax_collected,
+         (select count(*)::text from public.return_requests where status = 'requested') as open_returns`
     );
     const row = result.rows[0];
     res.json({
@@ -58,6 +68,11 @@ adminRouter.get(
       sellers: Number(row?.sellers ?? 0),
       pendingSellers: Number(row?.pending_sellers ?? 0),
       orders: Number(row?.orders ?? 0),
+      paidOrders: Number(row?.paid_orders ?? 0),
+      openOrders: Number(row?.open_orders ?? 0),
+      gmv: Number(row?.gmv ?? 0),
+      taxCollected: Number(row?.tax_collected ?? 0),
+      openReturns: Number(row?.open_returns ?? 0),
     });
   })
 );

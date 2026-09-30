@@ -91,24 +91,6 @@ export default function CartPage() {
     });
   }, [cartItems.length]);
 
-  const handleQtyChange = async (id: string, type: "inc" | "dec") => {
-    const item = cartItems.find((entry) => entry.id === id);
-    if (!item || !item.available) return;
-
-    const newQty = type === "dec" ? Math.max(1, item.qty - 1) : item.qty + 1;
-    if (newQty === item.qty) return;
-
-    setStatus(null);
-    try {
-      await updateCartItemQty(id, newQty);
-      syncFromCache();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not update quantity.";
-      setStatus({ type: "error", message });
-      await loadCart();
-    }
-  };
-
   const handleRemoveItem = async (id: string) => {
     setStatus(null);
     try {
@@ -116,6 +98,28 @@ export default function CartPage() {
       syncFromCache();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not remove item.";
+      setStatus({ type: "error", message });
+      await loadCart();
+    }
+  };
+
+  const handleQtyChange = async (id: string, type: "inc" | "dec") => {
+    const item = cartItems.find((entry) => entry.id === id);
+    if (!item || !item.available) return;
+
+    if (type === "dec" && item.qty <= 1) {
+      await handleRemoveItem(id);
+      return;
+    }
+
+    const newQty = type === "dec" ? item.qty - 1 : item.qty + 1;
+
+    setStatus(null);
+    try {
+      await updateCartItemQty(id, newQty);
+      syncFromCache();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update quantity.";
       setStatus({ type: "error", message });
       await loadCart();
     }
@@ -292,9 +296,10 @@ export default function CartPage() {
                     type="button"
                     onClick={() => void handleRemoveItem(item.id)}
                     className={styles.deleteBtn}
-                    aria-label="Remove item"
+                    aria-label={`Remove ${item.title}`}
                   >
                     <Trash2 size={16} />
+                    Remove
                   </button>
                 </div>
                 <div className={styles.qtySelector}>

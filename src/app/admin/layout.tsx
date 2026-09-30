@@ -3,6 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
+import {
+  Flag,
+  LayoutDashboard,
+  RotateCcw,
+  ShoppingBag,
+  Store,
+  Tags,
+  Ticket,
+  Users,
+  Wallet,
+} from "lucide-react";
 import Heading from "@/components/ui/Heading/Heading";
 import Text from "@/components/ui/Text/Text";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -10,15 +21,15 @@ import { redirectToLogin } from "@/utils/api-client";
 import styles from "./admin.module.css";
 
 const NAV = [
-  { href: "/admin", label: "Dashboard", exact: true },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/sellers", label: "Sellers" },
-  { href: "/admin/orders", label: "Orders" },
-  { href: "/admin/returns", label: "Returns" },
-  { href: "/admin/coupons", label: "Coupons" },
-  { href: "/admin/categories", label: "Categories" },
-  { href: "/admin/velocity-flags", label: "Velocity flags" },
-  { href: "/admin/stuck-pending-payments", label: "Stuck payments" },
+  { href: "/admin", label: "Overview", exact: true, Icon: LayoutDashboard },
+  { href: "/admin/users", label: "Users", Icon: Users },
+  { href: "/admin/sellers", label: "Sellers", Icon: Store },
+  { href: "/admin/orders", label: "Orders", Icon: ShoppingBag },
+  { href: "/admin/returns", label: "Returns", Icon: RotateCcw },
+  { href: "/admin/coupons", label: "Coupons", Icon: Ticket },
+  { href: "/admin/categories", label: "Categories", Icon: Tags },
+  { href: "/admin/velocity-flags", label: "Velocity", Icon: Flag },
+  { href: "/admin/stuck-pending-payments", label: "Payments", Icon: Wallet },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -63,8 +74,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <div className={styles.container}>
       <div className={styles.layout}>
         <aside className={styles.sidebar}>
-          <p className={styles.navTitle}>Admin</p>
-          <nav className={styles.navList}>
+          <Link href="/admin" className={styles.brand}>
+            <span className={styles.brandMark}>S</span>
+            <span>
+              <strong>Stuffsy</strong>
+              <small>Admin console</small>
+            </span>
+          </Link>
+          <p className={styles.navTitle}>Marketplace</p>
+          <nav className={styles.navList} aria-label="Admin">
             {NAV.map((item) => {
               const active = item.exact
                 ? pathname === item.href
@@ -74,7 +92,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={`${styles.navItem} ${active ? styles.navItemActive : ""}`}
+                  aria-current={active ? "page" : undefined}
                 >
+                  <item.Icon size={16} aria-hidden="true" />
                   {item.label}
                 </Link>
               );
