@@ -1,7 +1,25 @@
-import { rateLimit } from "express-rate-limit";
+import type { Request } from "express";
+import { ipKeyGenerator, rateLimit } from "express-rate-limit";
+import { isIP } from "node:net";
 import { RedisStore } from "rate-limit-redis";
 import { env } from "../config/env.js";
 import { getRedis, whenRedisReady } from "../config/redis.js";
+
+/**
+ * stuffsy.app proxies /api through Vercel, then Render.
+ * trust proxy 1 only sees Vercel's egress address, so every visitor shared
+ * one 120/minute bucket and catalog calls returned 429.
+ * Vercel sets x-vercel-forwarded-for to the browser address. Direct calls
+ * to the Render URL do not have that header, so they stay keyed by req.ip.
+ */
+function rateLimitKey(req: Request): string {
+  const forwarded = req.get("x-vercel-forwarded-for");
+  const candidate = forwarded?.split(",")[0]?.trim();
+  const ip = candidate && isIP(candidate) ? candidate : req.ip;
+  return ipKeyGenerator(ip && isIP(ip) ? ip : "0.0.0.0");
+}
+
+const perVisitor = { keyGenerator: rateLimitKey };
 
 function makeRedisStore(prefix: string) {
   return new RedisStore({
@@ -37,6 +55,7 @@ export const authWriteLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many attempts. Try again in 15 minutes." },
+  ...perVisitor,
   ...failOpen,
   ...withStore("auth"),
 });
@@ -50,6 +69,7 @@ export const checkoutLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many checkout attempts. Try again in 15 minutes." },
+  ...perVisitor,
   ...failOpen,
   ...withStore("checkout"),
 });
@@ -61,6 +81,7 @@ export const publicReadLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many requests. Slow down." },
+  ...perVisitor,
   ...failOpen,
   ...withStore("public"),
 });
@@ -71,6 +92,7 @@ export const trackViewLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many view events." },
+  ...perVisitor,
   ...failOpen,
   ...withStore("track"),
 });
@@ -81,6 +103,7 @@ export const reviewWriteLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many review submissions. Try again later." },
+  ...perVisitor,
   ...failOpen,
   ...withStore("review"),
 });
@@ -92,6 +115,7 @@ export const gstinLookupLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many GST checks. Wait a few minutes and try again." },
+  ...perVisitor,
   ...failOpen,
   ...withStore("gstin"),
 });
