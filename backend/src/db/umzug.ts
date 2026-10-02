@@ -25,9 +25,34 @@ const migrationGlob = __dirname.includes(`${path.sep}dist${path.sep}`)
   ? "migrations/*.js"
   : "migrations/*.ts";
 
+/**
+ * sequelize_meta has always stored `*.ts` names (CLI runs from src).
+ * Dist boot must use the same names or Umzug re-runs every migration as `*.js`.
+ */
+function stableMigrationName(fileName: string) {
+  return fileName.replace(/\.js$/i, ".ts");
+}
+
 export const migrator = new Umzug({
   migrations: {
     glob: [migrationGlob, { cwd: __dirname }],
+    resolve: ({ name, path: migrationPath, context }) => ({
+      name: stableMigrationName(name),
+      up: async () => {
+        if (!migrationPath) {
+          throw new Error(`Migration path missing for ${name}`);
+        }
+        const migration = await import(pathToFileURL(migrationPath).href);
+        return migration.up({ context });
+      },
+      down: async () => {
+        if (!migrationPath) {
+          throw new Error(`Migration path missing for ${name}`);
+        }
+        const migration = await import(pathToFileURL(migrationPath).href);
+        return migration.down({ context });
+      },
+    }),
   },
   context: migrationSequelize.getQueryInterface(),
   storage: new SequelizeStorage({
@@ -39,8 +64,20 @@ export const migrator = new Umzug({
 
 export type Migration = typeof migrator._types.migration;
 
+/**
+ * Drop accidental `*.js` meta rows from a failed dist boot that used file
+ * basenames before name normalization. Idempotent.
+ */
+async function scrubJsMetaRows() {
+  await migrationSequelize.query(`
+    DELETE FROM sequelize_meta
+    WHERE name LIKE '%.js'
+  `);
+}
+
 /** Apply pending migrations, then close the migration connection. */
 export async function applyPendingMigrations() {
+  await scrubJsMetaRows();
   const pending = await migrator.pending();
   if (pending.length === 0) {
     await migrationSequelize.close();
