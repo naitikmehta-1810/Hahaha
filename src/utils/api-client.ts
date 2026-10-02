@@ -6,6 +6,8 @@ export type AuthUser = {
   role: string;
   status: string;
   emailVerifiedAt: string | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
   createdAt: string;
   updatedAt: string;
   isSeller?: boolean;

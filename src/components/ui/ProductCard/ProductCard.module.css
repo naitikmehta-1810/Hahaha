@@ -10,7 +10,7 @@
 }
 
 .card:hover {
-  transform: translateY(-4px);
+  transform: none;
 }
 
 .imageWrapper {
@@ -73,7 +73,7 @@
   color: var(--color-text-muted);
   box-shadow: var(--shadow-sm);
   transition: all var(--transition-fast);
-  opacity: 0;
+  opacity: 1;
   z-index: 10;
 }
 

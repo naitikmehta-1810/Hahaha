@@ -22,9 +22,20 @@
   }
 }
 
+@media (max-width: 768px) {
+  .footerWrapper {
+    padding: 40px 16px 24px;
+  }
+}
+
 @media (max-width: 576px) {
   .footer {
     grid-template-columns: 1fr;
+  }
+
+  .legalLinks {
+    gap: 12px 16px;
+    flex-wrap: wrap;
   }
 }
 

@@ -11,6 +11,7 @@ import {
   fetchAddresses,
   createAddress,
   deleteAddress,
+  changeMyPassword,
   updateMyProfile,
   formatOrderStatusLabel,
   orderStatusBadgeClass,
@@ -23,7 +24,13 @@ import {
   type WishlistItem,
 } from "@/utils/wishlist";
 import { productHref } from "@/utils/catalog";
-import { FALLBACK_AVATAR_IMAGE, FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
+import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
+
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`;
+  return letters.toUpperCase() || "U";
+}
 
 import {
   LayoutDashboard,
@@ -302,8 +309,15 @@ function AccountPageInner() {
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [profileName, setProfileName] = useState("");
   const [profilePhone, setProfilePhone] = useState("");
+  const [profileDob, setProfileDob] = useState("");
+  const [profileGender, setProfileGender] = useState("");
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [nextPassword, setNextPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<string | null>(null);
   const [addressBusy, setAddressBusy] = useState(false);
   const [newAddress, setNewAddress] = useState({
     label: "Home",
@@ -377,6 +391,8 @@ function AccountPageInner() {
       if (!cancelled) {
         setProfileName(sessionUser.fullName ?? "");
         setProfilePhone(sessionUser.phoneNumber ?? "");
+        setProfileDob(sessionUser.dateOfBirth ?? "");
+        setProfileGender(sessionUser.gender ?? "");
       }
 
       if (pendingOrderId) {
@@ -417,8 +433,7 @@ function AccountPageInner() {
       : "",
     status: sessionUser?.status === "active" ? "Active" : (sessionUser?.status ?? ""),
     address: defaultAddressLabel,
-    avatar:
-      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS_nZ1bL9Vcq6_iyx6xBOSL2oaaTepkAAFPaw&s",
+    avatarInitials: initialsFromName(sessionUser?.fullName ?? ""),
     emailVerified: Boolean(sessionUser?.emailVerifiedAt),
   };
 
@@ -588,17 +603,13 @@ function AccountPageInner() {
             </div>
           )}
 
+          {activeTab !== "profile-details" ? (
+          <>
           <div className={styles.profileCard}>
             <div className={styles.profileLeft}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={user.avatar}
-                alt={user.name}
-                className={styles.avatar}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = FALLBACK_AVATAR_IMAGE;
-                }}
-              />
+              <div className={styles.avatar} aria-hidden>
+                {user.avatarInitials}
+              </div>
               <div className={styles.profileDetails}>
                 <div className={styles.nameRow}>
                   <Heading level={3}>{user.name}</Heading>
@@ -793,55 +804,6 @@ function AccountPageInner() {
                   </Button>
                 </div>
               </div>
-            ) : activeTab === "profile-details" ? (
-              <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
-                <div className={styles.sectionHeader}>
-                  <Heading level={4}>Profile Details</Heading>
-                </div>
-                <div className={styles.formStack}>
-                  <label className={styles.formField}>
-                    Full name
-                    <input
-                      value={profileName}
-                      onChange={(e) => setProfileName(e.target.value)}
-                    />
-                  </label>
-                  <label className={styles.formField}>
-                    Phone
-                    <input
-                      value={profilePhone}
-                      onChange={(e) => setProfilePhone(e.target.value)}
-                    />
-                  </label>
-                  <Text size="sm" color="muted">
-                    Email: {sessionUser?.email} (change not supported here)
-                  </Text>
-                  {profileMsg ? <Text size="sm">{profileMsg}</Text> : null}
-                  <Button
-                    disabled={profileBusy}
-                    onClick={() => {
-                      void (async () => {
-                        setProfileBusy(true);
-                        setProfileMsg(null);
-                        const result = await updateMyProfile({
-                          fullName: profileName,
-                          phoneNumber: profilePhone || null,
-                        });
-                        setProfileBusy(false);
-                        if (result.error || !result.data?.user) {
-                          setProfileMsg(result.error ?? "Could not update profile");
-                          return;
-                        }
-                        setUser(result.data.user);
-                        setProfileMsg("Profile updated.");
-                        void refreshSession();
-                      })();
-                    }}
-                  >
-                    {profileBusy ? "Saving…" : "Save profile"}
-                  </Button>
-                </div>
-              </div>
             ) : activeTab === "wishlist" ? (
               <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
                 <div className={styles.sectionHeader}>
@@ -1031,6 +993,194 @@ function AccountPageInner() {
               </>
             )}
           </div>
+          </>
+          ) : (
+            <div className={styles.profileEditor}>
+              <section className={styles.editorCard}>
+                <div className={styles.editorIdentity}>
+                  <div className={styles.avatar} aria-hidden>
+                    {user.avatarInitials}
+                  </div>
+                  <div>
+                    <Heading level={3}>{user.name || "Your profile"}</Heading>
+                    <Text size="sm" color="muted">
+                      These details belong to your account. Past orders keep the name and address used at checkout.
+                    </Text>
+                  </div>
+                </div>
+                <div className={styles.fieldGrid}>
+                  <label className={styles.formField}>
+                    Full name
+                    <input
+                      value={profileName}
+                      autoComplete="name"
+                      onChange={(e) => setProfileName(e.target.value)}
+                    />
+                  </label>
+                  <label className={styles.formField}>
+                    Phone
+                    <input
+                      value={profilePhone}
+                      autoComplete="tel"
+                      inputMode="tel"
+                      placeholder="10-digit mobile"
+                      onChange={(e) => setProfilePhone(e.target.value)}
+                    />
+                  </label>
+                  <label className={styles.formField}>
+                    Date of birth
+                    <input
+                      type="date"
+                      value={profileDob}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setProfileDob(e.target.value)}
+                    />
+                  </label>
+                  <label className={styles.formField}>
+                    Gender
+                    <select
+                      value={profileGender}
+                      onChange={(e) => setProfileGender(e.target.value)}
+                    >
+                      <option value="">Not set</option>
+                      <option value="female">Female</option>
+                      <option value="male">Male</option>
+                      <option value="other">Other</option>
+                      <option value="prefer_not_to_say">Prefer not to say</option>
+                    </select>
+                  </label>
+                  <label className={styles.formField}>
+                    Email
+                    <input value={sessionUser.email} readOnly />
+                  </label>
+                  <div className={styles.formField}>
+                    Email status
+                    <span className={user.emailVerified ? styles.activeBadge : styles.verifiedBadge}>
+                      {user.emailVerified ? "Verified" : "Not verified yet"}
+                    </span>
+                  </div>
+                </div>
+                {profileMsg ? (
+                  <Text size="sm" color={profileMsg === "Profile updated." ? "muted" : undefined}>
+                    {profileMsg}
+                  </Text>
+                ) : null}
+                <Button
+                  disabled={profileBusy}
+                  onClick={() => {
+                    void (async () => {
+                      const name = profileName.trim();
+                      const phone = profilePhone.trim();
+                      if (name.length < 2) {
+                        setProfileMsg("Enter your full name.");
+                        return;
+                      }
+                      if (phone && phone.replace(/\D/g, "").length < 8) {
+                        setProfileMsg("Enter a valid phone number, or leave it blank.");
+                        return;
+                      }
+                      setProfileBusy(true);
+                      setProfileMsg(null);
+                      const result = await updateMyProfile({
+                        fullName: name,
+                        phoneNumber: phone || null,
+                        dateOfBirth: profileDob || null,
+                        gender: profileGender ? profileGender : null,
+                      });
+                      setProfileBusy(false);
+                      if (result.error || !result.data?.user) {
+                        setProfileMsg(result.error ?? "Could not update profile");
+                        return;
+                      }
+                      setUser(result.data.user);
+                      setProfileName(result.data.user.fullName ?? "");
+                      setProfilePhone(result.data.user.phoneNumber ?? "");
+                      setProfileDob(result.data.user.dateOfBirth ?? "");
+                      setProfileGender(result.data.user.gender ?? "");
+                      setProfileMsg("Profile updated.");
+                      void refreshSession();
+                    })();
+                  }}
+                >
+                  {profileBusy ? "Saving…" : "Save profile"}
+                </Button>
+              </section>
+
+              <section className={styles.editorCard}>
+                <Heading level={4}>Password</Heading>
+                <Text size="sm" color="muted">
+                  You stay signed in on this browser. Other sessions are signed out.
+                </Text>
+                <div className={styles.formStack}>
+                  <label className={styles.formField}>
+                    Current password
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                    />
+                  </label>
+                  <label className={styles.formField}>
+                    New password
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={nextPassword}
+                      onChange={(e) => setNextPassword(e.target.value)}
+                    />
+                  </label>
+                  <label className={styles.formField}>
+                    Confirm new password
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                  </label>
+                </div>
+                {passwordMsg ? <Text size="sm">{passwordMsg}</Text> : null}
+                <Button
+                  variant="outline"
+                  disabled={passwordBusy}
+                  onClick={() => {
+                    void (async () => {
+                      if (!currentPassword) {
+                        setPasswordMsg("Enter your current password.");
+                        return;
+                      }
+                      if (nextPassword.length < 8) {
+                        setPasswordMsg("New password must be at least 8 characters.");
+                        return;
+                      }
+                      if (nextPassword !== confirmPassword) {
+                        setPasswordMsg("New password and confirmation do not match.");
+                        return;
+                      }
+                      setPasswordBusy(true);
+                      setPasswordMsg(null);
+                      const result = await changeMyPassword({
+                        currentPassword,
+                        newPassword: nextPassword,
+                      });
+                      setPasswordBusy(false);
+                      if (result.error) {
+                        setPasswordMsg(result.error);
+                        return;
+                      }
+                      setCurrentPassword("");
+                      setNextPassword("");
+                      setConfirmPassword("");
+                      setPasswordMsg("Password updated.");
+                    })();
+                  }}
+                >
+                  {passwordBusy ? "Updating…" : "Update password"}
+                </Button>
+              </section>
+            </div>
+          )}
         </main>
       </div>
     </div>

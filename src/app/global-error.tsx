@@ -24,7 +24,7 @@ export default function GlobalError({
           color: "#1c1917",
         }}
       >
-        <main style={{ maxWidth: 420, padding: 24, textAlign: "center" }}>
+        <main style={{ maxWidth: 420, width: "100%", padding: 24, textAlign: "center", boxSizing: "border-box" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/brand/stuffsy-logo.png"
@@ -45,7 +45,7 @@ export default function GlobalError({
               Error ID: {error.digest}
             </p>
           ) : null}
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 20 }}>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 20, flexWrap: "wrap" }}>
             <button
               type="button"
               onClick={() => reset()}

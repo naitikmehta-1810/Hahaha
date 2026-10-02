@@ -8,6 +8,8 @@ export type UserRecord = {
   role: string;
   status: string;
   email_verified_at: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -20,6 +22,8 @@ export type AuthUser = {
   role: string;
   status: string;
   emailVerifiedAt: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
   createdAt: string;
   updatedAt: string;
   /** True when this account owns a non-deleted shop, including pending setup. */
@@ -35,6 +39,8 @@ export function toAuthUser(row: UserRecord): AuthUser {
     role: row.role,
     status: row.status,
     emailVerifiedAt: row.email_verified_at,
+    dateOfBirth: row.date_of_birth,
+    gender: row.gender,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isSeller: false,

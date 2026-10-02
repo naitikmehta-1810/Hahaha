@@ -15,6 +15,20 @@
   .layout {
     grid-template-columns: 1fr;
   }
+
+  .sidebar {
+    position: static;
+  }
+
+  .navList {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .navItem {
+    flex: 0 0 auto;
+  }
 }
 
 .sidebar {
@@ -317,12 +331,25 @@
 }
 
 @media (max-width: 640px) {
+  .container {
+    padding: 16px 12px 48px;
+  }
+
   .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics {
     grid-template-columns: 1fr;
   }
 
   .sidebar {
     position: static;
+  }
+
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

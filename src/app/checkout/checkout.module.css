@@ -29,7 +29,8 @@
 
 .sidebar {
   flex: 1;
-  min-width: 300px;
+  min-width: 0;
+  width: min(100%, 360px);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -38,9 +39,25 @@
 }
 
 @media (max-width: 968px) {
+  .container {
+    padding: 20px 16px 48px;
+  }
+
   .sidebar {
     position: static;
     width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .card,
+  .stepper,
+  .valueProps {
+    padding: 16px;
+  }
+
+  .valueProps {
+    grid-template-columns: 1fr;
   }
 }
 

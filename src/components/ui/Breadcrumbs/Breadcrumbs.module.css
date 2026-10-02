@@ -10,6 +10,14 @@
   margin-bottom: 24px;
 }
 
+@media (max-width: 640px) {
+  .breadcrumbs {
+    font-size: 0.78rem;
+    margin-bottom: 16px;
+    gap: 6px;
+  }
+}
+
 .item {
   display: flex;
   align-items: center;

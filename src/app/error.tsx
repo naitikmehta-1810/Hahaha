@@ -85,7 +85,7 @@ export default function Error({
             Digest: {error.digest}
           </p>
         )}
-        <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
           <button
             onClick={() => reset()}
             style={{

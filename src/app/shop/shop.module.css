@@ -9,12 +9,15 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .controlsRow {
   display: flex;
   align-items: center;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .resultsText {
@@ -276,6 +279,21 @@
   }
 }
 
+@media (max-width: 640px) {
+  .container {
+    padding: 20px 16px 40px;
+  }
+
+  .titleSection {
+    align-items: stretch;
+  }
+
+  .controlsRow,
+  .select {
+    width: 100%;
+  }
+}
+
 @media (max-width: 480px) {
   .productsGrid {
     grid-template-columns: 1fr;
@@ -287,6 +305,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 16px;
 }

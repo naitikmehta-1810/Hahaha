@@ -597,10 +597,16 @@ export async function deleteAddress(id: string): Promise<void> {
 export async function updateMyProfile(input: {
   fullName?: string;
   phoneNumber?: string | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
 }) {
   return apiRequest<{ user: import("./api-client").AuthUser }>("PATCH", "/api/auth/me", {
     body: input,
   });
+}
+
+export async function changeMyPassword(input: { currentPassword: string; newPassword: string }) {
+  return apiRequest<{ ok: boolean }>("POST", "/api/auth/me/password", { body: input });
 }
 
 export function formatOrderStatusLabel(status: string) {

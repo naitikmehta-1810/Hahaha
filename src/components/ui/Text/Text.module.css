@@ -1,6 +1,7 @@
 .text {
   font-family: var(--font-family);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 /* Sizes */

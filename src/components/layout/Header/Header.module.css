@@ -326,6 +326,16 @@
   color: var(--color-primary);
 }
 
+@media (max-width: 1100px) {
+  .navActions {
+    gap: 12px;
+  }
+
+  .sellText {
+    display: none;
+  }
+}
+
 @media (max-width: 968px) {
   .header {
     padding: 12px 16px;
@@ -388,5 +398,13 @@
 @media (max-width: 480px) {
   .logoText {
     display: none;
+  }
+
+  .header {
+    padding: 10px 12px;
+  }
+
+  .navActions {
+    gap: 6px;
   }
 }

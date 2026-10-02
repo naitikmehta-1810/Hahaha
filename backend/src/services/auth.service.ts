@@ -1,12 +1,13 @@
 import { pool } from "../config/db.js";
-import { hashPassword } from "../utils/password.js";
+import { comparePassword, hashPassword } from "../utils/password.js";
 import { generateOpaqueToken, hashToken } from "../utils/token-hash.js";
 import { refreshTtlSeconds } from "../utils/cookies.js";
 import { signAccessToken } from "../utils/jwt.js";
 import type { AuthUser, UserRecord, UserRole } from "../types.js";
 import { toAuthUser } from "../types.js";
+import { AppError } from "../utils/errors.js";
 
-const USER_COLUMNS = `id, full_name, email, phone_number, role, status, email_verified_at, created_at, updated_at`;
+const USER_COLUMNS = `id, full_name, email, phone_number, role, status, email_verified_at, to_char(date_of_birth, 'YYYY-MM-DD') as date_of_birth, gender, created_at, updated_at`;
 
 /**
  * Effective role for JWT claims (requireRole reads this claim, not the DB).
@@ -195,30 +196,117 @@ export async function findUserById(id: string): Promise<AuthUser | null> {
 
 export async function updateUserProfile(
   userId: string,
-  input: { fullName?: string; phoneNumber?: string | null }
+  input: {
+    fullName?: string;
+    phoneNumber?: string | null;
+    dateOfBirth?: string | null;
+    gender?: string | null;
+  }
 ): Promise<AuthUser> {
-  const result = await pool.query<UserRecord>(
-    `update public.users
-     set full_name = coalesce($2, full_name),
-         phone_number = case when $3::boolean then $4 else phone_number end,
-         updated_at = now()
-     where id = $1
-     returning ${USER_COLUMNS}`,
-    [
-      userId,
-      input.fullName?.trim() || null,
-      input.phoneNumber !== undefined,
-      input.phoneNumber === undefined ? null : input.phoneNumber,
-    ]
-  );
+  const sets: string[] = [];
+  const params: unknown[] = [userId];
+
+  if (input.fullName !== undefined) {
+    params.push(input.fullName.trim());
+    sets.push(`full_name = $${params.length}`);
+  }
+  if (input.phoneNumber !== undefined) {
+    const phone =
+      input.phoneNumber === null ? null : input.phoneNumber.replace(/[^\d+]/g, "") || null;
+    params.push(phone);
+    sets.push(`phone_number = $${params.length}`);
+  }
+  if (input.dateOfBirth !== undefined) {
+    params.push(input.dateOfBirth);
+    sets.push(`date_of_birth = $${params.length}::date`);
+  }
+  if (input.gender !== undefined) {
+    params.push(input.gender);
+    sets.push(`gender = $${params.length}`);
+  }
+
+  if (sets.length === 0) {
+    throw new AppError(400, "EMPTY_PROFILE", "Nothing to update");
+  }
+
+  sets.push("updated_at = now()");
+
+  let result;
+  try {
+    result = await pool.query<UserRecord>(
+      `update public.users
+       set ${sets.join(", ")}
+       where id = $1
+       returning ${USER_COLUMNS}`,
+      params
+    );
+  } catch (error) {
+    const code =
+      typeof error === "object" && error && "code" in error
+        ? String((error as { code?: string }).code)
+        : "";
+    if (code === "23505") {
+      throw new AppError(
+        409,
+        "PHONE_IN_USE",
+        "That phone number is already on another account"
+      );
+    }
+    throw error;
+  }
+
   const row = result.rows[0];
   if (!row) {
-    throw new Error("USER_NOT_FOUND");
+    throw new AppError(404, "USER_NOT_FOUND", "User was not found");
   }
   const user = toAuthUser(row);
   user.role = await resolveEffectiveRole(userId, row.role);
   user.isSeller = await userHasSellerProfile(userId);
   return user;
+}
+
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<{ email: string; role: string }> {
+  const found = await pool.query<{ password_hash: string | null; email: string; role: string }>(
+    `select password_hash, email, role
+     from public.users
+     where id = $1
+     limit 1`,
+    [userId]
+  );
+  const row = found.rows[0];
+  if (!row) {
+    throw new AppError(404, "USER_NOT_FOUND", "User was not found");
+  }
+  if (!row.password_hash) {
+    throw new AppError(
+      400,
+      "PASSWORD_UNAVAILABLE",
+      "This account signs in with Google or Facebook"
+    );
+  }
+
+  const matches = await comparePassword(currentPassword, row.password_hash);
+  if (!matches) {
+    throw new AppError(400, "WRONG_PASSWORD", "Current password is incorrect");
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await pool.query(
+    `update public.users set password_hash = $1, updated_at = now() where id = $2`,
+    [passwordHash, userId]
+  );
+  await pool.query(
+    `update public.refresh_tokens
+     set revoked_at = now()
+     where user_id = $1 and revoked_at is null`,
+    [userId]
+  );
+
+  return { email: row.email, role: row.role };
 }
 
 export async function issueAuthTokens(user: { id: string; email: string; role: string }, rememberMe: boolean) {

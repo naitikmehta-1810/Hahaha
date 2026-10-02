@@ -22,9 +22,9 @@ import {
   revokeRefreshToken,
   rotateRefreshToken,
   sendVerificationEmailForUser,
+  changePassword,
   updateUserProfile,
 } from "../services/auth.service.js";
-import { AppError } from "../utils/errors.js";
 import {
   buildOAuthAuthorizeUrl,
   createOAuthState,
@@ -301,23 +301,66 @@ authRouter.patch(
     const parsed = z
       .object({
         fullName: z.string().trim().min(2).max(120).optional(),
-        phoneNumber: z.string().trim().min(6).max(20).nullable().optional(),
+        phoneNumber: z.string().trim().min(8).max(20).nullable().optional(),
+        dateOfBirth: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date of birth")
+          .nullable()
+          .optional(),
+        gender: z.enum(["female", "male", "other", "prefer_not_to_say"]).nullable().optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid profile" });
       return;
     }
-    if (parsed.data.fullName === undefined && parsed.data.phoneNumber === undefined) {
-      res.status(400).json({ message: "Provide fullName and/or phoneNumber" });
+    if (
+      parsed.data.fullName === undefined &&
+      parsed.data.phoneNumber === undefined &&
+      parsed.data.dateOfBirth === undefined &&
+      parsed.data.gender === undefined
+    ) {
+      res.status(400).json({ message: "Provide a detail to update" });
       return;
     }
-    try {
-      const user = await updateUserProfile(req.user!.id, parsed.data);
-      res.json({ user });
-    } catch {
-      throw new AppError(404, "USER_NOT_FOUND", "User was not found");
+    if (parsed.data.dateOfBirth) {
+      const born = new Date(`${parsed.data.dateOfBirth}T00:00:00.000Z`);
+      const today = new Date();
+      if (Number.isNaN(born.getTime()) || born.getTime() > today.getTime()) {
+        res.status(400).json({ message: "Date of birth cannot be in the future" });
+        return;
+      }
     }
+    const user = await updateUserProfile(req.user!.id, parsed.data);
+    res.json({ user });
+  })
+);
+
+authRouter.post(
+  "/me/password",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({
+        currentPassword: z.string().min(1, "Enter your current password"),
+        newPassword: z.string().min(8, "New password must be at least 8 characters").max(72),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid password" });
+      return;
+    }
+    const account = await changePassword(
+      req.user!.id,
+      parsed.data.currentPassword,
+      parsed.data.newPassword
+    );
+    const tokens = await issueAuthTokens(
+      { id: req.user!.id, email: account.email, role: account.role },
+      true
+    );
+    setAuthCookies(res, tokens, true);
+    res.json({ ok: true });
   })
 );
 

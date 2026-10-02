@@ -78,6 +78,36 @@ input, select, textarea {
   font-family: inherit;
   font-size: inherit;
   outline: none;
+  max-width: 100%;
+}
+
+img,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+li,
+td,
+th,
+label {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 /* Custom scrollbar */

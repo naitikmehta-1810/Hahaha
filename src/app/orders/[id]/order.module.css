@@ -7,6 +7,20 @@
   gap: 24px;
 }
 
+@media (max-width: 768px) {
+  .container {
+    padding: 20px 16px 40px;
+  }
+
+  .headerActions {
+    width: 100%;
+  }
+
+  .headerActions > * {
+    flex: 1;
+  }
+}
+
 .headerRow {
   display: flex;
   justify-content: space-between;

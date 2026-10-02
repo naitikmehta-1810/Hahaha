@@ -113,6 +113,19 @@
   cursor: default;
 }
 
+@media (max-width: 640px) {
+  .backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .dialog {
+    width: 100%;
+    border-radius: 20px 20px 0 0;
+    max-height: 92dvh;
+  }
+}
+
 @media (min-width: 640px) {
   .backdrop {
     align-items: center;

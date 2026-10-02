@@ -10,6 +10,16 @@
   .sidebar {
     width: 100%;
   }
+
+  .navSection {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .item {
+    width: auto;
+    flex: 1 1 140px;
+  }
 }
 
 .navSection {
