@@ -30,8 +30,8 @@ const NAV = [
   { href: "/seller", label: "Dashboard", exact: true, Icon: LayoutDashboard },
   { href: "/seller/orders", label: "Orders", Icon: ClipboardList },
   { href: "/seller/products", label: "Products", Icon: Package },
-  { href: "/seller/products/new", label: "Add Product", Icon: Plus },
-  { href: "/seller/shop-setup", label: "Shop Setup", Icon: Store },
+  { href: "/seller/products/new", label: "Add product", Icon: Plus },
+  { href: "/seller/shop-setup", label: "Shop setup", Icon: Store },
 ];
 
 function navActive(pathname: string, href: string, exact?: boolean) {
@@ -105,7 +105,6 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
           <span>Stuffsy</span>
         </Link>
         <div className={styles.topTitle}>
-          <span className={styles.topKicker}>Seller</span>
           <strong>{pageTitle(pathname)}</strong>
         </div>
         <form className={styles.topSearch} role="search" onSubmit={onSearch}>
@@ -113,26 +112,31 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search the marketplace…"
+            placeholder="Search marketplace"
             aria-label="Search marketplace"
           />
         </form>
         <div className={styles.topActions}>
+          {seller?.shopSlug ? (
+            <Link href={`/shops/${seller.shopSlug}`} className={styles.topGhost}>
+              Storefront
+              <ExternalLink size={13} aria-hidden="true" />
+            </Link>
+          ) : null}
           <OrderNotifications />
           <details className={styles.portalMenu}>
             <summary className={styles.portalMenuSummary}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={avatarSrc} alt="" className={styles.portalAvatar} />
               <span className={styles.portalSellerText}>
-                <strong>{seller?.shopName || user?.fullName || "Seller"}</strong>
-                <small>{user?.fullName || "Account"}</small>
+                <strong>{seller?.shopName || "Your shop"}</strong>
+                <small>{user?.fullName || "Seller"}</small>
               </span>
               <ChevronDown size={16} aria-hidden="true" />
             </summary>
             <div className={styles.portalMenuPanel}>
-              <Link href="/seller/shop-setup">Shop setup</Link>
-              <Link href="/account?tab=profile-details">Profile</Link>
               <Link href="/account">Buyer account</Link>
+              <Link href="/account?tab=profile-details">Profile</Link>
             </div>
           </details>
         </div>
@@ -148,13 +152,6 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
           />
         ) : null}
         <aside className={`${styles.sidebar} ${navOpen ? styles.sidebarOpen : ""}`}>
-          <Link href="/" className={styles.sideBrand}>
-            <BrandLogo size={32} />
-            <span>
-              <strong>Stuffsy</strong>
-              <small>Seller console</small>
-            </span>
-          </Link>
           {seller ? (
             <div className={styles.shopRail}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -166,13 +163,10 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
                   <em className={styles.statusChip}>{seller.status}</em>
                 </span>
               </div>
-              {seller.shopSlug ? (
-                <Link href={`/shops/${seller.shopSlug}`} className={styles.shopRailLink}>
-                  View shop <ExternalLink size={12} aria-hidden="true" />
-                </Link>
-              ) : null}
             </div>
-          ) : null}
+          ) : (
+            <p className={styles.sideLabel}>Seller</p>
+          )}
           <nav className={styles.navList} aria-label="Seller">
             {NAV.map((item) => {
               const active = navActive(pathname, item.href, item.exact);
@@ -189,16 +183,6 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
               );
             })}
           </nav>
-          <div className={styles.sidebarFoot}>
-            <Link href="/account" className={styles.navItem}>
-              Buyer account
-            </Link>
-            {seller?.shopSlug ? (
-              <Link href={`/shops/${seller.shopSlug}`} className={styles.viewShopButton}>
-                View shop <ExternalLink size={14} aria-hidden="true" />
-              </Link>
-            ) : null}
-          </div>
         </aside>
         <div className={styles.shellMain}>{children}</div>
       </div>

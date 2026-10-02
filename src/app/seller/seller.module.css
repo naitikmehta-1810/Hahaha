@@ -67,6 +67,53 @@
   color: #1f1635;
 }
 
+.topGhost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid #ebe4f5;
+  background: #fff;
+  color: #5c5470;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.topGhost:hover {
+  color: #7c3aed;
+  border-color: #c4b5fd;
+}
+
+.sideLabel {
+  margin: 0 8px 14px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b849c;
+}
+
+.primaryCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.primaryCta:hover {
+  background: #6d28d9;
+}
+
 .topSearch {
   flex: 1;
   max-width: 420px;
@@ -245,8 +292,8 @@
 .sidebar {
   width: 248px;
   flex-shrink: 0;
-  background: linear-gradient(180deg, #1f0a45 0%, #15072f 100%);
-  color: #f5f3ff;
+  background: #ffffff;
+  color: #1f1635;
   border: 0;
   border-radius: 0;
   padding: 20px 12px 18px;
@@ -256,7 +303,7 @@
   top: 64px;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid #ebe4f5;
 }
 
 .sideBrand {
@@ -265,7 +312,7 @@
   gap: 10px;
   margin: 0 8px 18px;
   text-decoration: none;
-  color: #f5f3ff;
+  color: #1f1635;
 }
 
 .sideBrand strong {
@@ -278,7 +325,7 @@
 .sideBrand small {
   display: block;
   margin-top: 2px;
-  color: #c4b5fd;
+  color: #6d657f;
   font-size: 0.72rem;
   font-weight: 600;
 }
@@ -289,7 +336,7 @@
   flex-direction: column;
   gap: 8px;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid #ebe4f5;
 }
 
 .sellerBrief {
@@ -431,8 +478,36 @@
   border-radius: 12px;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #ede9fe;
+  color: #5c5470;
   text-decoration: none;
+}
+
+.viewShopButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+  min-height: 40px;
+  border: 1px solid #ebe4f5;
+  border-radius: 12px;
+  color: #7c3aed;
+  background: #f7f4fd;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.navItemActive {
+  background: #f5f3ff;
+  color: #7c3aed;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.navItem:hover {
+  background: #f7f4fd;
+  color: #7c3aed;
 }
 
 .subNav {
@@ -454,33 +529,6 @@
   background: #f3e8ff;
   color: #7c3aed;
   font-weight: 700;
-}
-
-.viewShopButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 16px;
-  min-height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 12px;
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.85rem;
-  text-decoration: none;
-}
-
-.navItemActive {
-  background: #7c3aed;
-  color: #fff;
-  font-weight: 650;
-  box-shadow: 0 10px 22px rgba(124, 58, 237, 0.28);
-}
-
-.navItem:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
 }
 
 .navItem:focus-visible,
@@ -1570,7 +1618,7 @@ textarea.control {
   gap: 10px;
   margin: 0 6px 18px;
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid #ebe4f5;
 }
 
 .shopRailAvatar {
@@ -1591,7 +1639,7 @@ textarea.control {
   display: block;
   font-size: 0.92rem;
   line-height: 1.2;
-  color: #fff;
+  color: #1f1635;
 }
 
 .shopRailText span {
@@ -1605,8 +1653,8 @@ textarea.control {
   font-style: normal;
   font-size: 0.68rem;
   font-weight: 700;
-  color: #ede9fe;
-  background: rgba(255, 255, 255, 0.12);
+  color: #7c3aed;
+  background: #f5f3ff;
   border-radius: 999px;
   padding: 2px 8px;
 }
@@ -1620,7 +1668,7 @@ textarea.control {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #ddd6fe;
+  color: #7c3aed;
   font-size: 0.78rem;
   font-weight: 700;
   text-decoration: none;

@@ -105,6 +105,8 @@
   border-radius: 999px;
   background: #f7f4fd;
   border: 1px solid #ebe4f5;
+  text-decoration: none;
+  color: inherit;
 }
 
 .userChip strong {
@@ -155,13 +157,13 @@
   top: 64px;
   align-self: start;
   min-height: calc(100vh - 64px);
-  background: linear-gradient(180deg, #1f0a45 0%, #15072f 100%);
-  color: #f5f3ff;
+  background: #ffffff;
+  color: #1f1635;
   padding: 20px 12px 18px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid #ebe4f5;
 }
 
 .brand {
@@ -182,7 +184,6 @@
   background: #7c3aed;
   color: #fff;
   font-weight: 800;
-  box-shadow: 0 8px 18px rgba(124, 58, 237, 0.35);
 }
 
 .brand strong {
@@ -193,7 +194,7 @@
 
 .brand small {
   display: block;
-  color: #c4b5fd;
+  color: #6d657f;
   font-size: 0.72rem;
 }
 
@@ -202,7 +203,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #c4b5fd;
+  color: #8b849c;
   margin: 4px 10px 6px;
 }
 
@@ -220,25 +221,26 @@
   border-radius: 12px;
   font-size: 0.875rem;
   font-weight: 550;
-  color: #ede9fe;
+  color: #5c5470;
   text-decoration: none;
 }
 
 .navItem:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: #f7f4fd;
+  color: #7c3aed;
 }
 
 .navItemActive {
-  background: #7c3aed;
-  color: #fff;
-  font-weight: 650;
-  box-shadow: 0 10px 22px rgba(124, 58, 237, 0.28);
+  background: #f5f3ff;
+  color: #7c3aed;
+  font-weight: 700;
+  box-shadow: none;
 }
 
 .sidebarFoot {
   margin-top: auto;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid #ebe4f5;
 }
 
 .main {
@@ -270,6 +272,12 @@
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metricsWide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -477,7 +485,8 @@
 }
 
 @media (max-width: 1100px) {
-  .metrics {
+  .metrics,
+  .metricsWide {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -527,7 +536,8 @@
 }
 
 @media (max-width: 640px) {
-  .metrics {
+  .metrics,
+  .metricsWide {
     grid-template-columns: 1fr;
   }
 

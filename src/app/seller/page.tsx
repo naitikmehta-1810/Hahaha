@@ -21,10 +21,6 @@ import {
   Users,
   Percent,
   Plus,
-  Boxes,
-  ShoppingBag,
-  Wallet,
-  Settings,
 } from "lucide-react";
 import styles from "./seller.module.css";
 
@@ -213,15 +209,18 @@ export default function SellerDashboardPage() {
     <div className={styles.main}>
       <div className={styles.dashTop}>
         <div>
-          <h1 className={styles.greeting}>Welcome back, {greetingName}</h1>
-          <p className={styles.greetingSub}>Store performance for today and the last two weeks.</p>
+          <h1 className={styles.greeting}>{greetingName}</h1>
+          <p className={styles.greetingSub}>Last 14 days of paid performance.</p>
         </div>
+        <Link href="/seller/products/new" className={styles.primaryCta}>
+          <Plus size={16} aria-hidden="true" />
+          New product
+        </Link>
       </div>
 
       {seller.status === "pending" ? (
         <div className={styles.pendingBanner}>
-          Your shop is <strong>pending approval</strong>. You can edit Shop Setup now;
-          analytics and product publishing unlock after activation.
+          Your shop is pending approval. Shop setup stays editable until activation.
         </div>
       ) : null}
 
@@ -233,7 +232,7 @@ export default function SellerDashboardPage() {
             <span className={styles.metricIcon} aria-hidden="true">
               <IndianRupee size={18} />
             </span>
-            <div className={styles.metricLabel}>Total Sales</div>
+            <div className={styles.metricLabel}>Sales</div>
           </div>
           <div className={styles.metricValue}>{rupees(dash?.metrics.totalSales ?? 0)}</div>
         </div>
@@ -260,7 +259,7 @@ export default function SellerDashboardPage() {
             <span className={styles.metricIcon} style={{ background: "#fdf2f8", color: "#db2777" }} aria-hidden="true">
               <Percent size={18} />
             </span>
-            <div className={styles.metricLabel}>Conversion Rate</div>
+            <div className={styles.metricLabel}>Conversion</div>
           </div>
           <div className={styles.metricValue}>{(dash?.metrics.conversionRate ?? 0).toFixed(1)}%</div>
         </div>
@@ -372,39 +371,6 @@ export default function SellerDashboardPage() {
             <p className={styles.emptyState}>No channel data yet.</p>
           )}
         </section>
-      </div>
-
-      <div className={styles.quickActions}>
-        <Link href="/seller/products/new" className={styles.quickAction}>
-          <span className={styles.quickActionIcon} style={{ background: "#f5f3ff", color: "#7c3aed" }}>
-            <Plus size={18} aria-hidden="true" />
-          </span>
-          Add Product
-        </Link>
-        <Link href="/seller/products" className={styles.quickAction}>
-          <span className={styles.quickActionIcon} style={{ background: "#ecfdf5", color: "#059669" }}>
-            <Boxes size={18} aria-hidden="true" />
-          </span>
-          Manage Inventory
-        </Link>
-        <Link href="/seller/orders" className={styles.quickAction}>
-          <span className={styles.quickActionIcon} style={{ background: "#fff7ed", color: "#ea580c" }}>
-            <ShoppingBag size={18} aria-hidden="true" />
-          </span>
-          View Orders
-        </Link>
-        <Link href="/seller/shop-setup" className={styles.quickAction}>
-          <span className={styles.quickActionIcon} style={{ background: "#fdf2f8", color: "#db2777" }}>
-            <Wallet size={18} aria-hidden="true" />
-          </span>
-          Payouts
-        </Link>
-        <Link href="/seller/shop-setup" className={styles.quickAction}>
-          <span className={styles.quickActionIcon} style={{ background: "#f5f3ff", color: "#7c3aed" }}>
-            <Settings size={18} aria-hidden="true" />
-          </span>
-          Shop Settings
-        </Link>
       </div>
     </div>
   );

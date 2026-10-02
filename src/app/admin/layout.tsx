@@ -106,14 +106,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <span>Stuffsy</span>
         </Link>
         <div className={styles.topTitle}>
-          <span className={styles.topKicker}>Admin</span>
           <strong>{pageTitle(pathname)}</strong>
         </div>
         <div className={styles.topActions}>
           <Link href="/" className={styles.ghostLink}>
             Storefront
           </Link>
-          <div className={styles.userChip}>
+          <Link href="/account" className={styles.userChip}>
             {user.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.avatarUrl} alt="" className={styles.userAvatar} />
@@ -122,9 +121,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             )}
             <span>
               <strong>{user.fullName}</strong>
-              <small>Administrator</small>
+              <small>Admin</small>
             </span>
-          </div>
+          </Link>
         </div>
       </header>
 
@@ -138,14 +137,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           />
         ) : null}
         <aside className={`${styles.sidebar} ${navOpen ? styles.sidebarOpen : ""}`}>
-          <Link href="/admin" className={styles.brand}>
-            <span className={styles.brandMark}>S</span>
-            <span>
-              <strong>Stuffsy</strong>
-              <small>Admin console</small>
-            </span>
-          </Link>
-          <p className={styles.navTitle}>Operations</p>
+          <p className={styles.navTitle}>Console</p>
           <nav className={styles.navList} aria-label="Admin">
             {NAV.map((item) => {
               const active = item.exact
@@ -164,11 +156,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               );
             })}
           </nav>
-          <div className={styles.sidebarFoot}>
-            <Link href="/account" className={styles.navItem}>
-              My account
-            </Link>
-          </div>
         </aside>
         <main className={styles.main}>{children}</main>
       </div>
