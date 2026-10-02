@@ -10,6 +10,7 @@ export type UserRecord = {
   email_verified_at: string | null;
   date_of_birth: string | null;
   gender: string | null;
+  avatar_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -24,6 +25,7 @@ export type AuthUser = {
   emailVerifiedAt: string | null;
   dateOfBirth: string | null;
   gender: string | null;
+  avatarUrl: string | null;
   createdAt: string;
   updatedAt: string;
   /** True when this account owns a non-deleted shop, including pending setup. */
@@ -41,6 +43,7 @@ export function toAuthUser(row: UserRecord): AuthUser {
     emailVerifiedAt: row.email_verified_at,
     dateOfBirth: row.date_of_birth,
     gender: row.gender,
+    avatarUrl: row.avatar_url,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isSeller: false,

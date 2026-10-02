@@ -242,9 +242,19 @@ export const Header = () => {
             <span className={styles.authPlaceholder} aria-hidden="true" />
           ) : isAuthenticated && user ? (
             <Link href="/account" className={styles.userMenu} aria-label="My account">
-              <span className={styles.avatarFallback} title={user.fullName}>
-                <UserRound size={18} />
-              </span>
+              {user.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.avatarUrl}
+                  alt=""
+                  className={styles.avatarImage}
+                  title={user.fullName}
+                />
+              ) : (
+                <span className={styles.avatarFallback} title={user.fullName}>
+                  <UserRound size={18} />
+                </span>
+              )}
               <ChevronDown size={14} className={styles.chevron} />
             </Link>
           ) : (

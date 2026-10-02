@@ -7,11 +7,15 @@ import { Store } from "lucide-react";
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   className?: string;
+  open?: boolean;
 }
 
-const SidebarRoot = ({ children, className = "", ...props }: SidebarProps) => {
+const SidebarRoot = ({ children, className = "", open = false, ...props }: SidebarProps) => {
   return (
-    <aside className={`${styles.sidebar} ${className}`} {...props}>
+    <aside
+      className={`${styles.sidebar} ${open ? styles.sidebarOpen : ""} ${className}`}
+      {...props}
+    >
       {children}
     </aside>
   );
@@ -38,7 +42,7 @@ const SidebarItem = ({ children, icon, href, active = false, onClick }: SidebarI
 
   if (href) {
     return (
-      <Link href={href} className={itemClass}>
+      <Link href={href} className={itemClass} onClick={onClick}>
         <span className={styles.icon}>{icon}</span>
         <span>{children}</span>
       </Link>

@@ -8,10 +8,12 @@ import {
   ClipboardList,
   ExternalLink,
   LayoutDashboard,
+  Menu,
   Package,
   Plus,
   Search,
   Store,
+  X,
 } from "lucide-react";
 import OrderNotifications from "@/components/notifications/OrderNotifications";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -40,13 +42,23 @@ function navActive(pathname: string, href: string, exact?: boolean) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function pageTitle(pathname: string) {
+  if (pathname === "/seller") return "Dashboard";
+  if (pathname.startsWith("/seller/orders")) return "Orders";
+  if (pathname.includes("/products/new")) return "Add product";
+  if (pathname.includes("/edit")) return "Edit product";
+  if (pathname.startsWith("/seller/products")) return "Products";
+  if (pathname.startsWith("/seller/shop-setup")) return "Shop setup";
+  return "Seller";
+}
+
 export default function SellerLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { isAuthenticated, status, user } = useAuth();
   const [seller, setSeller] = useState<SellerProfile | null>(null);
   const [query, setQuery] = useState("");
-  const isDashboard = pathname === "/seller";
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -56,6 +68,10 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
     }
     void fetchMySeller().then(setSeller);
   }, [status, isAuthenticated, pathname]);
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [pathname]);
 
   const onSearch = (event: FormEvent) => {
     event.preventDefault();
@@ -71,61 +87,74 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  const avatarSrc = user?.avatarUrl || seller?.logoUrl || FALLBACK_SHOP_LOGO;
+
   return (
-    <div className={`${styles.portal} ${isDashboard ? styles.portalDash : ""}`}>
-      {!isDashboard ? (
-        <header className={styles.portalHeader}>
-          <Link href="/" className={styles.portalBrand}>
-            <BrandLogo size={32} decorative />
-            <span>Stuffsy</span>
-          </Link>
-          <form className={styles.portalSearch} role="search" onSubmit={onSearch}>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search for anything..."
-              aria-label="Search"
-            />
-            <button type="submit" aria-label="Search">
-              <Search size={16} />
-            </button>
-          </form>
-          <div className={styles.portalSeller}>
-            <OrderNotifications />
-            <details className={styles.portalMenu}>
-              <summary className={styles.portalMenuSummary}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={seller?.logoUrl || FALLBACK_SHOP_LOGO}
-                  alt=""
-                  className={styles.portalAvatar}
-                />
-                <span className={styles.portalSellerText}>
-                  <strong>{seller?.shopName || "Your shop"}</strong>
-                  <small>Seller</small>
-                </span>
-                <ChevronDown size={16} aria-hidden="true" />
-              </summary>
-              <div className={styles.portalMenuPanel}>
-                <Link href="/seller/shop-setup">Shop setup</Link>
-                <Link href="/account">Buyer account</Link>
-              </div>
-            </details>
-          </div>
-        </header>
-      ) : null}
+    <div className={styles.portal}>
+      <header className={styles.topBar}>
+        <button
+          type="button"
+          className={styles.menuToggle}
+          aria-label={navOpen ? "Close menu" : "Open menu"}
+          onClick={() => setNavOpen((open) => !open)}
+        >
+          {navOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
+        <Link href="/" className={styles.topBrand}>
+          <BrandLogo size={30} decorative />
+          <span>Stuffsy</span>
+        </Link>
+        <div className={styles.topTitle}>
+          <span className={styles.topKicker}>Seller</span>
+          <strong>{pageTitle(pathname)}</strong>
+        </div>
+        <form className={styles.topSearch} role="search" onSubmit={onSearch}>
+          <Search size={15} aria-hidden="true" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search the marketplace…"
+            aria-label="Search marketplace"
+          />
+        </form>
+        <div className={styles.topActions}>
+          <OrderNotifications />
+          <details className={styles.portalMenu}>
+            <summary className={styles.portalMenuSummary}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={avatarSrc} alt="" className={styles.portalAvatar} />
+              <span className={styles.portalSellerText}>
+                <strong>{seller?.shopName || user?.fullName || "Seller"}</strong>
+                <small>{user?.fullName || "Account"}</small>
+              </span>
+              <ChevronDown size={16} aria-hidden="true" />
+            </summary>
+            <div className={styles.portalMenuPanel}>
+              <Link href="/seller/shop-setup">Shop setup</Link>
+              <Link href="/account?tab=profile-details">Profile</Link>
+              <Link href="/account">Buyer account</Link>
+            </div>
+          </details>
+        </div>
+      </header>
 
       <div className={styles.shell}>
-        <aside className={styles.sidebar}>
-          {isDashboard ? (
-            <Link href="/" className={styles.sideBrand}>
-              <BrandLogo size={34} />
-              <span>
-                <strong>Stuffsy</strong>
-                <small>Seller Panel</small>
-              </span>
-            </Link>
-          ) : null}
+        {navOpen ? (
+          <button
+            type="button"
+            className={styles.navScrim}
+            aria-label="Close menu"
+            onClick={() => setNavOpen(false)}
+          />
+        ) : null}
+        <aside className={`${styles.sidebar} ${navOpen ? styles.sidebarOpen : ""}`}>
+          <Link href="/" className={styles.sideBrand}>
+            <BrandLogo size={32} />
+            <span>
+              <strong>Stuffsy</strong>
+              <small>Seller console</small>
+            </span>
+          </Link>
           {seller ? (
             <div className={styles.shopRail}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -134,7 +163,7 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
                 <strong>{seller.shopName}</strong>
                 <span>
                   {seller.badge ? <em>{seller.badge}</em> : null}
-                  <em>{seller.status}</em>
+                  <em className={styles.statusChip}>{seller.status}</em>
                 </span>
               </div>
               {seller.shopSlug ? (

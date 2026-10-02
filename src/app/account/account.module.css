@@ -14,19 +14,56 @@
   display: flex;
   gap: 32px;
   margin-top: 24px;
+  position: relative;
+}
+
+.menuToggle {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-text-main);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.navScrim {
+  display: none;
+}
+
+.mainContent {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 @media (max-width: 968px) {
   .layout {
     flex-direction: column;
+    gap: 16px;
   }
-}
 
-.mainContent {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+  .menuToggle {
+    display: inline-flex;
+    width: fit-content;
+  }
+
+  .navScrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    border: 0;
+    background: rgba(20, 10, 40, 0.42);
+  }
 }
 
 .headerArea {
@@ -87,6 +124,7 @@
   font-weight: 700;
   font-size: 1.25rem;
   letter-spacing: 0.02em;
+  object-fit: cover;
 }
 
 .profileEditor {
@@ -109,8 +147,48 @@
 
 .editorIdentity {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
+}
+
+.avatarCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.avatarActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.avatarUpload,
+.avatarRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.avatarUpload {
+  background: #7c3aed;
+  color: #fff;
+  border: 0;
+}
+
+.avatarRemove {
+  background: #fff;
+  color: #6d657f;
+  border: 1px solid #ebe4f5;
 }
 
 .fieldGrid {

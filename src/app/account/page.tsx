@@ -13,6 +13,7 @@ import {
   deleteAddress,
   changeMyPassword,
   updateMyProfile,
+  uploadMyAvatar,
   formatOrderStatusLabel,
   orderStatusBadgeClass,
   type OrderListItem,
@@ -50,6 +51,8 @@ import {
   Calendar,
   ShieldCheck,
   ArrowRight,
+  Menu,
+  X,
 } from "lucide-react";
 import styles from "./account.module.css";
 import Heading from "@/components/ui/Heading/Heading";
@@ -318,6 +321,8 @@ function AccountPageInner() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const [addressBusy, setAddressBusy] = useState(false);
   const [newAddress, setNewAddress] = useState({
     label: "Home",
@@ -336,6 +341,10 @@ function AccountPageInner() {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [activeTab]);
 
   useEffect(() => {
     if (authStatus === "ready" && !sessionUser) {
@@ -433,6 +442,7 @@ function AccountPageInner() {
       : "",
     status: sessionUser?.status === "active" ? "Active" : (sessionUser?.status ?? ""),
     address: defaultAddressLabel,
+    avatarUrl: sessionUser?.avatarUrl ?? null,
     avatarInitials: initialsFromName(sessionUser?.fullName ?? ""),
     emailVerified: Boolean(sessionUser?.emailVerifiedAt),
   };
@@ -492,84 +502,129 @@ function AccountPageInner() {
       </Breadcrumbs>
 
       <div className={styles.layout}>
-        <Sidebar>
+        <button
+          type="button"
+          className={styles.menuToggle}
+          aria-label={navOpen ? "Close account menu" : "Open account menu"}
+          onClick={() => setNavOpen((open) => !open)}
+        >
+          {navOpen ? <X size={16} /> : <Menu size={16} />}
+          Account menu
+        </button>
+        {navOpen ? (
+          <button
+            type="button"
+            className={styles.navScrim}
+            aria-label="Close account menu"
+            onClick={() => setNavOpen(false)}
+          />
+        ) : null}
+        <Sidebar open={navOpen}>
           <Sidebar.Nav>
             <Sidebar.Item
               icon={<LayoutDashboard size={18} />}
               active={activeTab === "dashboard"}
-              onClick={() => setActiveTab("dashboard")}
+              onClick={() => {
+                setActiveTab("dashboard");
+                setNavOpen(false);
+              }}
             >
               Dashboard
             </Sidebar.Item>
             <Sidebar.Item
               icon={<ShoppingBag size={18} />}
               active={activeTab === "orders"}
-              onClick={() => setActiveTab("orders")}
+              onClick={() => {
+                setActiveTab("orders");
+                setNavOpen(false);
+              }}
             >
               Orders
             </Sidebar.Item>
             <Sidebar.Item
               icon={<Heart size={18} />}
               active={activeTab === "wishlist"}
-              onClick={() => setActiveTab("wishlist")}
+              onClick={() => {
+                setActiveTab("wishlist");
+                setNavOpen(false);
+              }}
             >
               Wishlist
             </Sidebar.Item>
             <Sidebar.Item
               icon={<Star size={18} />}
               active={activeTab === "reviews"}
-              onClick={() => setActiveTab("reviews")}
+              onClick={() => {
+                setActiveTab("reviews");
+                setNavOpen(false);
+              }}
             >
               Reviews
             </Sidebar.Item>
             <Sidebar.Item
               icon={<MapPin size={18} />}
               active={activeTab === "addresses"}
-              onClick={() => setActiveTab("addresses")}
+              onClick={() => {
+                setActiveTab("addresses");
+                setNavOpen(false);
+              }}
             >
               Addresses
             </Sidebar.Item>
             <Sidebar.Item
               icon={<CreditCard size={18} />}
               active={activeTab === "payment-methods"}
-              onClick={() => setActiveTab("payment-methods")}
+              onClick={() => {
+                setActiveTab("payment-methods");
+                setNavOpen(false);
+              }}
             >
               Payment Methods
             </Sidebar.Item>
             <Sidebar.Item
               icon={<User size={18} />}
               active={activeTab === "profile-details"}
-              onClick={() => setActiveTab("profile-details")}
+              onClick={() => {
+                setActiveTab("profile-details");
+                setNavOpen(false);
+              }}
             >
               Profile Details
             </Sidebar.Item>
             <Sidebar.Item
               icon={<Bell size={18} />}
               active={activeTab === "notifications"}
-              onClick={() => setActiveTab("notifications")}
+              onClick={() => {
+                setActiveTab("notifications");
+                setNavOpen(false);
+              }}
             >
               Notifications
             </Sidebar.Item>
             {sessionUser.isSeller ? (
-              <Sidebar.Item icon={<Store size={18} />} href="/seller">
+              <Sidebar.Item icon={<Store size={18} />} href="/seller" onClick={() => setNavOpen(false)}>
                 Seller panel
               </Sidebar.Item>
             ) : null}
             {sessionUser.role === "admin" ? (
-              <Sidebar.Item icon={<ShieldCheck size={18} />} href="/admin">
+              <Sidebar.Item icon={<ShieldCheck size={18} />} href="/admin" onClick={() => setNavOpen(false)}>
                 Admin panel
               </Sidebar.Item>
             ) : null}
             <Sidebar.Item
               icon={<SettingsIcon size={18} />}
               active={activeTab === "settings"}
-              onClick={() => setActiveTab("settings")}
+              onClick={() => {
+                setActiveTab("settings");
+                setNavOpen(false);
+              }}
             >
               Settings
             </Sidebar.Item>
             <Sidebar.Item
               icon={<LogOut size={18} />}
               onClick={() => {
+                setNavOpen(false);
                 void logout().then(() => {
                   router.replace("/login");
                 });
@@ -607,9 +662,14 @@ function AccountPageInner() {
           <>
           <div className={styles.profileCard}>
             <div className={styles.profileLeft}>
-              <div className={styles.avatar} aria-hidden>
-                {user.avatarInitials}
-              </div>
+              {user.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={user.avatarUrl} alt="" className={styles.avatar} />
+              ) : (
+                <div className={styles.avatar} aria-hidden>
+                  {user.avatarInitials}
+                </div>
+              )}
               <div className={styles.profileDetails}>
                 <div className={styles.nameRow}>
                   <Heading level={3}>{user.name}</Heading>
@@ -998,14 +1058,90 @@ function AccountPageInner() {
             <div className={styles.profileEditor}>
               <section className={styles.editorCard}>
                 <div className={styles.editorIdentity}>
-                  <div className={styles.avatar} aria-hidden>
-                    {user.avatarInitials}
-                  </div>
-                  <div>
+                  {user.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={user.avatarUrl} alt="" className={styles.avatar} />
+                  ) : (
+                    <div className={styles.avatar} aria-hidden>
+                      {user.avatarInitials}
+                    </div>
+                  )}
+                  <div className={styles.avatarCopy}>
                     <Heading level={3}>{user.name || "Your profile"}</Heading>
                     <Text size="sm" color="muted">
                       These details belong to your account. Past orders keep the name and address used at checkout.
                     </Text>
+                    <div className={styles.avatarActions}>
+                      <label className={styles.avatarUpload}>
+                        {avatarBusy ? "Uploading…" : "Change photo"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          hidden
+                          disabled={avatarBusy}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.target.value = "";
+                            if (!file) return;
+                            if (file.size > 4_500_000) {
+                              setProfileMsg("Choose a photo under 4.5 MB.");
+                              return;
+                            }
+                            void (async () => {
+                              setAvatarBusy(true);
+                              setProfileMsg(null);
+                              try {
+                                const dataBase64 = await new Promise<string>((resolve, reject) => {
+                                  const reader = new FileReader();
+                                  reader.onload = () => resolve(String(reader.result ?? ""));
+                                  reader.onerror = () => reject(new Error("Could not read file"));
+                                  reader.readAsDataURL(file);
+                                });
+                                const result = await uploadMyAvatar({
+                                  dataBase64,
+                                  fileName: file.name,
+                                });
+                                if (result.error || !result.data?.user) {
+                                  setProfileMsg(result.error ?? "Could not upload photo");
+                                  return;
+                                }
+                                setUser(result.data.user);
+                                setProfileMsg("Profile photo updated.");
+                                void refreshSession();
+                              } catch {
+                                setProfileMsg("Could not upload photo");
+                              } finally {
+                                setAvatarBusy(false);
+                              }
+                            })();
+                          }}
+                        />
+                      </label>
+                      {user.avatarUrl ? (
+                        <button
+                          type="button"
+                          className={styles.avatarRemove}
+                          disabled={avatarBusy}
+                          onClick={() => {
+                            void (async () => {
+                              setAvatarBusy(true);
+                              setProfileMsg(null);
+                              const result = await updateMyProfile({ avatarUrl: null });
+                              setAvatarBusy(false);
+                              if (result.error || !result.data?.user) {
+                                setProfileMsg(result.error ?? "Could not remove photo");
+                                return;
+                              }
+                              setUser(result.data.user);
+                              setProfileMsg("Profile photo removed.");
+                              void refreshSession();
+                            })();
+                          }}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
                 <div className={styles.fieldGrid}>

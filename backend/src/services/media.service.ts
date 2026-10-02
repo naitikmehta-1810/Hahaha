@@ -21,7 +21,8 @@ export type UploadFolder =
   | "misc"
   | "invoices"
   | "categories"
-  | "ui";
+  | "ui"
+  | "avatars";
 
 export type UploadResult = {
   url: string;

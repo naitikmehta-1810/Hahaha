@@ -1,51 +1,88 @@
 .portal {
   min-height: 100vh;
-  background: #f6f4fb;
+  background:
+    radial-gradient(1200px 480px at 100% -10%, rgba(124, 58, 237, 0.08), transparent 55%),
+    #f4f1fa;
   display: flex;
   flex-direction: column;
   overflow-x: clip;
 }
 
-.portalHeader {
+.topBar {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 40;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   min-height: 64px;
-  padding: 10px 20px;
-  background: #fff;
-  border-bottom: 1px solid #eee8f6;
+  padding: 10px 18px;
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid #ebe4f5;
+  backdrop-filter: blur(10px);
 }
 
-.portalBrand {
+.menuToggle {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #ebe4f5;
+  border-radius: 12px;
+  background: #fff;
+  color: #1f1635;
+  place-items: center;
+  cursor: pointer;
+}
+
+.topBrand {
   display: flex;
   align-items: center;
   gap: 8px;
   font-weight: 800;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   letter-spacing: -0.03em;
   color: #1f1635;
   text-decoration: none;
   flex-shrink: 0;
 }
 
-.portalSearch {
+.topTitle {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.topKicker {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7c3aed;
+}
+
+.topTitle strong {
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+  color: #1f1635;
+}
+
+.topSearch {
   flex: 1;
-  max-width: 560px;
+  max-width: 420px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #f6f4fb;
-  border: 1px solid #eee8f6;
+  background: #f7f4fd;
+  border: 1px solid #ebe4f5;
   border-radius: 999px;
-  padding: 0 8px 0 16px;
+  padding: 0 14px;
   min-width: 0;
+  color: #6d657f;
 }
 
-.portalSearch input {
+.topSearch input {
   flex: 1;
   min-width: 0;
   border: 0;
@@ -53,21 +90,10 @@
   min-height: 40px;
   font: inherit;
   outline: none;
+  color: #1f1635;
 }
 
-.portalSearch button {
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: #6d657f;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-.portalSeller {
+.topActions {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -81,6 +107,7 @@
   border-radius: 50%;
   object-fit: cover;
   background: #f4efff;
+  border: 1px solid #ebe4f5;
 }
 
 .portalSellerText {
@@ -98,9 +125,53 @@
   font-size: 0.72rem;
 }
 
-.portalChevron {
-  color: #6d657f;
+.portalMenu {
+  position: relative;
+}
+
+.portalMenuSummary {
+  list-style: none;
   display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid #ebe4f5;
+  background: #fff;
+}
+
+.portalMenuSummary::-webkit-details-marker {
+  display: none;
+}
+
+.portalMenuPanel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #ebe4f5;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(31, 22, 53, 0.12);
+  padding: 8px;
+  display: grid;
+  gap: 2px;
+  z-index: 30;
+}
+
+.portalMenuPanel a {
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #1f1635;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.portalMenuPanel a:hover {
+  background: #f7f4fd;
+  color: #7c3aed;
 }
 
 .shell {
@@ -112,12 +183,17 @@
   padding: 0;
   max-width: none;
   flex: 1;
+  position: relative;
+}
+
+.navScrim {
+  display: none;
 }
 
 .shellMain {
   flex: 1;
   min-width: 0;
-  padding: 20px 24px 48px;
+  padding: 22px 24px 56px;
 }
 
 .shellMain .container {
@@ -154,47 +230,6 @@
   border-top: 1px solid var(--color-border);
 }
 
-@media (max-width: 968px) {
-  .shell {
-    flex-direction: column;
-    padding: 0;
-  }
-
-  .sidebar,
-  .portalDash .sidebar {
-    width: 100%;
-    min-height: 0;
-    position: static;
-    border-right: 0;
-    border-bottom: 1px solid #eee8f6;
-  }
-
-  .navList {
-    flex-direction: row;
-    flex-wrap: wrap;
-    max-width: 100%;
-  }
-
-  .navItem {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .shopRail {
-    margin-bottom: 12px;
-  }
-
-  .portalHeader {
-    flex-wrap: wrap;
-  }
-
-  .portalSearch {
-    order: 3;
-    flex-basis: 100%;
-    max-width: none;
-  }
-}
-
 .container {
   max-width: 1400px;
   margin: 0 auto;
@@ -207,38 +242,28 @@
   align-items: flex-start;
 }
 
-@media (max-width: 968px) {
-  .layout {
-    flex-direction: column;
-  }
-}
-
 .sidebar {
   width: 248px;
   flex-shrink: 0;
-  background: linear-gradient(180deg, #2e1064 0%, #1c0b3a 100%);
+  background: linear-gradient(180deg, #1f0a45 0%, #15072f 100%);
   color: #f5f3ff;
   border: 0;
   border-radius: 0;
-  padding: 20px 14px 20px;
+  padding: 20px 12px 18px;
   box-shadow: none;
   min-height: calc(100vh - 64px);
   position: sticky;
   top: 64px;
   display: flex;
   flex-direction: column;
-}
-
-.portalDash .sidebar {
-  top: 0;
-  min-height: 100vh;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .sideBrand {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 8px 22px;
+  margin: 0 8px 18px;
   text-decoration: none;
   color: #f5f3ff;
 }
@@ -264,6 +289,7 @@
   flex-direction: column;
   gap: 8px;
   padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .sellerBrief {
@@ -449,6 +475,7 @@
   background: #7c3aed;
   color: #fff;
   font-weight: 650;
+  box-shadow: 0 10px 22px rgba(124, 58, 237, 0.28);
 }
 
 .navItem:hover {
@@ -495,13 +522,13 @@
 
 .metricCard {
   background: #fff;
-  border: 1px solid #eee8f6;
-  border-radius: 16px;
+  border: 1px solid #ebe4f5;
+  border-radius: 18px;
   padding: 18px;
-  box-shadow: 0 8px 24px rgba(31, 22, 53, 0.05);
+  box-shadow: 0 10px 28px rgba(31, 22, 53, 0.04);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   position: relative;
   overflow: hidden;
 }
@@ -510,9 +537,10 @@
   content: "";
   position: absolute;
   left: 0;
-  top: 0;
-  bottom: 0;
+  top: 16px;
+  bottom: 16px;
   width: 3px;
+  border-radius: 999px;
   background: #7c3aed;
 }
 
@@ -600,8 +628,52 @@
 }
 
 @media (max-width: 968px) {
+  .menuToggle {
+    display: grid;
+  }
+
+  .topTitle {
+    display: none;
+  }
+
+  .topSearch {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .topBar {
+    flex-wrap: wrap;
+  }
+
+  .navScrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    border: 0;
+    background: rgba(20, 10, 40, 0.45);
+  }
+
   .sidebar {
-    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    width: min(280px, 86vw);
+    min-height: 100vh;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    box-shadow: 18px 0 40px rgba(20, 10, 40, 0.28);
+  }
+
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+
+  .shellMain {
+    padding: 18px 16px 48px;
   }
 
   .sidebarToggle {
@@ -1159,14 +1231,15 @@ textarea.control {
 
 .dashTop {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+  padding: 4px 2px 2px;
 }
 
 .greeting {
   margin: 0;
-  font-size: 1.65rem;
+  font-size: clamp(1.35rem, 2.4vw, 1.75rem);
   line-height: 1.2;
   letter-spacing: -0.03em;
   font-weight: 800;
@@ -1180,40 +1253,23 @@ textarea.control {
 }
 
 .dashSellerCluster {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  display: none;
 }
 
 .dashSeller {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  background: #fff;
-  border: 1px solid #ece7f5;
-  border-radius: 999px;
-  padding: 6px 14px 6px 6px;
+  display: none;
 }
 
 .dashAvatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: contain;
-  background: #f4efff;
+  display: none;
 }
 
 .dashSeller strong {
-  display: block;
-  font-size: 0.88rem;
-  line-height: 1.2;
+  display: none;
 }
 
 .dashSeller small {
-  color: #6d657f;
-  font-size: 0.72rem;
+  display: none;
 }
 
 .dashSplit {
@@ -1549,10 +1605,14 @@ textarea.control {
   font-style: normal;
   font-size: 0.68rem;
   font-weight: 700;
-  color: #7c3aed;
-  background: #f3e8ff;
+  color: #ede9fe;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  padding: 1px 7px;
+  padding: 2px 8px;
+}
+
+.statusChip {
+  text-transform: capitalize;
 }
 
 .shopRailLink {
@@ -1760,7 +1820,22 @@ textarea.control {
   }
 
   .settingsNav {
-    position: static;
+    position: sticky;
+    top: 72px;
+    z-index: 15;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    padding: 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .settingsItem {
+    flex: 0 0 auto;
+    width: auto;
+    white-space: nowrap;
   }
 
   .fieldGrid3 {

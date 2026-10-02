@@ -9,8 +9,6 @@ import Button from "@/components/ui/Button/Button";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
 import { formatOrderStatusLabel } from "@/utils/cart";
-import { FALLBACK_SHOP_LOGO } from "@/utils/media";
-import OrderNotifications from "@/components/notifications/OrderNotifications";
 import {
   fetchMySeller,
   fetchSellerDashboard,
@@ -215,23 +213,8 @@ export default function SellerDashboardPage() {
     <div className={styles.main}>
       <div className={styles.dashTop}>
         <div>
-          <h1 className={styles.greeting}>Welcome back, {greetingName} 👋</h1>
-          <p className={styles.greetingSub}>Here&apos;s what&apos;s happening with your store today.</p>
-        </div>
-        <div className={styles.dashSellerCluster}>
-          <OrderNotifications />
-          <div className={styles.dashSeller}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={seller.logoUrl || FALLBACK_SHOP_LOGO}
-              alt=""
-              className={styles.dashAvatar}
-            />
-            <span>
-              <strong>{seller.shopName}</strong>
-              <small>Seller</small>
-            </span>
-          </div>
+          <h1 className={styles.greeting}>Welcome back, {greetingName}</h1>
+          <p className={styles.greetingSub}>Store performance for today and the last two weeks.</p>
         </div>
       </div>
 

@@ -308,6 +308,7 @@ authRouter.patch(
           .nullable()
           .optional(),
         gender: z.enum(["female", "male", "other", "prefer_not_to_say"]).nullable().optional(),
+        avatarUrl: z.string().url().nullable().optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) {
@@ -318,7 +319,8 @@ authRouter.patch(
       parsed.data.fullName === undefined &&
       parsed.data.phoneNumber === undefined &&
       parsed.data.dateOfBirth === undefined &&
-      parsed.data.gender === undefined
+      parsed.data.gender === undefined &&
+      parsed.data.avatarUrl === undefined
     ) {
       res.status(400).json({ message: "Provide a detail to update" });
       return;
@@ -333,6 +335,33 @@ authRouter.patch(
     }
     const user = await updateUserProfile(req.user!.id, parsed.data);
     res.json({ user });
+  })
+);
+
+authRouter.post(
+  "/me/avatar",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({
+        dataBase64: z.string().min(32).max(6_000_000),
+        fileName: z.string().trim().min(1).max(120).default("avatar.jpg"),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid avatar" });
+      return;
+    }
+    const { uploadImage } = await import("../services/media.service.js");
+    const uploaded = await uploadImage({
+      dataBase64: parsed.data.dataBase64,
+      fileName: parsed.data.fileName,
+      folder: "avatars",
+      publicId: `user-${req.user!.id}`,
+      overwrite: true,
+    });
+    const user = await updateUserProfile(req.user!.id, { avatarUrl: uploaded.url });
+    res.json({ user, url: uploaded.url });
   })
 );
 

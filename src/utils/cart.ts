@@ -599,10 +599,19 @@ export async function updateMyProfile(input: {
   phoneNumber?: string | null;
   dateOfBirth?: string | null;
   gender?: string | null;
+  avatarUrl?: string | null;
 }) {
   return apiRequest<{ user: import("./api-client").AuthUser }>("PATCH", "/api/auth/me", {
     body: input,
   });
+}
+
+export async function uploadMyAvatar(input: { dataBase64: string; fileName?: string }) {
+  return apiRequest<{ user: import("./api-client").AuthUser; url: string }>(
+    "POST",
+    "/api/auth/me/avatar",
+    { body: input }
+  );
 }
 
 export async function changeMyPassword(input: { currentPassword: string; newPassword: string }) {

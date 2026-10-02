@@ -8,6 +8,7 @@ export type AuthUser = {
   emailVerifiedAt: string | null;
   dateOfBirth?: string | null;
   gender?: string | null;
+  avatarUrl?: string | null;
   createdAt: string;
   updatedAt: string;
   isSeller?: boolean;

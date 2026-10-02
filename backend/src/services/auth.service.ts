@@ -7,7 +7,7 @@ import type { AuthUser, UserRecord, UserRole } from "../types.js";
 import { toAuthUser } from "../types.js";
 import { AppError } from "../utils/errors.js";
 
-const USER_COLUMNS = `id, full_name, email, phone_number, role, status, email_verified_at, to_char(date_of_birth, 'YYYY-MM-DD') as date_of_birth, gender, created_at, updated_at`;
+const USER_COLUMNS = `id, full_name, email, phone_number, role, status, email_verified_at, to_char(date_of_birth, 'YYYY-MM-DD') as date_of_birth, gender, avatar_url, created_at, updated_at`;
 
 /**
  * Effective role for JWT claims (requireRole reads this claim, not the DB).
@@ -201,6 +201,7 @@ export async function updateUserProfile(
     phoneNumber?: string | null;
     dateOfBirth?: string | null;
     gender?: string | null;
+    avatarUrl?: string | null;
   }
 ): Promise<AuthUser> {
   const sets: string[] = [];
@@ -223,6 +224,10 @@ export async function updateUserProfile(
   if (input.gender !== undefined) {
     params.push(input.gender);
     sets.push(`gender = $${params.length}`);
+  }
+  if (input.avatarUrl !== undefined) {
+    params.push(input.avatarUrl);
+    sets.push(`avatar_url = $${params.length}`);
   }
 
   if (sets.length === 0) {

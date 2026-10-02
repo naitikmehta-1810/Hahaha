@@ -14,6 +14,8 @@ import {
   Filter as FilterIcon,
   ChevronLeft,
   ChevronRight,
+  Menu,
+  X,
 } from "lucide-react";
 import styles from "./shop.module.css";
 import Heading from "@/components/ui/Heading/Heading";
@@ -91,6 +93,7 @@ function ShopStorefrontInner() {
   const [productsLoading, setProductsLoading] = useState(true);
   const [followBusy, setFollowBusy] = useState(false);
   const [messageNote, setMessageNote] = useState<string | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     setSelectedCategory(categoryFromUrl);
@@ -227,7 +230,24 @@ function ShopStorefrontInner() {
       </Breadcrumbs>
 
       <div className={styles.layout}>
-        <aside className={styles.sidebar}>
+        <button
+          type="button"
+          className={styles.menuToggle}
+          aria-label={navOpen ? "Close shop menu" : "Open shop menu"}
+          onClick={() => setNavOpen((open) => !open)}
+        >
+          {navOpen ? <X size={16} /> : <Menu size={16} />}
+          Shop menu
+        </button>
+        {navOpen ? (
+          <button
+            type="button"
+            className={styles.navScrim}
+            aria-label="Close shop menu"
+            onClick={() => setNavOpen(false)}
+          />
+        ) : null}
+        <aside className={`${styles.sidebar} ${navOpen ? styles.sidebarOpen : ""}`}>
           <div className={styles.sellerCard}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -303,7 +323,10 @@ function ShopStorefrontInner() {
                   className={`${styles.navItem} ${
                     tab === key ? styles.navItemActive : ""
                   }`}
-                  onClick={() => setTab(key)}
+                  onClick={() => {
+                    setTab(key);
+                    setNavOpen(false);
+                  }}
                 >
                   {label}
                 </button>
@@ -322,7 +345,10 @@ function ShopStorefrontInner() {
                     className={`${styles.categoryItem} ${
                       selectedCategory === cat.slug ? styles.categoryItemActive : ""
                     }`}
-                    onClick={() => updateCategory(cat.slug)}
+                    onClick={() => {
+                      updateCategory(cat.slug);
+                      setNavOpen(false);
+                    }}
                   >
                     <span>{cat.name}</span>
                     <span className={styles.categoryCount}>({cat.count})</span>
@@ -433,8 +459,12 @@ function ShopStorefrontInner() {
                       </option>
                     ))}
                   </select>
-                  <button type="button" className={styles.filterBtn}>
-                    <FilterIcon size={16} /> Filter
+                  <button
+                    type="button"
+                    className={styles.filterBtn}
+                    onClick={() => setNavOpen(true)}
+                  >
+                    <FilterIcon size={16} /> Shop menu
                   </button>
                 </div>
               </div>

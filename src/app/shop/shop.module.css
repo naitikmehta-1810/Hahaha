@@ -42,12 +42,6 @@
   margin-top: 24px;
 }
 
-@media (max-width: 968px) {
-  .layout {
-    flex-direction: column;
-  }
-}
-
 .sidebar {
   width: 260px;
   flex-shrink: 0;
