@@ -10,13 +10,21 @@ import { getRedis, whenRedisReady } from "../config/redis.js";
  * trust proxy 1 only sees Vercel's egress address, so every visitor shared
  * one 120/minute bucket and catalog calls returned 429.
  * Vercel sets x-vercel-forwarded-for to the browser address. Other trusted
- * proxies provide the same value through x-forwarded-for. Direct calls to
- * the Render URL do not have either header, so they stay keyed by req.ip.
+ * proxies provide the same value through x-forwarded-for or x-real-ip.
+ * Direct calls to the Render URL do not have these headers, so they stay
+ * keyed by req.ip.
  */
 function rateLimitKey(req: Request): string {
-  const forwarded = req.get("x-vercel-forwarded-for") ?? req.get("x-forwarded-for");
-  const candidate = forwarded?.split(",")[0]?.trim();
-  const ip = candidate && isIP(candidate) ? candidate : req.ip;
+  const forwarded = [
+    req.get("x-vercel-forwarded-for"),
+    req.get("x-forwarded-for"),
+    req.get("x-real-ip"),
+  ];
+  const forwardedIp = forwarded
+    .flatMap((value) => (value ? value.split(",") : []))
+    .map((value) => value.trim())
+    .find((value) => isIP(value));
+  const ip = forwardedIp ?? req.ip;
   return ipKeyGenerator(ip && isIP(ip) ? ip : "0.0.0.0");
 }
 
