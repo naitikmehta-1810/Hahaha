@@ -97,6 +97,10 @@ app.post(
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 
+app.get("/", (_req, res) => {
+  res.json({ ok: true, service: "stuffsy-backend" });
+});
+
 app.get("/api/health", async (_req, res) => {
   const checks: { database: "ok" | "error"; redis: "ok" | "error" | "skipped" } = {
     database: "error",
