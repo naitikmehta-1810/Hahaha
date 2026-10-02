@@ -31,13 +31,18 @@ Dev-only: `PAYMENT_MODE=stub` auto-captures for local polling UI. Never use stub
 
 ## Deploy checklist
 
-1. `cd backend && npm ci && npm run migrate`
-2. Start Redis, then API, then email + WhatsApp workers
-3. Configure Razorpay webhook → `POST {BACKEND_PUBLIC_URL}/api/payments/webhook` (raw JSON body)
-4. Configure Shiprocket webhook → `POST {BACKEND_PUBLIC_URL}/api/shipping/webhook/shiprocket` (optional `?token={SHIPPING_WEBHOOK_SECRET}`)
-5. Internal shipping tooling still uses `POST /api/shipping/webhook` with `x-stuffsy-shipping-secret`
-6. Confirm Cloudinary delivery URLs are HTTPS CDN fronts for catalog images
-7. Smoke: `GET /api/health` returns `{ ok: true, database: "ok", redis: "ok" }`, place order → paid → seller **Ship now** → buyer tracking shows AWB
+1. `cd backend && npm ci && npm run build`
+2. Start the API (it applies pending Umzug migrations before listening). Or run `npm run migrate` yourself first.
+3. Start Redis, then the email (+ optional WhatsApp) worker alongside the API
+4. Configure Razorpay webhook → `POST {BACKEND_PUBLIC_URL}/api/payments/webhook` (raw JSON body)
+5. Configure Shiprocket webhook → `POST {BACKEND_PUBLIC_URL}/api/shipping/webhook/shiprocket` (optional `?token={SHIPPING_WEBHOOK_SECRET}`)
+6. Internal shipping tooling still uses `POST /api/shipping/webhook` with `x-stuffsy-shipping-secret`
+7. Confirm Cloudinary delivery URLs are HTTPS CDN fronts for catalog images
+8. Smoke: `GET /api/health` returns `{ ok: true, database: "ok", redis: "ok" }`, place order → paid → seller **Ship now** → buyer tracking shows AWB
+
+**Render:** keep Start Command as  
+`node notification-services/email-service/dist/server.js & exec node backend/dist/server.js`  
+The API process runs migrations on boot (safe with `WEB_CONCURRENCY=1`).
 
 ## Shiprocket (manual)
 

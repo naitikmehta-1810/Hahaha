@@ -167,27 +167,42 @@ async function warmPool() {
   }, 60_000);
 }
 
-const server = app.listen(env.PORT, () => {
-  logger.info({ port: env.PORT }, `Stuffsy backend listening on http://localhost:${env.PORT}`);
-  void startReservationReleaseJob();
-  void startAbandonedCartJob();
-  void startCartPriceDropJob();
-  void startRecentlyViewedDigestJob();
+async function start() {
   try {
-    startInvoiceWorker();
+    const { applyPendingMigrations } = await import("./db/umzug.js");
+    const result = await applyPendingMigrations();
+    if (result.applied > 0) {
+      logger.info({ applied: result.applied }, "applied pending database migrations");
+    }
   } catch (error) {
-    logger.error({ err: error }, "invoice worker failed to start");
-  }
-  void warmPool();
-});
-
-server.on("error", (error: NodeJS.ErrnoException) => {
-  if (error.code === "EADDRINUSE") {
-    logger.error(
-      { port: env.PORT },
-      `Port ${env.PORT} is already in use. Stop the other process or re-run npm run dev (free-port runs automatically).`
-    );
+    logger.error({ err: error }, "database migrate failed");
     process.exit(1);
   }
-  throw error;
-});
+
+  const server = app.listen(env.PORT, () => {
+    logger.info({ port: env.PORT }, `Stuffsy backend listening on http://localhost:${env.PORT}`);
+    void startReservationReleaseJob();
+    void startAbandonedCartJob();
+    void startCartPriceDropJob();
+    void startRecentlyViewedDigestJob();
+    try {
+      startInvoiceWorker();
+    } catch (error) {
+      logger.error({ err: error }, "invoice worker failed to start");
+    }
+    void warmPool();
+  });
+
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EADDRINUSE") {
+      logger.error(
+        { port: env.PORT },
+        `Port ${env.PORT} is already in use. Stop the other process or re-run npm run dev (free-port runs automatically).`
+      );
+      process.exit(1);
+    }
+    throw error;
+  });
+}
+
+void start();

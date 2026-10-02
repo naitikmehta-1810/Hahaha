@@ -20,9 +20,14 @@ const migrationSequelize = new Sequelize(env.DATABASE_URL, {
       : undefined,
 });
 
+/** Compiled `dist/` loads `.js`; `tsx` / `ts-node` on `src/` loads `.ts`. */
+const migrationGlob = __dirname.includes(`${path.sep}dist${path.sep}`)
+  ? "migrations/*.js"
+  : "migrations/*.ts";
+
 export const migrator = new Umzug({
   migrations: {
-    glob: ["migrations/*.ts", { cwd: __dirname }],
+    glob: [migrationGlob, { cwd: __dirname }],
   },
   context: migrationSequelize.getQueryInterface(),
   storage: new SequelizeStorage({
@@ -33,6 +38,18 @@ export const migrator = new Umzug({
 });
 
 export type Migration = typeof migrator._types.migration;
+
+/** Apply pending migrations, then close the migration connection. */
+export async function applyPendingMigrations() {
+  const pending = await migrator.pending();
+  if (pending.length === 0) {
+    await migrationSequelize.close();
+    return { applied: 0 };
+  }
+  await migrator.up();
+  await migrationSequelize.close();
+  return { applied: pending.length };
+}
 
 const isDirectRun =
   Boolean(process.argv[1]) &&
