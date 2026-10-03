@@ -46,7 +46,7 @@ const BreadcrumbsItem = ({ children, href, active = false }: BreadcrumbsItemProp
           {children}
         </Link>
       ) : (
-        <span>{children}</span>
+        <span aria-current={active ? "page" : undefined}>{children}</span>
       )}
     </li>
   );

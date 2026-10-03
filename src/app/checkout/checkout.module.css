@@ -242,11 +242,13 @@
 }
 
 .deliveryName {
+  display: block;
   font-size: 0.875rem;
   font-weight: 700;
 }
 
 .deliveryMeta {
+  display: block;
   font-size: 0.75rem;
   color: var(--color-text-muted);
 }
@@ -378,15 +380,27 @@
 
 .methodLogos {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
-.methodLogo {
-  font-size: 0.6rem;
-  font-weight: 700;
-  border: 1px solid var(--color-border-dark);
-  padding: 2px 5px;
-  border-radius: 3px;
+.methodLogos svg {
+  width: 38px;
+  height: 24px;
+}
+
+.cardTitleSpaced {
+  margin-top: 28px;
+}
+
+.recapBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.placeOrderRow {
+  margin-top: 16px;
 }
 
 .secureNote {
@@ -407,9 +421,9 @@
 }
 
 .statusError {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger-ink);
 }
 
 .valueProps {
@@ -490,7 +504,7 @@
   background: var(--color-warning-bg);
   border-radius: var(--radius-md);
   font-size: 0.8125rem;
-  color: #92400e;
+  color: var(--color-warning-ink);
 }
 
 .recapList {

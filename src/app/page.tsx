@@ -1,21 +1,23 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  ChevronRight,
-  Truck,
-  RotateCcw,
-  ShieldCheck,
-  Headphones,
   ArrowRight,
+  BadgeCheck,
+  ChevronLeft,
+  ChevronRight,
   LayoutGrid,
+  ShieldCheck,
+  Sparkles,
+  Store,
+  X,
 } from "lucide-react";
 import styles from "./page.module.css";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
-import Button from "@/components/ui/Button/Button";
+import { ButtonLink } from "@/components/ui/Button/Button";
 import ProductCard from "@/components/ui/ProductCard/ProductCard";
+import ValueProps from "@/components/ui/ValueProps/ValueProps";
+import { useAuth } from "@/components/auth/AuthProvider";
 import {
   HOME_POPULAR_SORT,
   categoryImageUrl,
@@ -28,35 +30,289 @@ import {
   type CategoryNode,
   type ProductCard as CatalogProduct,
 } from "@/utils/catalog";
-import { FALLBACK_PRODUCT_IMAGE, HERO_CAROUSEL_IMAGES } from "@/utils/media";
+import {
+  FALLBACK_PRODUCT_IMAGE,
+  HERO_CAROUSEL_IMAGES,
+  SELL_STEP_IMAGES,
+  optimizedImage,
+} from "@/utils/media";
 import { apiRequest } from "@/utils/api-client";
 
-const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
+const SLIDE_INTERVAL_MS = 6500;
+
+type Slide = {
+  eyebrow: string;
+  title: string;
+  text: string;
+  cta: string;
+  href: string;
+  images: [string, string];
+  badge: { icon: React.ReactNode; label: string };
+};
+
+const POPULAR_TABS = [
+  ["popular", "Popular right now"],
+  ["best-sellers", "Best sellers"],
+  ["top-rated", "Top rated"],
+  ["new-arrivals", "New arrivals"],
+] as const;
+
+const RECOMMEND_TABS = [
+  ["for-you", "Recommended for you"],
+  ["views", "Recently viewed"],
+] as const;
+
+function ProductGrid({ products, loading }: { products: CatalogProduct[]; loading: boolean }) {
+  return (
+    <div className={styles.productsGrid}>
+      {loading && products.length === 0
+        ? Array.from({ length: 6 }).map((_, index) => <ProductCard.Skeleton key={index} />)
+        : products.map((product) => (
+            <ProductCard key={product.id} href={productHref(product)} productId={product.id}>
+              <ProductCard.Image
+                src={productImageUrl(product)}
+                alt={product.title}
+                onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                  (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
+                }}
+              >
+                {product.isBestseller ? <ProductCard.Badge>Bestseller</ProductCard.Badge> : null}
+              </ProductCard.Image>
+              <ProductCard.Body>
+                <ProductCard.Title>{product.title}</ProductCard.Title>
+                <ProductCard.Subtitle>{product.shopName}</ProductCard.Subtitle>
+                <ProductCard.Price
+                  amount={product.price}
+                  originalAmount={product.compareAtPrice ?? undefined}
+                  discountPercentage={product.discountPercent ?? undefined}
+                />
+                <ProductCard.Rating rating={product.avgRating} reviewsCount={product.reviewCount} />
+              </ProductCard.Body>
+            </ProductCard>
+          ))}
+    </div>
+  );
+}
+
+function SectionTabs<T extends string>({
+  tabs,
+  active,
+  onChange,
+  label,
+}: {
+  tabs: ReadonlyArray<readonly [T, string]>;
+  active: T;
+  onChange: (key: T) => void;
+  label: string;
+}) {
+  return (
+    <div className={styles.sectionTabs} role="tablist" aria-label={label}>
+      {tabs.map(([key, text]) => (
+        <button
+          key={key}
+          type="button"
+          role="tab"
+          aria-selected={active === key}
+          onClick={() => onChange(key)}
+          className={`${styles.tabBtn} ${active === key ? styles.activeTabBtn : ""}`}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function HeroCarousel({ slides }: { slides: Slide[] }) {
+  const [current, setCurrent] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const touchStart = useRef<number | null>(null);
+  const count = slides.length;
+
+  const go = useCallback((index: number) => setCurrent((index + count) % count), [count]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (paused || reduceMotion) return;
+    const timer = window.setTimeout(() => setCurrent((prev) => (prev + 1) % count), SLIDE_INTERVAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [current, paused, reduceMotion, count]);
+
+  return (
+    <div
+      className={`${styles.carousel} ${paused ? styles.carouselPaused : ""}`}
+      aria-roledescription="carousel"
+      aria-label="Featured"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={() => setPaused(false)}
+      onTouchStart={(e) => {
+        touchStart.current = e.touches[0]?.clientX ?? null;
+      }}
+      onTouchEnd={(e) => {
+        const start = touchStart.current;
+        const end = e.changedTouches[0]?.clientX;
+        touchStart.current = null;
+        if (start == null || end == null) return;
+        const delta = end - start;
+        if (Math.abs(delta) > 40) go(current + (delta < 0 ? 1 : -1));
+      }}
+    >
+      <span className={`${styles.orb} ${styles.orbA}`} aria-hidden="true" />
+      <span className={`${styles.orb} ${styles.orbB}`} aria-hidden="true" />
+      <span className={styles.gridPattern} aria-hidden="true" />
+
+      {slides.map((slide, index) => {
+        const active = index === current;
+        return (
+          <div
+            key={slide.title}
+            className={`${styles.slide} ${active ? styles.slideActive : ""}`}
+            role="group"
+            aria-roledescription="slide"
+            aria-label={`${index + 1} of ${count}`}
+            aria-hidden={!active}
+          >
+            <div className={styles.carouselContent}>
+              <p className={styles.carouselEyebrow}>
+                <Sparkles size={13} aria-hidden="true" />
+                {slide.eyebrow}
+              </p>
+              {index === 0 ? (
+                <h1 className={styles.carouselTitle}>{slide.title}</h1>
+              ) : (
+                <h2 className={styles.carouselTitle}>{slide.title}</h2>
+              )}
+              <p className={styles.carouselSubtitle}>{slide.text}</p>
+              <ButtonLink
+                href={slide.href}
+                size="lg"
+                variant="secondary"
+                className={styles.carouselCta}
+                tabIndex={active ? 0 : -1}
+                rightIcon={<ArrowRight size={18} />}
+              >
+                {slide.cta}
+              </ButtonLink>
+            </div>
+            <div className={styles.collage} aria-hidden="true">
+              <span className={`${styles.collageCard} ${styles.collageBack}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={optimizedImage(slide.images[1], 420)}
+                  alt=""
+                  loading={index === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
+                  }}
+                />
+              </span>
+              <span className={`${styles.collageCard} ${styles.collageFront}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={optimizedImage(slide.images[0], 520)}
+                  alt=""
+                  loading={index === 0 ? "eager" : "lazy"}
+                  fetchPriority={index === 0 ? "high" : "auto"}
+                  decoding="async"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
+                  }}
+                />
+              </span>
+              <span className={styles.glassBadge}>
+                {slide.badge.icon}
+                {slide.badge.label}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+
+      <div className={styles.carouselControls}>
+        <div className={styles.carouselDots}>
+          {slides.map((slide, index) => (
+            <button
+              key={slide.title}
+              type="button"
+              className={`${styles.dot} ${index === current ? styles.activeDot : ""}`}
+              aria-label={`Show slide ${index + 1}: ${slide.title}`}
+              aria-current={index === current}
+              onClick={() => go(index)}
+            >
+              {index === current && !reduceMotion ? (
+                <span
+                  key={`${current}-${paused}`}
+                  className={styles.dotProgress}
+                  style={{ animationDuration: `${SLIDE_INTERVAL_MS}ms` }}
+                />
+              ) : null}
+            </button>
+          ))}
+        </div>
+        <div className={styles.carouselArrows}>
+          <button type="button" className={styles.arrow} aria-label="Previous slide" onClick={() => go(current - 1)}>
+            <ChevronLeft size={18} />
+          </button>
+          <button type="button" className={styles.arrow} aria-label="Next slide" onClick={() => go(current + 1)}>
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
-  const [activePopularTab, setActivePopularTab] = useState("popular");
-  const [activeRecommendTab, setActiveRecommendTab] = useState("for-you");
-  const [currentSlide, setCurrentSlide] = useState(0);
+  const { user } = useAuth();
+  const [activePopularTab, setActivePopularTab] =
+    useState<(typeof POPULAR_TABS)[number][0]>("popular");
+  const [activeRecommendTab, setActiveRecommendTab] =
+    useState<(typeof RECOMMEND_TABS)[number][0]>("for-you");
   const [sidebarCategories, setSidebarCategories] = useState<CategoryNode[]>([]);
   const [circleCategories, setCircleCategories] = useState<CategoryNode[]>([]);
   const [popularProducts, setPopularProducts] = useState<CatalogProduct[]>([]);
+  const [newArrivals, setNewArrivals] = useState<CatalogProduct[]>([]);
   const [recommendedProducts, setRecommendedProducts] = useState<CatalogProduct[]>([]);
   const [loadingPopular, setLoadingPopular] = useState(true);
+  const [loadingRecommended, setLoadingRecommended] = useState(true);
+  const [showingFallback, setShowingFallback] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % 4);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     void fetchCategories().then((tree) => {
       setSidebarCategories(pickSidebarCategories(tree));
       setCircleCategories(pickShopByCategoryNodes(tree, 8));
     });
+    // Real new listings give the "new arrivals" slide its own imagery.
+    void fetchProducts({ sort: "new_arrivals", pageSize: 2 }).then((result) =>
+      setNewArrivals(result.products)
+    );
   }, []);
+
+  useEffect(() => {
+    if (!categoriesOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCategoriesOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [categoriesOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,49 +331,67 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
+    setLoadingRecommended(true);
     void (async () => {
       if (activeRecommendTab === "views") {
         const result = await apiRequest<{ products: CatalogProduct[] }>(
           "GET",
-          "/api/analytics/recently-viewed?limit=6"
+          "/api/analytics/recently-viewed?limit=6",
+          { skipRefresh: true }
         );
         if (cancelled) return;
         if (result.data?.products?.length) {
           setRecommendedProducts(result.data.products);
+          setShowingFallback(false);
+          setLoadingRecommended(false);
           return;
         }
       }
       const fallback = await fetchProducts({ sort: "bestsellers", pageSize: 6 });
-      if (!cancelled) setRecommendedProducts(fallback.products);
+      if (!cancelled) {
+        setRecommendedProducts(fallback.products);
+        setShowingFallback(activeRecommendTab === "views");
+        setLoadingRecommended(false);
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, [activeRecommendTab]);
 
-  const renderProductCard = (product: CatalogProduct) => (
-    <ProductCard key={product.id} href={productHref(product)}>
-      <ProductCard.Image
-        src={productImageUrl(product)}
-        alt={product.title}
-        onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-          (e.target as HTMLImageElement).src = FALLBACK_THUMB;
-        }}
-      >
-        {product.isBestseller ? <ProductCard.Badge>Bestseller</ProductCard.Badge> : null}
-      </ProductCard.Image>
-      <ProductCard.Body>
-        <ProductCard.Title>{product.title}</ProductCard.Title>
-        <ProductCard.Subtitle>{product.shopName}</ProductCard.Subtitle>
-        <ProductCard.Price
-          amount={product.price}
-          originalAmount={product.compareAtPrice ?? undefined}
-          discountPercentage={product.discountPercent ?? undefined}
-        />
-        <ProductCard.Rating rating={product.avgRating} reviewsCount={product.reviewCount} />
-      </ProductCard.Body>
-    </ProductCard>
-  );
+  const arrivalImages = newArrivals.map((p) => productImageUrl(p));
+  const slides: Slide[] = [
+    {
+      eyebrow: "Handmade marketplace",
+      title: "Discover unique handmade treasures",
+      text: "Find things you'll love. Support real makers from across India.",
+      cta: "Shop now",
+      href: "/shop",
+      images: [HERO_CAROUSEL_IMAGES[0], HERO_CAROUSEL_IMAGES[1]],
+      badge: { icon: <BadgeCheck size={14} aria-hidden="true" />, label: "Made by real makers" },
+    },
+    {
+      eyebrow: "Fresh from the studio",
+      title: "New pieces, added every week",
+      text: "Be the first to see what makers are listing right now.",
+      cta: "See new arrivals",
+      href: "/shop?sort=newest",
+      images: [
+        arrivalImages[0] ?? HERO_CAROUSEL_IMAGES[1],
+        arrivalImages[1] ?? HERO_CAROUSEL_IMAGES[0],
+      ],
+      badge: { icon: <Sparkles size={14} aria-hidden="true" />, label: "Just listed" },
+    },
+    {
+      eyebrow: "Sell on Stuffsy",
+      title: "Turn your craft into a business",
+      text: "Open a shop in minutes and reach buyers across India.",
+      cta: user?.isSeller ? "Open your seller hub" : "Start selling",
+      href: user?.isSeller ? "/seller" : "/sell",
+      images: [SELL_STEP_IMAGES[1], SELL_STEP_IMAGES[2]],
+      badge: { icon: <ShieldCheck size={14} aria-hidden="true" />, label: "Secure payouts" },
+    },
+  ];
 
   return (
     <div className={styles.container}>
@@ -127,29 +401,27 @@ export default function Home() {
         onClick={() => setCategoriesOpen(true)}
       >
         <LayoutGrid size={16} />
-        Categories
+        Browse categories
       </button>
 
       <section className={styles.heroSection}>
         <aside
-          className={`${styles.categoriesSidebar} ${
-            categoriesOpen ? styles.categoriesSidebarOpen : ""
-          }`}
+          className={`${styles.categoriesSidebar} ${categoriesOpen ? styles.categoriesSidebarOpen : ""}`}
           onClick={(e) => {
             if (e.target === e.currentTarget) setCategoriesOpen(false);
           }}
         >
-          <div className={styles.categoriesPanel}>
+          <nav className={styles.categoriesPanel} aria-label="Categories">
             <div className={styles.sidebarTitle}>
               <span>Categories</span>
               <button
                 type="button"
                 className={styles.categoriesClose}
+                aria-label="Close categories"
                 onClick={() => setCategoriesOpen(false)}
               >
-                Close
+                <X size={18} />
               </button>
-              <ChevronRight size={16} className={styles.sidebarChevron} />
             </div>
             {sidebarCategories.map((cat) => (
               <Link
@@ -158,221 +430,137 @@ export default function Home() {
                 className={styles.categoryItem}
                 onClick={() => setCategoriesOpen(false)}
               >
-                <div className={styles.categoryContent}>
-                  <span>{cat.name}</span>
-                  {cat.productCount > 0 ? (
-                    <span style={{ color: "var(--color-text-muted)", fontSize: "0.8rem" }}>
-                      ({cat.productCount})
-                    </span>
-                  ) : null}
-                </div>
+                <span className={styles.categoryLabel}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={optimizedImage(categoryImageUrl(cat), 64)}
+                    alt=""
+                    className={styles.categoryThumb}
+                    loading="lazy"
+                  />
+                  {cat.name}
+                </span>
+                {cat.productCount > 0 ? (
+                  <span className={styles.categoryCount}>{cat.productCount}</span>
+                ) : (
+                  <ChevronRight size={14} className={styles.categoryChevron} />
+                )}
               </Link>
             ))}
             <Link
               href="/shop"
-              className={styles.categoryItem}
-              style={{ color: "var(--color-primary)", marginTop: "8px" }}
+              className={`${styles.categoryItem} ${styles.categoryAll}`}
               onClick={() => setCategoriesOpen(false)}
             >
-              <strong>See all categories</strong>
+              <span>See all categories</span>
+              <ArrowRight size={14} />
             </Link>
-          </div>
+          </nav>
         </aside>
 
-        <div className={styles.carousel}>
-          <div className={styles.carouselContent}>
-            <Heading level={1} className={styles.carouselTitle}>
-              Discover Unique Handmade Treasures
-            </Heading>
-            <Text size="md" className={styles.carouselSubtitle}>
-              Find things you&apos;ll love. Support real makers.
-            </Text>
-            <Button variant="secondary" size="lg" onClick={() => (window.location.href = "/shop")}>
-              Shop Now
-            </Button>
-          </div>
-          <div className={styles.carouselImages}>
-            <div className={styles.heroImageContainer}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={HERO_CAROUSEL_IMAGES[0]}
-                alt="Candle set"
-                className={styles.heroImg1}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = FALLBACK_THUMB;
-                }}
-              />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={HERO_CAROUSEL_IMAGES[1]}
-                alt="Woven Wall Hanging"
-                className={styles.heroImg2}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = FALLBACK_THUMB;
-                }}
-              />
+        <HeroCarousel slides={slides} />
+      </section>
+
+      <ValueProps />
+
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <SectionTabs
+            tabs={POPULAR_TABS}
+            active={activePopularTab}
+            onChange={setActivePopularTab}
+            label="Popular products"
+          />
+          <Link href="/shop" className={styles.viewAllLink}>
+            <span>View all</span>
+            <ArrowRight size={14} />
+          </Link>
+        </div>
+        <ProductGrid products={popularProducts} loading={loadingPopular} />
+      </section>
+
+      {circleCategories.length > 0 ? (
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.sectionEyebrow}>Explore</p>
+              <h2 className={styles.sectionTitle}>Shop by category</h2>
             </div>
+            <Link href="/shop" className={styles.viewAllLink}>
+              <span>View all</span>
+              <ArrowRight size={14} />
+            </Link>
           </div>
-          <div className={styles.carouselDots}>
-            {[0, 1, 2, 3].map((index) => (
-              <span
-                key={index}
-                className={`${styles.dot} ${index === currentSlide ? styles.activeDot : ""}`}
-                onClick={() => setCurrentSlide(index)}
-              />
+          <div className={styles.categoriesGrid}>
+            {circleCategories.map((cat) => (
+              <Link
+                key={cat.id}
+                href={`/shop?category=${encodeURIComponent(cat.slug)}`}
+                className={styles.categoryCircle}
+              >
+                <span className={styles.circleRing}>
+                  <span className={styles.circleImgWrapper}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={optimizedImage(categoryImageUrl(cat), 200)}
+                      alt=""
+                      className={styles.circleImg}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </span>
+                </span>
+                <span className={styles.circleTitle}>{cat.name}</span>
+              </Link>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
-      <section className={styles.valueProps}>
-        <div className={styles.propItem}>
-          <div className={styles.propIcon}>
-            <Truck size={24} />
-          </div>
-          <div className={styles.propText}>
-            <span className={styles.propTitle}>Free Shipping</span>
-            <span className={styles.propDesc}>On orders over ₹499</span>
-          </div>
+      <section className={styles.sellBand} aria-labelledby="sell-band-title">
+        <span className={`${styles.orb} ${styles.orbC}`} aria-hidden="true" />
+        <div className={styles.sellCopy}>
+          <p className={styles.sellEyebrow}>
+            <Store size={14} aria-hidden="true" /> For makers
+          </p>
+          <h2 id="sell-band-title" className={styles.sellTitle}>
+            {user?.isSeller ? "Your shop is one click away" : "Your craft deserves a bigger audience"}
+          </h2>
+          <p className={styles.sellText}>
+            Set up a shop, list your products and get orders from buyers across India, with
+            shipping and payments handled for you.
+          </p>
         </div>
-        <div className={styles.propItem}>
-          <div className={styles.propIcon}>
-            <RotateCcw size={24} />
-          </div>
-          <div className={styles.propText}>
-            <span className={styles.propTitle}>Easy Returns</span>
-            <span className={styles.propDesc}>Within 7 days</span>
-          </div>
-        </div>
-        <div className={styles.propItem}>
-          <div className={styles.propIcon}>
-            <ShieldCheck size={24} />
-          </div>
-          <div className={styles.propText}>
-            <span className={styles.propTitle}>Secure Payments</span>
-            <span className={styles.propDesc}>100% protected</span>
-          </div>
-        </div>
-        <div className={styles.propItem}>
-          <div className={styles.propIcon}>
-            <Headphones size={24} />
-          </div>
-          <div className={styles.propText}>
-            <span className={styles.propTitle}>24/7 Support</span>
-            <span className={styles.propDesc}>We&apos;re here to help</span>
-          </div>
-        </div>
+        <ButtonLink
+          href={user?.isSeller ? "/seller" : "/sell"}
+          size="lg"
+          variant="secondary"
+          className={styles.sellCta}
+          rightIcon={<ArrowRight size={18} />}
+        >
+          {user?.isSeller ? "Go to seller hub" : "Start selling"}
+        </ButtonLink>
       </section>
 
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
-          <div className={styles.sectionTabs}>
-            {(
-              [
-                ["popular", "Popular Right Now"],
-                ["best-sellers", "Best Sellers"],
-                ["top-rated", "Top Rated"],
-                ["new-arrivals", "New Arrivals"],
-              ] as const
-            ).map(([key, label]) => (
-            <button
-                key={key}
-                type="button"
-                onClick={() => setActivePopularTab(key)}
-              className={`${styles.tabBtn} ${
-                  activePopularTab === key ? styles.activeTabBtn : ""
-              }`}
-            >
-                {label}
-            </button>
-            ))}
-          </div>
+          <SectionTabs
+            tabs={RECOMMEND_TABS}
+            active={activeRecommendTab}
+            onChange={setActiveRecommendTab}
+            label="Recommendations"
+          />
           <Link href="/shop" className={styles.viewAllLink}>
             <span>View all</span>
             <ArrowRight size={14} />
           </Link>
         </div>
-
-        <div className={styles.productsGrid}>
-          {loadingPopular && popularProducts.length === 0
-            ? null
-            : popularProducts.map(renderProductCard)}
-        </div>
-      </section>
-
-      <section className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <Heading level={3}>Shop by Category</Heading>
-          <Link href="/shop" className={styles.viewAllLink}>
-            <span>View all</span>
-            <ArrowRight size={14} />
-          </Link>
-        </div>
-
-        <div className={styles.categoriesGrid}>
-          {circleCategories.map((cat) => (
-            <div
-              key={cat.id}
-              className={styles.categoryCircle}
-              onClick={() => {
-                window.location.href = `/shop?category=${encodeURIComponent(cat.slug)}`;
-              }}
-            >
-              <div className={styles.circleImgWrapper}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={categoryImageUrl(cat)}
-                  alt={cat.name}
-                  className={styles.circleImg}
-                />
-              </div>
-              <span className={styles.circleTitle}>{cat.name}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <div className={styles.sectionTabs}>
-            {(
-              [
-                ["for-you", "Recommended for You"],
-                ["views", "Based on Views"],
-                ["similar", "Similar Items"],
-              ] as const
-            ).map(([key, label]) => (
-            <button
-                key={key}
-                type="button"
-                onClick={() => setActiveRecommendTab(key)}
-              className={`${styles.tabBtn} ${
-                  activeRecommendTab === key ? styles.activeTabBtn : ""
-              }`}
-            >
-                {label}
-            </button>
-            ))}
-          </div>
-          <Link href="/shop" className={styles.viewAllLink}>
-            <span>View all</span>
-            <ArrowRight size={14} />
-          </Link>
-        </div>
-
-        <div className={styles.productsGrid}>
-          {recommendedProducts.map(renderProductCard)}
-        </div>
-        {activeRecommendTab === "similar" ? (
-          <Text size="sm" color="muted" style={{ marginTop: 12 }}>
-            Similar-items matching needs a dedicated recommendation model — showing
-            bestsellers for now.
-          </Text>
-        ) : activeRecommendTab === "views" && recommendedProducts.length === 0 ? (
-          <Text size="sm" color="muted" style={{ marginTop: 12 }}>
-            View a few products to personalize this tab.
-          </Text>
+        {showingFallback ? (
+          <p className={styles.sectionNote}>
+            Products you view will appear here. Meanwhile, here are our bestsellers.
+          </p>
         ) : null}
+        <ProductGrid products={recommendedProducts} loading={loadingRecommended} />
       </section>
     </div>
   );

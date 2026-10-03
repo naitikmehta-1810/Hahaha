@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
+import { RefreshCw } from "lucide-react";
 import Button from "@/components/ui/Button/Button";
+import PageHeader from "@/components/ui/PageHeader/PageHeader";
+import Notice from "@/components/ui/Notice/Notice";
+import StatusPill, { humanizeStatus } from "@/components/ui/StatusPill/StatusPill";
 import { apiRequest } from "@/utils/api-client";
-import styles from "../admin.module.css";
+import { formatDateTime, rupees } from "@/utils/format";
+import ui from "@/components/console/console.module.css";
 
 type AdminOrder = {
   id: string;
@@ -14,6 +17,16 @@ type AdminOrder = {
   totalAmount: number;
   createdAt: string;
 };
+
+const STATUSES = [
+  "pending_payment",
+  "paid",
+  "processing",
+  "shipped",
+  "delivered",
+  "cancelled",
+  "returned",
+];
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
@@ -40,69 +53,73 @@ export default function AdminOrdersPage() {
 
   return (
     <>
-      <div className={styles.headerRow}>
-        <div>
-          <Heading level={2}>Orders</Heading>
-          <Text size="sm" color="muted">
-            Latest 100 orders
-          </Text>
+      <PageHeader title="Orders" description="The latest 100 orders across every shop." />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className={`${ui.card} ${ui.cardFlush}`}>
+        <div className={ui.cardHead}>
+          <div className={ui.toolbar}>
+            <label className={ui.field}>
+              <span>Status</span>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="">All statuses</option>
+                {STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {humanizeStatus(status)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              variant="secondary"
+              leftIcon={<RefreshCw size={15} />}
+              disabled={loading}
+              onClick={() => void load(statusFilter)}
+            >
+              Refresh
+            </Button>
+          </div>
         </div>
-      </div>
-      <div className={styles.formRow}>
-        <label className={styles.field}>
-          Status filter
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="">All</option>
-            <option value="pending_payment">pending_payment</option>
-            <option value="paid">paid</option>
-            <option value="processing">processing</option>
-            <option value="shipped">shipped</option>
-            <option value="delivered">delivered</option>
-            <option value="cancelled">cancelled</option>
-            <option value="returned">returned</option>
-          </select>
-        </label>
-        <Button size="sm" variant="outline" onClick={() => void load(statusFilter)}>
-          Refresh
-        </Button>
-      </div>
-      {error ? <p className={styles.error}>{error}</p> : null}
-      {loading ? (
-        <Text color="muted">Loading…</Text>
-      ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
+        <div className={ui.tableWrap}>
+          <table className={ui.table}>
             <thead>
               <tr>
-                <th>Order #</th>
+                <th>Order</th>
                 <th>Status</th>
-                <th>Total</th>
-                <th>Created</th>
+                <th>Placed</th>
+                <th className={ui.num}>Total</th>
               </tr>
             </thead>
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
-                  <td>{o.orderNumber}</td>
-                  <td>{o.status}</td>
-                  <td>₹{o.totalAmount.toLocaleString("en-IN")}</td>
-                  <td>{new Date(o.createdAt).toLocaleString()}</td>
+                  <td className={`${ui.cellPrimary} ${ui.mono}`}>{o.orderNumber}</td>
+                  <td>
+                    <StatusPill status={o.status} />
+                  </td>
+                  <td className={ui.nowrap}>{formatDateTime(o.createdAt)}</td>
+                  <td className={`${ui.num} ${ui.cellPrimary}`}>{rupees(o.totalAmount)}</td>
                 </tr>
               ))}
-              {orders.length === 0 ? (
+              {!loading && orders.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className={styles.muted}>
-                    No orders found.
+                  <td colSpan={4} className={ui.emptyCell}>
+                    No orders{statusFilter ? ` with status “${humanizeStatus(statusFilter)}”` : ""}.
+                  </td>
+                </tr>
+              ) : null}
+              {loading ? (
+                <tr>
+                  <td colSpan={4} className={ui.emptyCell}>
+                    Loading orders…
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
-      )}
+      </section>
     </>
   );
 }

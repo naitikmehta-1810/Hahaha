@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
+import PageHeader from "@/components/ui/PageHeader/PageHeader";
+import Notice from "@/components/ui/Notice/Notice";
 import { apiRequest } from "@/utils/api-client";
+import ui from "@/components/console/console.module.css";
 import styles from "../admin.module.css";
 
 type CategoryRow = {
@@ -18,6 +19,7 @@ type CategoryRow = {
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
@@ -55,6 +57,7 @@ export default function AdminCategoriesPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setNotice(null);
     const parsedGst = gstRate.trim() === "" ? null : Number(gstRate);
     if (parsedGst !== null && (!Number.isFinite(parsedGst) || parsedGst < 0 || parsedGst > 100)) {
       setSaving(false);
@@ -75,126 +78,153 @@ export default function AdminCategoriesPage() {
       setError(result.error);
       return;
     }
+    setError(null);
+    setNotice(editingId ? `Category “${name}” updated.` : `Category “${name}” created.`);
     resetForm();
     await load();
   }
 
-  async function onDelete(id: string) {
-    if (!window.confirm("Delete this category? It will be hidden from the shop. Products already in it stay put.")) return;
-    const result = await apiRequest("DELETE", `/api/admin/categories/${id}`);
+  async function onDelete(category: CategoryRow) {
+    if (
+      !window.confirm(
+        `Delete “${category.name}”? It will be hidden from the shop. Products already in it stay put.`
+      )
+    ) {
+      return;
+    }
+    const result = await apiRequest("DELETE", `/api/admin/categories/${category.id}`);
     if (result.error) {
       setError(result.error);
       return;
     }
+    if (editingId === category.id) resetForm();
     await load();
   }
 
+  function startEdit(category: CategoryRow) {
+    setEditingId(category.id);
+    setName(category.name);
+    setSlug(category.slug);
+    setParentId(category.parent_id ?? "");
+    setGstRate(category.gst_rate == null ? "" : String(category.gst_rate));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  const nameById = new Map(categories.map((c) => [c.id, c.name]));
+
   return (
     <>
-      <div className={styles.headerRow}>
-        <div>
-          <Heading level={2}>Categories</Heading>
-          <Text size="sm" color="muted">
-            Create, edit, and delete categories. Leave GST blank to charge 18% at checkout.
-          </Text>
-        </div>
-      </div>
+      <PageHeader
+        title="Categories"
+        description="Organise the catalog. Leave GST blank to charge the default 18% at checkout."
+      />
 
-      <form className={styles.formRow} onSubmit={(e) => void onSubmit(e)}>
-        <label className={styles.field}>
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <label className={styles.field}>
-          Slug
-          <input
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder="optional"
-          />
-        </label>
-        <label className={styles.field}>
-          Parent
-          <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
-            <option value="">None</option>
-            {categories
-              .filter((c) => c.id !== editingId)
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label className={styles.field}>
-          GST %
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step="0.01"
-            value={gstRate}
-            placeholder="18"
-            onChange={(e) => setGstRate(e.target.value)}
-          />
-        </label>
-        <Button type="submit" size="sm" variant="primary" disabled={saving}>
-          {editingId ? "Update" : "Create"}
-        </Button>
-        {editingId ? (
-          <Button type="button" size="sm" variant="outline" onClick={resetForm}>
-            Cancel
+      <form className={ui.card} onSubmit={(e) => void onSubmit(e)}>
+        <h2 className={styles.formTitle}>
+          {editingId ? "Edit category" : "New category"}
+          {editingId ? <span className={styles.editingTag}>Editing {name}</span> : null}
+        </h2>
+        <div className={ui.formGrid}>
+          <label className={ui.field}>
+            <span>Name</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} required />
+          </label>
+          <label className={ui.field}>
+            <span>Slug</span>
+            <input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="Generated from the name"
+            />
+          </label>
+          <label className={ui.field}>
+            <span>Parent category</span>
+            <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
+              <option value="">None (top level)</option>
+              {categories
+                .filter((c) => c.id !== editingId)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label className={ui.field}>
+            <span>GST %</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              value={gstRate}
+              placeholder="18"
+              onChange={(e) => setGstRate(e.target.value)}
+            />
+          </label>
+        </div>
+        <div className={ui.formActions}>
+          {editingId ? (
+            <Button variant="ghost" onClick={resetForm}>
+              Cancel
+            </Button>
+          ) : null}
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? "Saving…" : editingId ? "Save changes" : "Create category"}
           </Button>
-        ) : null}
+        </div>
       </form>
 
-      {error ? <p className={styles.error}>{error}</p> : null}
-      {loading ? (
-        <Text color="muted">Loading…</Text>
-      ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+      {notice ? <Notice tone="success">{notice}</Notice> : null}
+
+      <section className={`${ui.card} ${ui.cardFlush}`}>
+        <div className={ui.cardHead}>
+          <div>
+            <h2 className={ui.cardTitle}>All categories</h2>
+            <p className={ui.cardSub}>{loading ? "Loading…" : `${categories.length} categories`}</p>
+          </div>
+        </div>
+        <div className={ui.tableWrap}>
+          <table className={ui.table}>
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Slug</th>
                 <th>Parent</th>
                 <th>GST</th>
-                <th>Actions</th>
+                <th className={ui.num}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {categories.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.name}</td>
-                  <td>{c.slug}</td>
                   <td>
-                    {categories.find((p) => p.id === c.parent_id)?.name ?? "—"}
+                    <span className={ui.cellPrimary}>{c.name}</span>
+                    <span className={ui.cellSub}>/{c.slug}</span>
                   </td>
-                  <td>{c.gst_rate == null || c.gst_rate === "" ? "18% default" : `${c.gst_rate}%`}</td>
+                  <td>{(c.parent_id && nameById.get(c.parent_id)) ?? "—"}</td>
+                  <td className={ui.nowrap}>
+                    {c.gst_rate == null || c.gst_rate === "" ? (
+                      <span className={ui.muted}>18% (default)</span>
+                    ) : (
+                      `${Number(c.gst_rate)}%`
+                    )}
+                  </td>
                   <td>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingId(c.id);
-                        setName(c.name);
-                        setSlug(c.slug);
-                        setParentId(c.parent_id ?? "");
-                        setGstRate(c.gst_rate == null ? "" : String(c.gst_rate));
-                      }}
-                    >
-                      Edit
-                    </Button>{" "}
-                    <Button size="sm" variant="outline" onClick={() => void onDelete(c.id)}>
-                      Delete
-                    </Button>
+                    <div className={ui.rowActions}>
+                      <Button size="sm" variant="secondary" onClick={() => startEdit(c)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="danger" onClick={() => void onDelete(c)}>
+                        Delete
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
-              {categories.length === 0 ? (
+              {!loading && categories.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className={styles.muted}>
+                  <td colSpan={4} className={ui.emptyCell}>
                     No categories yet.
                   </td>
                 </tr>
@@ -202,7 +232,7 @@ export default function AdminCategoriesPage() {
             </tbody>
           </table>
         </div>
-      )}
+      </section>
     </>
   );
 }

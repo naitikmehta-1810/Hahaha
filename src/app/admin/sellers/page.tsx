@@ -1,11 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
+import PageHeader from "@/components/ui/PageHeader/PageHeader";
+import Notice from "@/components/ui/Notice/Notice";
+import StatusPill from "@/components/ui/StatusPill/StatusPill";
 import { apiRequest } from "@/utils/api-client";
-import styles from "../admin.module.css";
+import { formatDate } from "@/utils/format";
+import ui from "@/components/console/console.module.css";
 
 type AdminSeller = {
   id: string;
@@ -21,8 +24,30 @@ type AdminSeller = {
   panIndiaBypass: boolean;
 };
 
+const FILTERS = [
+  { value: "all", label: "All shops" },
+  { value: "pending", label: "Pending" },
+  { value: "active", label: "Active" },
+  { value: "suspended", label: "Suspended" },
+] as const;
+
+function reach(seller: AdminSeller) {
+  if (seller.gstVerified) return { label: "All India · GST", tone: "success" as const };
+  if (seller.panIndiaBypass || seller.sellingScope === "pan_india") {
+    return {
+      label: seller.panIndiaBypass ? "All India · admin bypass" : "All India",
+      tone: "info" as const,
+    };
+  }
+  return {
+    label: seller.sellingState ? `${seller.sellingState} only` : "Home state only",
+    tone: "neutral" as const,
+  };
+}
+
 export default function AdminSellersPage() {
   const [sellers, setSellers] = useState<AdminSeller[]>([]);
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]["value"]>("all");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -70,107 +95,143 @@ export default function AdminSellersPage() {
     await load();
   }
 
-  function reachLabel(seller: AdminSeller) {
-    if (seller.gstVerified) return `GST · all India`;
-    if (seller.panIndiaBypass || seller.sellingScope === "pan_india") {
-      return seller.panIndiaBypass ? "Admin bypass · all India" : "All India";
-    }
-    return seller.sellingState ? `State only · ${seller.sellingState}` : "State only";
-  }
+  const counts = {
+    all: sellers.length,
+    pending: sellers.filter((s) => s.status === "pending").length,
+    active: sellers.filter((s) => s.status === "active").length,
+    suspended: sellers.filter((s) => s.status === "suspended").length,
+  };
+  const visible = filter === "all" ? sellers : sellers.filter((s) => s.status === filter);
 
   return (
     <>
-      <div className={styles.headerRow}>
-        <div>
-          <Heading level={2}>Sellers</Heading>
-          <Text size="sm" color="muted">
-            Approve shops, suspend them, or let a shop sell across India without GST
-          </Text>
+      <PageHeader
+        title="Sellers"
+        description="Approve new shops, suspend them, or let a shop sell across India without a GSTIN."
+      />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className={`${ui.card} ${ui.cardFlush}`}>
+        <div className={ui.cardHead}>
+          <div className={ui.toolbar} role="tablist" aria-label="Filter shops by status">
+            {FILTERS.map((item) => (
+              <Button
+                key={item.value}
+                size="sm"
+                variant={filter === item.value ? "primary" : "secondary"}
+                role="tab"
+                aria-selected={filter === item.value}
+                onClick={() => setFilter(item.value)}
+              >
+                {item.label} ({counts[item.value]})
+              </Button>
+            ))}
+          </div>
         </div>
-      </div>
-      {error ? <p className={styles.error}>{error}</p> : null}
-      {loading ? (
-        <Text color="muted">Loading…</Text>
-      ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
+        <div className={ui.tableWrap}>
+          <table className={ui.table}>
             <thead>
               <tr>
                 <th>Shop</th>
-                <th>Slug</th>
-                <th>Phone</th>
                 <th>Status</th>
                 <th>Selling reach</th>
-                <th>Created</th>
-                <th>Actions</th>
+                <th>Phone</th>
+                <th>Joined</th>
+                <th className={ui.num}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {sellers.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.shopName}</td>
-                  <td>{s.shopSlug}</td>
-                  <td>{s.contactPhone ?? "—"}</td>
-                  <td>{s.status}</td>
-                  <td>{reachLabel(s)}</td>
-                  <td>{new Date(s.createdAt).toLocaleString()}</td>
-                  <td>
-                    <div className={styles.actions}>
-                      {s.status !== "active" ? (
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          disabled={busyId === s.id}
-                          onClick={() => void setStatus(s.id, "active")}
-                        >
-                          Approve
-                        </Button>
-                      ) : null}
-                      {s.status !== "suspended" ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busyId === s.id}
-                          onClick={() => void setStatus(s.id, "suspended")}
-                        >
-                          Suspend
-                        </Button>
-                      ) : null}
-                      {!s.gstVerified && s.sellingScope !== "pan_india" ? (
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          disabled={busyId === s.id}
-                          onClick={() => void setPanIndia(s.id, true)}
-                        >
-                          Allow all India
-                        </Button>
-                      ) : null}
-                      {!s.gstVerified && (s.panIndiaBypass || s.sellingScope === "pan_india") && s.sellingState ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busyId === s.id}
-                          onClick={() => void setPanIndia(s.id, false)}
-                        >
-                          Limit to {s.sellingState}
-                        </Button>
-                      ) : null}
-                    </div>
+              {visible.map((s) => {
+                const shopReach = reach(s);
+                const busy = busyId === s.id;
+                return (
+                  <tr key={s.id}>
+                    <td>
+                      <Link href={`/shops/${s.shopSlug}`} className={ui.cellPrimary}>
+                        {s.shopName}
+                      </Link>
+                      <span className={ui.cellSub}>/{s.shopSlug}</span>
+                    </td>
+                    <td>
+                      <StatusPill status={s.status} />
+                    </td>
+                    <td>
+                      <StatusPill tone={shopReach.tone}>{shopReach.label}</StatusPill>
+                    </td>
+                    <td className={ui.nowrap}>{s.contactPhone ?? "—"}</td>
+                    <td className={ui.nowrap}>{formatDate(s.createdAt)}</td>
+                    <td>
+                      <div className={ui.rowActions}>
+                        {s.status !== "active" ? (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={busy}
+                            onClick={() => void setStatus(s.id, "active")}
+                          >
+                            {s.status === "suspended" ? "Reactivate" : "Approve"}
+                          </Button>
+                        ) : null}
+                        {!s.gstVerified && s.sellingScope !== "pan_india" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => void setPanIndia(s.id, true)}
+                          >
+                            Allow all India
+                          </Button>
+                        ) : null}
+                        {!s.gstVerified &&
+                        (s.panIndiaBypass || s.sellingScope === "pan_india") &&
+                        s.sellingState ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={busy}
+                            onClick={() => void setPanIndia(s.id, false)}
+                          >
+                            Limit to {s.sellingState}
+                          </Button>
+                        ) : null}
+                        {s.status !== "suspended" ? (
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={busy}
+                            onClick={() => {
+                              if (window.confirm(`Suspend ${s.shopName}?`)) {
+                                void setStatus(s.id, "suspended");
+                              }
+                            }}
+                          >
+                            Suspend
+                          </Button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!loading && visible.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className={ui.emptyCell}>
+                    {filter === "all" ? "No sellers yet." : `No ${filter} shops.`}
                   </td>
                 </tr>
-              ))}
-              {sellers.length === 0 ? (
+              ) : null}
+              {loading ? (
                 <tr>
-                  <td colSpan={7} className={styles.muted}>
-                    No sellers found.
+                  <td colSpan={6} className={ui.emptyCell}>
+                    Loading shops…
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
-      )}
+      </section>
     </>
   );
 }

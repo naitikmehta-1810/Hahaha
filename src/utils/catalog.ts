@@ -36,6 +36,8 @@ export type ProductDetail = ProductCard & {
   productType: string;
   specs: unknown;
   processingDays: number;
+  /** Upper bound of the "ships in" estimate. Older cached payloads may omit it. */
+  processingDaysMax?: number;
   tags: string[];
   categoryId: string;
   subcategoryId: string | null;

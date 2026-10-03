@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
+import PageHeader from "@/components/ui/PageHeader/PageHeader";
+import Notice from "@/components/ui/Notice/Notice";
+import StatusPill from "@/components/ui/StatusPill/StatusPill";
 import { apiRequest } from "@/utils/api-client";
-import styles from "../admin.module.css";
+import { rupees } from "@/utils/format";
+import ui from "@/components/console/console.module.css";
 
 type VelocityFlag = {
   userId: string;
@@ -41,53 +43,58 @@ export default function AdminVelocityFlagsPage() {
 
   return (
     <>
-      <div className={styles.headerRow}>
-        <div>
-          <Heading level={2}>Velocity flags</Heading>
-          <Text size="sm" color="muted">
-            Accounts with &gt;5 orders in 24h, or &gt;3 COD orders totaling over ₹15,000
-          </Text>
-        </div>
-      </div>
+      <PageHeader
+        title="Velocity flags"
+        description="Accounts with more than 5 orders in 24 hours, or more than 3 COD orders totalling over ₹15,000."
+      />
 
-      {error ? <p className={styles.error}>{error}</p> : null}
-      {loading ? (
-        <Text color="muted">Loading…</Text>
-      ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className={`${ui.card} ${ui.cardFlush}`}>
+        <div className={ui.tableWrap}>
+          <table className={ui.table}>
             <thead>
               <tr>
-                <th>User</th>
-                <th>Email</th>
-                <th>Orders (24h)</th>
-                <th>COD orders</th>
-                <th>COD total</th>
+                <th>Account</th>
                 <th>Reason</th>
+                <th className={ui.num}>Orders (24h)</th>
+                <th className={ui.num}>COD orders</th>
+                <th className={ui.num}>COD total</th>
               </tr>
             </thead>
             <tbody>
               {flags.map((f) => (
                 <tr key={f.userId}>
-                  <td>{f.fullName ?? f.userId.slice(0, 8)}</td>
-                  <td>{f.email}</td>
-                  <td>{f.orderCount}</td>
-                  <td>{f.codOrderCount}</td>
-                  <td>₹{f.codTotal.toLocaleString("en-IN")}</td>
-                  <td>{f.flagReason}</td>
+                  <td>
+                    <span className={ui.cellPrimary}>{f.fullName ?? f.userId.slice(0, 8)}</span>
+                    <span className={ui.cellSub}>{f.email}</span>
+                  </td>
+                  <td>
+                    <StatusPill tone="warning">{f.flagReason}</StatusPill>
+                  </td>
+                  <td className={ui.num}>{f.orderCount}</td>
+                  <td className={ui.num}>{f.codOrderCount}</td>
+                  <td className={`${ui.num} ${ui.cellPrimary}`}>{rupees(f.codTotal)}</td>
                 </tr>
               ))}
-              {flags.length === 0 ? (
+              {!loading && flags.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className={styles.muted}>
-                    No velocity flags right now.
+                  <td colSpan={5} className={ui.emptyCell}>
+                    No accounts are flagged right now.
+                  </td>
+                </tr>
+              ) : null}
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className={ui.emptyCell}>
+                    Loading…
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
-      )}
+      </section>
     </>
   );
 }

@@ -1,0 +1,20 @@
+.lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  color: var(--color-text-main);
+}
+
+.mark {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Same treatment as the brand name on the sign-in / sign-up screens. */
+.name {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}

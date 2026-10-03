@@ -139,7 +139,15 @@ export async function getShopBySlug(
          where p.seller_id = s.id and p.deleted_at is null
        )::text as review_count
      from public.sellers s
-     where s.shop_slug = $1 and s.deleted_at is null`,
+     where s.deleted_at is null
+       and (
+         s.shop_slug = $1
+         -- A renamed shop still answers on its old slug; callers read shopSlug
+         -- from the result to redirect to the current URL.
+         or s.id = (select h.seller_id from public.seller_slug_history h where h.old_slug = $1)
+       )
+     order by (s.shop_slug = $1) desc
+     limit 1`,
     [slug]
   );
 

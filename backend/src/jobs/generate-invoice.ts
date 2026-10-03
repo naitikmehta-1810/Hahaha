@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
 import { Queue, Worker } from "bullmq";
 import { pool } from "../config/db.js";
@@ -45,6 +48,61 @@ function inr(amount: number) {
   return `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * Assets ship in backend/assets. Resolve from this module (src/jobs or
+ * dist/jobs) and fall back to the working directory.
+ */
+function assetPath(...parts: string[]) {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(here, "../../assets", ...parts),
+    path.resolve(process.cwd(), "assets", ...parts),
+    path.resolve(process.cwd(), "backend/assets", ...parts),
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+const INVOICE_ASSETS = {
+  logo: assetPath("stuffsy-mark.png"),
+  font: assetPath("fonts", "NotoSans-Regular.ttf"),
+  fontBold: assetPath("fonts", "NotoSans-Bold.ttf"),
+};
+
+const ONES = [
+  "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+  "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen",
+];
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+
+function belowHundred(n: number) {
+  return n < 20 ? ONES[n] : `${TENS[Math.floor(n / 10)]}${n % 10 ? ` ${ONES[n % 10]}` : ""}`;
+}
+
+function belowThousand(n: number) {
+  const hundreds = Math.floor(n / 100);
+  const rest = n % 100;
+  return [hundreds ? `${ONES[hundreds]} Hundred` : "", rest ? belowHundred(rest) : ""]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** 125050.5 -> "One Lakh Twenty Five Thousand Fifty Rupees and Fifty Paise Only" */
+export function amountInWords(amount: number) {
+  const rupees = Math.floor(Math.abs(amount));
+  const paise = Math.round((Math.abs(amount) - rupees) * 100);
+  const parts: string[] = [];
+  const crore = Math.floor(rupees / 10_000_000);
+  const lakh = Math.floor((rupees % 10_000_000) / 100_000);
+  const thousand = Math.floor((rupees % 100_000) / 1000);
+  const rest = rupees % 1000;
+  if (crore) parts.push(`${belowThousand(crore)} Crore`);
+  if (lakh) parts.push(`${belowHundred(lakh)} Lakh`);
+  if (thousand) parts.push(`${belowHundred(thousand)} Thousand`);
+  if (rest) parts.push(belowThousand(rest));
+  const words = parts.length ? parts.join(" ") : "Zero";
+  return `${words} Rupee${rupees === 1 ? "" : "s"}${paise ? ` and ${belowHundred(paise)} Paise` : ""} Only`;
+}
+
 type InvoiceLine = {
   title: string;
   variant: string | null;
@@ -65,7 +123,7 @@ type InvoiceSellerGroup = {
   items: InvoiceLine[];
 };
 
-type InvoiceData = {
+export type InvoiceData = {
   invoiceNumber: string;
   orderNumber: string;
   orderDate: string;
@@ -92,13 +150,67 @@ function moneyRound(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-function buildInvoicePdf(data: InvoiceData): Promise<Buffer> {
+const INVOICE_COLORS = {
+  brand: "#7C3AED",
+  brandDark: "#4C1D95",
+  brandTint: "#F5F1FE",
+  ink: "#1F1430",
+  muted: "#645C74",
+  light: "#948CA3",
+  border: "#E6E0EF",
+  zebra: "#FBFAFE",
+  amber: "#B45309",
+  amberTint: "#FFF7E6",
+};
+
+const SUPPORT_EMAIL = "support@stuffsy.in";
+
+export function buildInvoicePdf(data: InvoiceData): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 36 });
+    const M = 40;
+    const doc = new PDFDocument({
+      size: "A4",
+      margin: M,
+      bufferPages: true,
+      info: {
+        Title: `${data.invoiceNumber} · Stuffsy`,
+        Author: "Stuffsy",
+        Subject: `Invoice for order ${data.orderNumber}`,
+      },
+    });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
+
+    // Noto Sans has the ₹ glyph; the built-in Helvetica does not.
+    const hasFont = Boolean(INVOICE_ASSETS.font && INVOICE_ASSETS.fontBold);
+    if (hasFont) {
+      doc.registerFont("Body", INVOICE_ASSETS.font!);
+      doc.registerFont("Bold", INVOICE_ASSETS.fontBold!);
+    }
+    // Ligatures (ff, fi) would make copied text read "Stufsy"; keep plain glyphs so
+    // the PDF stays searchable.
+    const rawText = doc.text.bind(doc) as (...args: unknown[]) => PDFKit.PDFDocument;
+    (doc as unknown as { text: (...args: unknown[]) => PDFKit.PDFDocument }).text = (
+      text: unknown,
+      x?: unknown,
+      yPos?: unknown,
+      options?: unknown
+    ) =>
+      rawText(text, x, yPos, {
+        features: { liga: false, clig: false },
+        ...((options as Record<string, unknown> | undefined) ?? {}),
+      });
+    const BODY = hasFont ? "Body" : "Helvetica";
+    const BOLD = hasFont ? "Bold" : "Helvetica-Bold";
+    const money = (value: number) => (hasFont ? inr(value) : inr(value).replace("₹", "Rs. "));
+
+    const C = INVOICE_COLORS;
+    const pageW = doc.page.width;
+    const contentW = pageW - M * 2;
+    const right = pageW - M;
+    const footerReserve = 64;
 
     const registered = data.groups.filter((group) => group.gstRegistered);
     const unregistered = data.groups.filter((group) => !group.gstRegistered);
@@ -109,187 +221,344 @@ function buildInvoicePdf(data: InvoiceData): Promise<Buffer> {
           ? "Bill of Supply"
           : "Invoice";
 
-    doc.rect(0, 0, doc.page.width, 78).fill("#7C3AED");
-    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(22).text("Stuffsy", 36, 22);
-    doc.font("Helvetica").fontSize(10).text("Handmade marketplace", 36, 48);
-    doc.font("Helvetica-Bold").fontSize(13).text(documentTitle, 320, 22, {
-      width: 239,
-      align: "right",
-    });
-    doc.font("Helvetica").fontSize(9).fillColor("#ede9fe");
-    doc.text(data.invoiceNumber, 320, 42, { width: 239, align: "right" });
-    doc.text(`${data.orderDate}  ·  Order ${data.orderNumber}`, 320, 56, {
-      width: 239,
-      align: "right",
-    });
-
-    doc.fillColor("#111827");
-    let y = 98;
-    const drawCard = (x: number, title: string, lines: string[]) => {
-      const height = 22 + lines.length * 13;
-      doc.roundedRect(x, y, 250, height, 8).fillAndStroke("#faf8ff", "#ece7f5");
-      doc.fillColor("#7C3AED").font("Helvetica-Bold").fontSize(9).text(title, x + 12, y + 10);
-      doc.fillColor("#374151").font("Helvetica").fontSize(9);
-      lines.forEach((line, index) => {
-        doc.text(line, x + 12, y + 24 + index * 13, { width: 226 });
+    let y = 0;
+    const ensureRoom = (needed: number) => {
+      if (y + needed > doc.page.height - footerReserve) {
+        doc.addPage();
+        doc.rect(0, 0, pageW, 4).fill(C.brand);
+        y = M;
+      }
+    };
+    const label = (text: string, x: number, top: number, width: number, align: "left" | "right" = "left") => {
+      doc.font(BOLD).fontSize(7).fillColor(C.light).text(text.toUpperCase(), x, top, {
+        width,
+        align,
+        characterSpacing: 0.6,
       });
-      return height;
     };
 
-    const billLines = [data.customerName, ...data.shippingLines.filter(Boolean)];
-    if (data.buyerState) billLines.push(`Place of supply: ${data.buyerState}`);
-    const leftHeight = drawCard(36, "BILL TO", billLines);
+    // ── Header ────────────────────────────────────────────────────────
+    doc.rect(0, 0, pageW, 6).fill(C.brand);
+    const logoSize = 42;
+    let brandX = M;
+    if (INVOICE_ASSETS.logo) {
+      doc.image(INVOICE_ASSETS.logo, M, 30, { width: logoSize, height: logoSize });
+      brandX = M + logoSize + 10;
+    }
+    doc.font(BOLD).fontSize(22).fillColor(C.ink).text("Stuffsy", brandX, 31, { lineBreak: false });
+    doc.font(BODY).fontSize(9).fillColor(C.muted).text("Handmade marketplace", brandX, 59, {
+      lineBreak: false,
+    });
+
+    doc.font(BOLD).fontSize(20).fillColor(C.brand).text(documentTitle, M, 30, {
+      width: contentW,
+      align: "right",
+    });
+    doc.font(BODY).fontSize(8).fillColor(C.light).text("Original for recipient", M, 57, {
+      width: contentW,
+      align: "right",
+    });
+
+    // ── Meta strip ────────────────────────────────────────────────────
+    y = 92;
     const isCod = data.paymentMethod === "cod";
+    const paymentLabel = isCod
+      ? "Cash on Delivery"
+      : data.paymentMethod === "upi"
+        ? "UPI"
+        : data.paymentMethod.charAt(0).toUpperCase() + data.paymentMethod.slice(1);
+    const meta: Array<[string, string]> = [
+      ["Invoice no.", data.invoiceNumber],
+      ["Invoice date", data.orderDate],
+      ["Order no.", data.orderNumber],
+      ["Payment", isCod ? "Due on delivery" : "Paid"],
+    ];
+    doc.roundedRect(M, y, contentW, 50, 8).fill(C.brandTint);
+    const metaW = contentW / meta.length;
+    meta.forEach(([key, value], index) => {
+      const x = M + 14 + index * metaW;
+      label(key, x, y + 11, metaW - 20);
+      doc.font(BOLD).fontSize(10).fillColor(C.ink).text(value, x, y + 24, {
+        width: metaW - 20,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    });
+    y += 66;
+
+    // ── Parties ───────────────────────────────────────────────────────
+    const colW = (contentW - 16) / 2;
+    const billLines = [...data.shippingLines.filter(Boolean)];
     const payLines = [
-      isCod ? "Cash on Delivery" : data.paymentMethod.toUpperCase(),
+      paymentLabel,
       isCod
-        ? "Amount due on delivery"
+        ? `Amount due on delivery: ${money(data.totalAmount)}`
         : data.paymentReference
-          ? `Ref ${data.paymentReference}`
+          ? `Reference: ${data.paymentReference}`
           : "Paid online",
     ];
-    const rightHeight = drawCard(309, "PAYMENT", payLines);
-    y += Math.max(leftHeight, rightHeight) + 18;
+    if (data.buyerState) payLines.push(`Place of supply: ${data.buyerState}`);
 
-    const ensureRoom = (needed: number) => {
-      if (y + needed > doc.page.height - 50) {
-        doc.addPage();
-        y = 40;
+    const drawParty = (x: number, title: string, heading: string | null, lines: string[]) => {
+      label(title, x, y, colW);
+      let top = y + 13;
+      if (heading) {
+        doc.font(BOLD).fontSize(10.5).fillColor(C.ink).text(heading, x, top, { width: colW });
+        top = doc.y + 1;
       }
+      doc.font(BODY).fontSize(9).fillColor(C.muted);
+      for (const line of lines) {
+        doc.text(line, x, top, { width: colW });
+        top = doc.y;
+      }
+      return top;
     };
+    const leftEnd = drawParty(M, "Billed & shipped to", data.customerName, billLines);
+    const rightEnd = drawParty(M + colW + 16, "Payment", null, payLines);
+    y = Math.max(leftEnd, rightEnd) + 18;
 
+    // ── Seller groups ─────────────────────────────────────────────────
     for (const group of data.groups) {
-      ensureRoom(90);
-      doc.roundedRect(36, y, 523, 8).fill(group.gstRegistered ? "#7C3AED" : "#f59e0b");
-      y += 16;
-      doc.fillColor("#111827").font("Helvetica-Bold").fontSize(12).text(group.shopName, 36, y);
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(8)
-        .fillColor(group.gstRegistered ? "#7C3AED" : "#b45309")
-        .text(group.gstRegistered ? "TAX INVOICE" : "BILL OF SUPPLY", 400, y, {
-          width: 159,
+      ensureRoom(110);
+      const gst = group.gstRegistered;
+
+      doc.moveTo(M, y).lineTo(right, y).lineWidth(0.8).strokeColor(C.border).stroke();
+      y += 12;
+      label("Sold by", M, y, 200);
+      const tag = gst ? "TAX INVOICE" : "BILL OF SUPPLY";
+      doc.font(BOLD).fontSize(7);
+      const tagW = doc.widthOfString(tag) + 16;
+      doc.roundedRect(right - tagW, y - 2, tagW, 15, 7).fill(gst ? C.brandTint : C.amberTint);
+      doc.font(BOLD).fontSize(7).fillColor(gst ? C.brandDark : C.amber).text(tag, right - tagW, y + 2, {
+        width: tagW,
+        align: "center",
+      });
+      y += 12;
+      doc.font(BOLD).fontSize(11.5).fillColor(C.ink).text(group.shopName, M, y, { width: contentW - tagW - 10 });
+      y = doc.y + 1;
+      doc.font(BODY).fontSize(8.5).fillColor(C.muted);
+      const sellerLines = [
+        gst && group.legalName ? `Legal name: ${group.legalName}` : null,
+        group.address,
+        gst && group.gstin
+          ? `GSTIN: ${group.gstin}${group.state ? `   ·   State: ${group.state}` : ""}`
+          : "Not registered under GST. GST is not charged by this seller.",
+      ].filter((line): line is string => Boolean(line));
+      for (const line of sellerLines) {
+        doc.text(line, M, y, { width: contentW });
+        y = doc.y;
+      }
+      y += 10;
+
+      const columns = gst
+        ? [
+            { key: "#", w: 22, align: "left" as const },
+            { key: "Item", w: 183, align: "left" as const },
+            { key: "Qty", w: 32, align: "right" as const },
+            { key: "Rate", w: 64, align: "right" as const },
+            { key: "Taxable", w: 66, align: "right" as const },
+            { key: "GST", w: 38, align: "right" as const },
+            { key: "Tax", w: 50, align: "right" as const },
+            { key: "Amount", w: contentW - 455, align: "right" as const },
+          ]
+        : [
+            { key: "#", w: 22, align: "left" as const },
+            { key: "Item", w: 273, align: "left" as const },
+            { key: "Qty", w: 40, align: "right" as const },
+            { key: "Rate", w: 80, align: "right" as const },
+            { key: "Amount", w: contentW - 415, align: "right" as const },
+          ];
+      const pad = 6;
+
+      const drawHeader = () => {
+        doc.rect(M, y, contentW, 20).fill(C.ink);
+        let x = M;
+        doc.font(BOLD).fontSize(7.5).fillColor("#FFFFFF");
+        for (const col of columns) {
+          doc.text(col.key.toUpperCase(), x + pad, y + 6.5, {
+            width: col.w - pad * 2,
+            align: col.align,
+            characterSpacing: 0.4,
+          });
+          x += col.w;
+        }
+        y += 20;
+      };
+
+      ensureRoom(44);
+      drawHeader();
+
+      let groupTotal = 0;
+      group.items.forEach((item, index) => {
+        const name = item.variant ? `${item.title} (${item.variant})` : item.title;
+        const tax = gst ? moneyRound((item.lineTotal * item.gstPercent) / 100) : 0;
+        const amount = gst ? moneyRound(item.lineTotal + tax) : item.lineTotal;
+        groupTotal += amount;
+
+        doc.font(BOLD).fontSize(8.5);
+        const nameH = doc.heightOfString(name, { width: columns[1].w - pad * 2 });
+        doc.fontSize(7.5);
+        const noteH = item.note
+          ? doc.heightOfString(`Customization: ${item.note}`, { width: columns[1].w - pad * 2 }) + 2
+          : 0;
+        const rowH = Math.max(22, nameH + noteH + 12);
+
+        if (y + rowH > doc.page.height - footerReserve) {
+          ensureRoom(rowH + 20);
+          drawHeader();
+        }
+        if (index % 2 === 1) doc.rect(M, y, contentW, rowH).fill(C.zebra);
+
+        const cells = gst
+          ? [
+              String(index + 1),
+              name,
+              String(item.quantity),
+              money(item.unitPrice),
+              money(item.lineTotal),
+              `${item.gstPercent}%`,
+              money(tax),
+              money(amount),
+            ]
+          : [String(index + 1), name, String(item.quantity), money(item.unitPrice), money(amount)];
+
+        let x = M;
+        cells.forEach((cell, cellIndex) => {
+          const col = columns[cellIndex];
+          const isAmount = cellIndex === cells.length - 1;
+          doc
+            .font(isAmount || cellIndex === 1 ? BOLD : BODY)
+            .fontSize(8.5)
+            .fillColor(cellIndex === 0 ? C.light : C.ink)
+            .text(cell, x + pad, y + 6, { width: col.w - pad * 2, align: col.align });
+          if (cellIndex === 1 && item.note) {
+            doc
+              .font(BODY)
+              .fontSize(7.5)
+              .fillColor(C.muted)
+              .text(`Customization: ${item.note}`, x + pad, y + 6 + nameH + 2, {
+                width: col.w - pad * 2,
+              });
+          }
+          x += col.w;
+        });
+        y += rowH;
+        doc.moveTo(M, y).lineTo(right, y).lineWidth(0.5).strokeColor(C.border).stroke();
+      });
+
+      if (data.groups.length > 1) {
+        y += 6;
+        doc.font(BODY).fontSize(8.5).fillColor(C.muted).text(`Subtotal · ${group.shopName}`, M, y, {
+          width: contentW - 90,
           align: "right",
         });
-      y = doc.y + 2;
-      doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
-      if (group.legalName && group.gstRegistered) doc.text(`Legal name: ${group.legalName}`, 36, y);
-      y = doc.y;
-      if (group.address) doc.text(group.address, 36, y, { width: 360 });
-      y = doc.y;
-      doc.text(
-        group.gstRegistered && group.gstin
-          ? `GSTIN ${group.gstin}${group.state ? `  ·  ${group.state}` : ""}`
-          : "Not registered under GST. GST is not charged by this seller.",
-        36,
-        y,
-        { width: 500 }
-      );
-      y = doc.y + 8;
-
-      const gstCols = group.gstRegistered;
-      const headers = gstCols
-        ? ["Item", "Qty", "Rate", "Taxable", "GST", "Amount"]
-        : ["Item", "Qty", "Rate", "Amount"];
-      const widths = gstCols ? [190, 40, 70, 70, 70, 73] : [280, 50, 90, 103];
-      ensureRoom(36);
-      doc.rect(36, y, 523, 18).fill("#f5f3ff");
-      doc.fillColor("#5b21b6").font("Helvetica-Bold").fontSize(8);
-      let hx = 42;
-      headers.forEach((header, index) => {
-        doc.text(header, hx, y + 5, { width: widths[index] - 6 });
-        hx += widths[index];
-      });
-      y += 22;
-
-      for (const item of group.items) {
-        const label = [
-          item.variant ? `${item.title} (${item.variant})` : item.title,
-          item.note ? `Customization: ${item.note}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n");
-        const gstAmount = gstCols ? moneyRound((item.lineTotal * item.gstPercent) / 100) : 0;
-        const amount = gstCols ? moneyRound(item.lineTotal + gstAmount) : item.lineTotal;
-        const cells = gstCols
-          ? [
-              label,
-              String(item.quantity),
-              inr(item.unitPrice),
-              inr(item.lineTotal),
-              `${item.gstPercent}%`,
-              inr(amount),
-            ]
-          : [label, String(item.quantity), inr(item.unitPrice), inr(amount)];
-        ensureRoom(36);
-        doc.fillColor("#111827").font("Helvetica").fontSize(8);
-        const labelHeight = doc.heightOfString(cells[0] ?? "", { width: widths[0] - 8 });
-        const rowHeight = Math.max(18, labelHeight + 6);
-        let cx = 42;
-        cells.forEach((cell, index) => {
-          doc.text(cell, cx, y, { width: widths[index] - 8 });
-          cx += widths[index];
+        doc.font(BOLD).fontSize(8.5).fillColor(C.ink).text(money(moneyRound(groupTotal)), right - 90, y, {
+          width: 90 - pad,
+          align: "right",
         });
-        y += rowHeight;
-        doc.moveTo(36, y - 4).lineTo(559, y - 4).strokeColor("#f3e8ff").stroke();
+        y = doc.y;
       }
-      y += 8;
+      y += 16;
     }
 
-    ensureRoom(120);
-    const summaryX = 330;
-    doc.fillColor("#374151").font("Helvetica").fontSize(10);
-    const row = (label: string, value: string, bold = false) => {
-      doc.font(bold ? "Helvetica-Bold" : "Helvetica").fillColor(bold ? "#111827" : "#374151");
-      doc.fontSize(bold ? 12 : 10);
-      doc.text(label, summaryX, y, { width: 110 });
-      doc.text(value, summaryX + 110, y, { width: 110, align: "right" });
-      y += bold ? 20 : 16;
-    };
-    row("Subtotal", inr(data.subtotal));
-    if (data.discountAmount > 0) row("Discount", `-${inr(data.discountAmount)}`);
-    row("Shipping", inr(data.shippingAmount));
+    // ── Totals ────────────────────────────────────────────────────────
+    const totalRows: Array<[string, string]> = [["Subtotal", money(data.subtotal)]];
+    if (data.discountAmount > 0) totalRows.push(["Discount", `− ${money(data.discountAmount)}`]);
+    totalRows.push(["Shipping", data.shippingAmount > 0 ? money(data.shippingAmount) : "Free"]);
 
     if (registered.length > 0 && unregistered.length === 0 && data.taxAmount > 0) {
-      const oneState = registered.every(
-        (group) => sameState(group.state, registered[0]?.state ?? null)
-      );
+      const oneState = registered.every((group) => sameState(group.state, registered[0]?.state ?? null));
       const intra = oneState && sameState(registered[0]?.state ?? null, data.buyerState);
       if (intra) {
         const half = moneyRound(data.taxAmount / 2);
-        row("CGST", inr(half));
-        row("SGST", inr(moneyRound(data.taxAmount - half)));
+        totalRows.push(["CGST", money(half)]);
+        totalRows.push(["SGST", money(moneyRound(data.taxAmount - half))]);
       } else if (data.buyerState) {
-        row("IGST", inr(data.taxAmount));
+        totalRows.push(["IGST", money(data.taxAmount)]);
       } else {
-        row(`GST (${Number((data.taxRate * 100).toFixed(2))}%)`, inr(data.taxAmount));
+        totalRows.push([`GST (${Number((data.taxRate * 100).toFixed(2))}%)`, money(data.taxAmount)]);
       }
     } else if (data.taxAmount > 0) {
-      row("Tax on order", inr(data.taxAmount));
+      totalRows.push(["Tax on order", money(data.taxAmount)]);
     } else if (unregistered.length === data.groups.length) {
-      row("GST", "Not charged");
+      totalRows.push(["GST", "Not charged"]);
     }
 
-    doc.moveTo(summaryX, y).lineTo(555, y).strokeColor("#e5e7eb").stroke();
-    y += 8;
-    row("Total", inr(data.totalAmount), true);
+    const boxW = 230;
+    const boxX = right - boxW;
+    const totalsH = totalRows.length * 18 + 16 + 34;
+    ensureRoom(totalsH + 30);
 
-    y += 16;
-    doc.fillColor("#6b7280").font("Helvetica").fontSize(8);
-    doc.text(
-      registered.length > 0
-        ? "GST figures use the tax stored on this order. Intra-state orders split GST into CGST and SGST. Inter-state orders show IGST."
-        : "This is a bill of supply. The seller is not registered under GST, so GST is not charged on these goods.",
-      36,
-      y,
-      { width: 523 }
-    );
-    y = doc.y + 14;
-    doc.text("Thank you for shopping on Stuffsy.", 36, y, { width: 523, align: "center" });
-    doc.text("support@stuffsy.in  ·  This is a computer-generated document.", 36, doc.y + 2, {
-      width: 523,
-      align: "center",
+    // Amount in words, left of the totals box.
+    const wordsW = contentW - boxW - 20;
+    label("Amount in words", M, y + 4, wordsW);
+    doc.font(BOLD).fontSize(9.5).fillColor(C.ink).text(amountInWords(data.totalAmount), M, y + 17, {
+      width: wordsW,
     });
+    const wordsEnd = doc.y;
+
+    let ty = y + 4;
+    for (const [key, value] of totalRows) {
+      doc.font(BODY).fontSize(9).fillColor(C.muted).text(key, boxX, ty, { width: boxW / 2 });
+      doc.font(BOLD).fontSize(9).fillColor(C.ink).text(value, boxX + boxW / 2, ty, {
+        width: boxW / 2 - 10,
+        align: "right",
+      });
+      ty += 18;
+    }
+    ty += 4;
+    doc.roundedRect(boxX - 10, ty, boxW + 10, 32, 8).fill(C.brand);
+    doc.font(BOLD).fontSize(10).fillColor("#FFFFFF").text(isCod ? "Total due" : "Total paid", boxX, ty + 10, {
+      width: boxW / 2,
+    });
+    doc.font(BOLD).fontSize(13).fillColor("#FFFFFF").text(money(data.totalAmount), boxX + boxW / 2 - 20, ty + 8, {
+      width: boxW / 2 + 10,
+      align: "right",
+    });
+    y = Math.max(wordsEnd, ty + 32) + 24;
+
+    // ── Notes ─────────────────────────────────────────────────────────
+    ensureRoom(70);
+    label("Notes", M, y, contentW);
+    y += 13;
+    doc.font(BODY).fontSize(8).fillColor(C.muted);
+    const notes = [
+      registered.length > 0
+        ? "GST figures use the tax recorded on this order. Intra-state supplies show CGST and SGST; inter-state supplies show IGST."
+        : "This is a bill of supply. The seller is not registered under GST, so GST is not charged on these goods.",
+      "Stuffsy is a marketplace. Each item is sold and shipped by the seller named above.",
+      "This is a computer-generated document and does not require a signature.",
+    ];
+    for (const note of notes) {
+      doc.text(`•  ${note}`, M, y, { width: contentW });
+      y = doc.y + 3;
+    }
+    y += 10;
+    doc.font(BOLD).fontSize(10).fillColor(C.brand).text("Thank you for shopping handmade.", M, y, {
+      width: contentW,
+    });
+
+    // ── Footer on every page ──────────────────────────────────────────
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i += 1) {
+      doc.switchToPage(i);
+      // Writing inside the bottom margin would otherwise trigger an automatic page break.
+      const bottomMargin = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0;
+      const fy = doc.page.height - 40;
+      doc.moveTo(M, fy - 8).lineTo(right, fy - 8).lineWidth(0.5).strokeColor(C.border).stroke();
+      doc.font(BODY).fontSize(7.5).fillColor(C.light);
+      doc.text(`Stuffsy  ·  ${SUPPORT_EMAIL}  ·  ${data.invoiceNumber}`, M, fy, {
+        width: contentW / 2,
+        lineBreak: false,
+      });
+      doc.text(`Page ${i - range.start + 1} of ${range.count}`, M + contentW / 2, fy, {
+        width: contentW / 2,
+        align: "right",
+        lineBreak: false,
+      });
+      doc.page.margins.bottom = bottomMargin;
+    }
 
     doc.end();
   });

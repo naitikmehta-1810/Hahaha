@@ -16,6 +16,7 @@ import styles from "./checkout.module.css";
 import Heading from "@/components/ui/Heading/Heading";
 import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
+import PaymentIcon from "@/components/ui/PaymentMarks/PaymentIcon";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
@@ -38,6 +39,7 @@ import {
   openRazorpayCheckout,
   stubCapturePayment,
 } from "@/utils/payments";
+import { optimizedImage } from "@/utils/media";
 
 const INDIAN_STATES = [
   "Andhra Pradesh",
@@ -710,7 +712,7 @@ function CheckoutInner() {
                 </label>
               )}
 
-              <h3 className={styles.cardTitle} style={{ marginTop: 28 }}>
+              <h3 className={`${styles.cardTitle} ${styles.cardTitleSpaced}`}>
                 Delivery Options
               </h3>
               <div className={styles.deliveryList}>
@@ -726,8 +728,8 @@ function CheckoutInner() {
                       onChange={() => setDeliveryOption("standard")}
                     />
                     <span>
-                      <div className={styles.deliveryName}>Standard Delivery</div>
-                      <div className={styles.deliveryMeta}>5–7 business days</div>
+                      <span className={styles.deliveryName}>Standard Delivery</span>
+                      <span className={styles.deliveryMeta}>5–7 business days</span>
                     </span>
                   </span>
                   <span
@@ -750,8 +752,8 @@ function CheckoutInner() {
                       onChange={() => setDeliveryOption("express")}
                     />
                     <span>
-                      <div className={styles.deliveryName}>Express Delivery</div>
-                      <div className={styles.deliveryMeta}>2–3 business days</div>
+                      <span className={styles.deliveryName}>Express Delivery</span>
+                      <span className={styles.deliveryMeta}>2–3 business days</span>
                     </span>
                   </span>
                   <span className={styles.deliveryPrice}>₹{EXPRESS_SHIPPING}</span>
@@ -783,11 +785,11 @@ function CheckoutInner() {
                     <div key={item.id} className={styles.recapItem}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={item.image}
+                        src={optimizedImage(item.image, 160)}
                         alt={item.title}
                         className={styles.recapThumb}
                       />
-                      <div style={{ flex: 1 }}>
+                      <div className={styles.recapBody}>
                         <div className={styles.summaryItemTitle}>{item.title}</div>
                         <div className={styles.summaryItemMeta}>
                           {item.subtitle} · Qty: {item.qty}
@@ -838,16 +840,28 @@ function CheckoutInner() {
                   <span className={styles.radioLeft}>
                     <input
                       type="radio"
+                      name="checkout-payment"
                       checked={paymentMethod === value}
+                      disabled={value === "cod" && total > COD_MAX_ORDER_VALUE}
                       onChange={() => setPaymentMethod(value)}
                     />
                     <span>{label}</span>
                   </span>
                   {value === "card" ? (
                     <span className={styles.methodLogos}>
-                      <span className={styles.methodLogo}>VISA</span>
-                      <span className={styles.methodLogo}>MC</span>
-                      <span className={styles.methodLogo}>RuPay</span>
+                      <PaymentIcon brand="visa" />
+                      <PaymentIcon brand="mastercard" />
+                      <PaymentIcon brand="rupay" />
+                    </span>
+                  ) : null}
+                  {value === "upi" ? (
+                    <span className={styles.methodLogos}>
+                      <PaymentIcon brand="upi" />
+                    </span>
+                  ) : null}
+                  {value === "wallet" ? (
+                    <span className={styles.methodLogos}>
+                      <PaymentIcon brand="paytm" />
                     </span>
                   ) : null}
                   {value === "cod" && total > COD_MAX_ORDER_VALUE ? (
@@ -891,7 +905,7 @@ function CheckoutInner() {
               {availableItems.map((item) => (
                 <div key={item.id} className={styles.summaryItem}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={item.image} alt="" className={styles.summaryThumb} />
+                  <img src={optimizedImage(item.image, 160)} alt="" className={styles.summaryThumb} />
                   <div className={styles.summaryItemBody}>
                     <p className={styles.summaryItemTitle}>{item.title}</p>
                     <div className={styles.summaryItemMeta}>
@@ -943,7 +957,7 @@ function CheckoutInner() {
 
             {step === 3 ? (
               <>
-                <div style={{ marginTop: 16 }}>
+                <div className={styles.placeOrderRow}>
                   <Button
                     variant="primary"
                     fullWidth

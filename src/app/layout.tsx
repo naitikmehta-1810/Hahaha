@@ -1,20 +1,30 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/layout/AppShell";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 
+// Favicon and touch icons come from src/app/favicon.ico, icon.png and
+// apple-icon.png (Next.js file conventions), so they are not listed here.
 export const metadata: Metadata = {
-  title: "Stuffsy - Discover Unique Handmade Treasures",
+  title: {
+    default: "Stuffsy - Discover Unique Handmade Treasures",
+    template: "%s · Stuffsy",
+  },
   description:
     "Buy and sell unique handmade items, crafts, and vintage goods on Stuffsy, the artisan marketplace.",
   applicationName: "Stuffsy",
-  icons: {
-    icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/brand/stuffsy-logo.png", type: "image/png", sizes: "512x512" },
-    ],
-    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
-  },
+};
+
+// Self-hosted variable font: no render-blocking request to Google, and weights like 650 work.
+const sans = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-sans",
+});
+
+export const viewport: Viewport = {
+  themeColor: "#7c3aed",
 };
 
 export default function RootLayout({
@@ -23,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={sans.variable} suppressHydrationWarning>
       <body suppressHydrationWarning>
         <AuthProvider>
           <AppShell>{children}</AppShell>

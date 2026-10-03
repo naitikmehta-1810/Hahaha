@@ -22,8 +22,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "Stuffsy", {
       body: data.body,
-      icon: "/brand/stuffsy-logo.png",
-      badge: "/favicon.png",
+      icon: "/brand/stuffsy-mark.png",
+      badge: "/brand/stuffsy-mark-48.png",
       tag: data.tag || "stuffsy",
       data: { url: data.url || "/" },
     })

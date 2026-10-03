@@ -14,10 +14,13 @@ import {
   Star,
   RefreshCw,
   ExternalLink,
+  Mail,
 } from "lucide-react";
 import styles from "../order.module.css";
-import Button from "@/components/ui/Button/Button";
+import Button, { buttonClassName } from "@/components/ui/Button/Button";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
+import StatusPill from "@/components/ui/StatusPill/StatusPill";
+import { SUPPORT_EMAIL, supportMailto } from "@/utils/support";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
 import {
@@ -30,11 +33,10 @@ import {
   formatOrderDateTime,
   formatOrderStatusLabel,
   mapsUrlFromAddress,
-  orderStatusBadgeClass,
   requestOrderReturn,
   submitReview,
 } from "@/utils/cart";
-import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
+import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
 
 const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
 
@@ -43,15 +45,6 @@ function formatOptions(values: Record<string, unknown>) {
     .filter(([, v]) => v != null && String(v).length > 0)
     .map(([, v]) => String(v))
     .join(" · ");
-}
-
-function badgeClass(status: string) {
-  const key = orderStatusBadgeClass(status);
-  if (key === "delivered") return styles.delivered;
-  if (key === "shipped") return styles.shipped;
-  if (key === "outForDelivery") return styles.outForDelivery;
-  if (key === "cancelled") return styles.cancelled;
-  return styles.processing;
 }
 
 export default function OrderDetailsPage() {
@@ -181,9 +174,7 @@ export default function OrderDetailsPage() {
         <div className={styles.titleBlock}>
           <h1>
             Order #{order.orderNumber}
-            <span className={`${styles.statusBadge} ${badgeClass(order.status)}`}>
-              {formatOrderStatusLabel(order.status)}
-            </span>
+            <StatusPill status={order.status}>{formatOrderStatusLabel(order.status)}</StatusPill>
           </h1>
           <p className={styles.placedOn}>
             Placed on {formatOrderDateTime(order.placedAt || order.createdAt)}
@@ -260,7 +251,7 @@ export default function OrderDetailsPage() {
               <div key={item.id} className={styles.orderItem}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={item.productThumbnailUrl || FALLBACK_THUMB}
+                  src={optimizedImage(item.productThumbnailUrl || FALLBACK_THUMB, 200)}
                   alt=""
                   className={styles.itemThumb}
                 />
@@ -428,13 +419,15 @@ export default function OrderDetailsPage() {
               <p className={styles.sidebarMuted}>{address?.phoneNumber}</p>
             </div>
             {mapsUrl ? (
-              <div style={{ marginTop: 12 }}>
-                <a href={mapsUrl} target="_blank" rel="noreferrer">
-                  <Button variant="outline" fullWidth leftIcon={<ExternalLink size={14} />}>
-                    View on Map
-                  </Button>
-                </a>
-              </div>
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={buttonClassName({ variant: "outline", fullWidth: true, className: styles.cardAction })}
+              >
+                <ExternalLink size={14} aria-hidden="true" />
+                View on map
+              </a>
             ) : null}
           </div>
 
@@ -495,11 +488,14 @@ export default function OrderDetailsPage() {
               <Headphones size={16} className={styles.cardTitleIcon} /> Need Help?
             </h3>
             <p className={styles.sidebarMuted}>Our support team is here to help you.</p>
-            <div style={{ marginTop: 12 }}>
-              <Button variant="outline" fullWidth>
-                Contact Support
-              </Button>
-            </div>
+            <a
+              href={supportMailto(`Help with order #${order.orderNumber}`)}
+              className={buttonClassName({ variant: "outline", fullWidth: true, className: styles.cardAction })}
+            >
+              <Mail size={16} aria-hidden="true" />
+              Contact support
+            </a>
+            <p className={`${styles.sidebarMuted} ${styles.cardAction}`}>{SUPPORT_EMAIL}</p>
           </div>
         </aside>
       </div>

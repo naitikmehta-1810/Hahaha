@@ -4,19 +4,23 @@ import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Trash2,
-  Lock,
-  Truck,
-  RotateCcw,
-  ShieldCheck,
-  Headphones,
+  ArrowLeft,
   ArrowRight,
+  Lock,
+  Minus,
   Plus,
+  ShoppingBag,
+  Tag,
+  Trash2,
+  Truck,
 } from "lucide-react";
 import styles from "./cart.module.css";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
-import Button from "@/components/ui/Button/Button";
+import Button, { ButtonLink } from "@/components/ui/Button/Button";
+import EmptyState from "@/components/ui/EmptyState/EmptyState";
+import Notice from "@/components/ui/Notice/Notice";
+import PaymentMarks from "@/components/ui/PaymentMarks/PaymentMarks";
+import PaymentIcon, { type PaymentBrand } from "@/components/ui/PaymentMarks/PaymentIcon";
+import ValueProps from "@/components/ui/ValueProps/ValueProps";
 import ProductCard from "@/components/ui/ProductCard/ProductCard";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -40,7 +44,7 @@ import {
   productImageUrl,
   type ProductCard as CatalogProduct,
 } from "@/utils/catalog";
-import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
+import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
 
 export default function CartPage() {
   const router = useRouter();
@@ -191,515 +195,319 @@ export default function CartPage() {
     router.push(`/checkout?payment=${encodeURIComponent(payment)}`);
   };
 
+  const itemCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
+  const isEmpty = !cartLoading && cartItems.length === 0;
+  const freeShippingProgress =
+    freeShipping.threshold > 0 ? Math.min(100, (subtotal / freeShipping.threshold) * 100) : 100;
+
+  const paymentOptions = [
+    { value: "card", label: "Credit / debit card", brands: ["visa", "mastercard", "rupay"] as PaymentBrand[] },
+    { value: "upi", label: "UPI", brands: ["upi"] as PaymentBrand[] },
+    { value: "netbanking", label: "Net banking", brands: [] as PaymentBrand[] },
+    { value: "wallets", label: "Wallets", brands: ["paytm"] as PaymentBrand[] },
+  ];
+
   return (
     <div className={styles.container}>
-      {/* Breadcrumbs */}
       <Breadcrumbs>
         <Breadcrumbs.Item href="/">Home</Breadcrumbs.Item>
         <Breadcrumbs.Item active>Cart</Breadcrumbs.Item>
       </Breadcrumbs>
 
-      {/* Main Cart Heading */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "8px",
-        }}
-      >
-        <Heading level={2}>Your Cart ({cartItems.length})</Heading>
-        <Link
-          href="/shop"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            color: "var(--color-primary)",
-            fontWeight: "600",
-            fontSize: "0.875rem",
-          }}
-        >
-          <Plus size={16} />
-          <span>Continue Shopping</span>
+      <div className={styles.pageHead}>
+        <h1 className={styles.pageTitle}>
+          Your cart
+          {itemCount > 0 ? (
+            <span className={styles.pageCount}>
+              {itemCount} item{itemCount === 1 ? "" : "s"}
+            </span>
+          ) : null}
+        </h1>
+        <Link href="/shop" className={styles.continueLink}>
+          <ArrowLeft size={16} />
+          <span>Continue shopping</span>
         </Link>
       </div>
 
-      {status && (
-        <div
-          className={`${styles.statusMessage} ${
-            status.type === "error" ? styles.statusError : styles.statusSuccess
-          }`}
-          role="alert"
-        >
+      {status ? (
+        <Notice tone={status.type === "error" ? "danger" : "success"} className={styles.notice}>
           {status.message}
-        </div>
-      )}
+        </Notice>
+      ) : null}
 
-      {/* Free-shipping progress — threshold from cart API */}
-      {availableItems.length > 0 && (
-        <div className={styles.shippingBanner}>
-          <Truck size={18} className={styles.shippingBannerIcon} />
-          {freeShipping.qualifies || freeShipping.remaining <= 0 ? (
-            <span>
-              You&apos;ve unlocked <strong>FREE Shipping</strong>!
-            </span>
-          ) : (
-            <span>
-              Add items worth <strong>₹{Math.ceil(freeShipping.remaining)}</strong> more for{" "}
-              <strong>FREE Shipping</strong>
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Cart Layout */}
-      <div className={styles.cartLayout}>
-        {/* Left Side: Items list */}
-        <div className={styles.itemsSection}>
-          <div className={styles.itemsList}>
-            {cartLoading && cartItems.length === 0 && (
-              <div style={{ padding: "48px 24px", textAlign: "center" }}>
-                <Text size="md" color="muted">
-                  Loading your cart…
-                </Text>
-              </div>
-            )}
-            {cartItems.map((item) => (
-              <div
-                key={item.id}
-                className={`${styles.cartItem} ${
-                  !item.available ? styles.cartItemUnavailable : ""
-                }`}
-              >
-                <div className={styles.itemImgWrapper}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.image}
-                    alt={item.title}
-                    className={styles.itemImg}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
-                    }}
-                  />
-                  {!item.available && (
-                    <span className={styles.unavailableBadge}>Unavailable</span>
+      {isEmpty ? (
+        <EmptyState
+          icon={<ShoppingBag size={24} />}
+          title="Your cart is empty"
+          description="Browse handmade pieces from independent makers and add your favourites here."
+          action={<ButtonLink href="/shop">Start shopping</ButtonLink>}
+        />
+      ) : (
+        <div className={styles.cartLayout}>
+          <div className={styles.itemsSection}>
+            {availableItems.length > 0 ? (
+              <div className={styles.shippingBanner}>
+                <Truck size={18} className={styles.shippingBannerIcon} />
+                <div className={styles.shippingBannerBody}>
+                  {freeShipping.qualifies || freeShipping.remaining <= 0 ? (
+                    <span>
+                      You&apos;ve unlocked <strong>free shipping</strong>.
+                    </span>
+                  ) : (
+                    <span>
+                      Add <strong>₹{Math.ceil(freeShipping.remaining).toLocaleString("en-IN")}</strong> more
+                      for <strong>free shipping</strong>.
+                    </span>
                   )}
+                  <span className={styles.shippingTrack} aria-hidden="true">
+                    <span
+                      className={styles.shippingFill}
+                      style={{
+                        width: `${freeShipping.qualifies ? 100 : freeShippingProgress}%`,
+                      }}
+                    />
+                  </span>
                 </div>
-                <div className={styles.itemDetails}>
-                  <h4 className={styles.itemTitle}>{item.title}</h4>
-                  <span className={styles.itemSubtitle}>{item.subtitle}</span>
-                  {item.customizationNote ? (
-                    <span className={styles.itemSubtitle}>For the maker: {item.customizationNote}</span>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => void handleRemoveItem(item.id)}
-                    className={styles.deleteBtn}
-                    aria-label={`Remove ${item.title}`}
-                  >
-                    <Trash2 size={16} />
-                    Remove
-                  </button>
-                </div>
-                <div className={styles.qtySelector}>
-                  <button
-                    type="button"
-                    className={styles.qtyBtn}
-                    disabled={!item.available}
-                    onClick={() => void handleQtyChange(item.id, "dec")}
-                  >
-                    -
-                  </button>
-                  <span className={styles.qtyVal}>{item.qty}</span>
-                  <button
-                    type="button"
-                    className={styles.qtyBtn}
-                    disabled={!item.available}
-                    onClick={() => void handleQtyChange(item.id, "inc")}
-                  >
-                    +
-                  </button>
-                </div>
-                <span className={styles.itemPrice}>
-                  {item.available
-                    ? `₹${(item.price * item.qty).toLocaleString("en-IN")}`
-                    : "—"}
-                </span>
-              </div>
-            ))}
-            {!cartLoading && cartItems.length === 0 && (
-              <div style={{ padding: "48px 24px", textAlign: "center" }}>
-                <Text size="md" color="muted">
-                  Your cart is empty.
-                </Text>
-                <Link
-                  href="/shop"
-                  style={{ display: "inline-block", marginTop: "16px" }}
-                >
-                  <Button variant="primary">Shop Products</Button>
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* Value Props Row */}
-          <div className={styles.valueProps}>
-            <div className={styles.propItem}>
-              <Truck size={18} className={styles.propIcon} />
-              <div className={styles.propText}>
-                <span className={styles.propTitle}>Free Shipping</span>
-                <span className={styles.propDesc}>On orders over ₹499</span>
-              </div>
-            </div>
-            <div className={styles.propItem}>
-              <RotateCcw size={18} className={styles.propIcon} />
-              <div className={styles.propText}>
-                <span className={styles.propTitle}>Easy Returns</span>
-                <span className={styles.propDesc}>Within 7 days</span>
-              </div>
-            </div>
-            <div className={styles.propItem}>
-              <ShieldCheck size={18} className={styles.propIcon} />
-              <div className={styles.propText}>
-                <span className={styles.propTitle}>Secure Payments</span>
-                <span className={styles.propDesc}>100% protected</span>
-              </div>
-            </div>
-            <div className={styles.propItem}>
-              <Headphones size={18} className={styles.propIcon} />
-              <div className={styles.propText}>
-                <span className={styles.propTitle}>24/7 Support</span>
-                <span className={styles.propDesc}>We&apos;re here to help</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Side: Order summary & payment selection */}
-        <aside className={styles.summarySidebar}>
-          {/* Order Summary */}
-          <div className={styles.summaryCard}>
-            <h3 className={styles.summaryTitle}>Order Summary</h3>
-            <div className={styles.row}>
-              <span>Subtotal</span>
-              <span>₹{subtotal.toLocaleString("en-IN")}</span>
-            </div>
-            {discountAmount > 0 ? (
-              <div className={styles.row}>
-                <span>Discount{couponCode ? ` (${couponCode})` : ""}</span>
-                <span className={styles.shippingFree}>
-                  −₹{discountAmount.toLocaleString("en-IN")}
-                </span>
               </div>
             ) : null}
-            <div className={styles.row}>
-              <span>Shipping</span>
-              {shipping === 0 ? (
-                <span className={styles.shippingFree}>Free</span>
-              ) : (
-                <span>₹{shipping}</span>
-              )}
-            </div>
-            <div className={styles.row}>
-              <span>{taxLabel}</span>
-              <span>₹{tax.toLocaleString("en-IN")}</span>
-            </div>
-            <div className={styles.rowBold}>
-              <span>Total</span>
-              <span>₹{total.toLocaleString("en-IN")}</span>
-            </div>
 
-            <div style={{ margin: "12px 0 16px" }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                  marginBottom: 6,
-                }}
-              >
-                Coupon code
-              </label>
-              {couponCode ? (
+            <div className={styles.itemsList}>
+              {cartLoading && cartItems.length === 0 ? (
+                <p className={styles.loadingText}>Loading your cart…</p>
+              ) : null}
+              {cartItems.map((item) => (
                 <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    padding: "10px 12px",
-                    border: "1px solid var(--color-border-dark)",
-                    borderRadius: 8,
-                    fontSize: "0.875rem",
-                  }}
+                  key={item.id}
+                  className={`${styles.cartItem} ${!item.available ? styles.cartItemUnavailable : ""}`}
                 >
-                  <span>
-                    Applied: <strong>{couponCode}</strong>
+                  <div className={styles.itemImgWrapper}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={optimizedImage(item.image, 240)}
+                      alt={item.title}
+                      className={styles.itemImg}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
+                      }}
+                    />
+                    {!item.available ? <span className={styles.unavailableBadge}>Unavailable</span> : null}
+                  </div>
+                  <div className={styles.itemDetails}>
+                    <h2 className={styles.itemTitle}>{item.title}</h2>
+                    <span className={styles.itemSubtitle}>{item.subtitle}</span>
+                    {item.customizationNote ? (
+                      <span className={styles.itemNote}>For the maker: {item.customizationNote}</span>
+                    ) : null}
+                    <span className={styles.itemUnit}>
+                      {item.available ? `₹${item.price.toLocaleString("en-IN")} each` : "No longer available"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoveItem(item.id)}
+                      className={styles.deleteBtn}
+                      aria-label={`Remove ${item.title}`}
+                    >
+                      <Trash2 size={15} />
+                      Remove
+                    </button>
+                  </div>
+                  <div className={styles.qtySelector} role="group" aria-label={`Quantity for ${item.title}`}>
+                    <button
+                      type="button"
+                      className={styles.qtyBtn}
+                      disabled={!item.available}
+                      aria-label={item.qty <= 1 ? "Remove item" : "Decrease quantity"}
+                      onClick={() => void handleQtyChange(item.id, "dec")}
+                    >
+                      {item.qty <= 1 ? <Trash2 size={14} /> : <Minus size={14} />}
+                    </button>
+                    <span className={styles.qtyVal}>{item.qty}</span>
+                    <button
+                      type="button"
+                      className={styles.qtyBtn}
+                      disabled={!item.available}
+                      aria-label="Increase quantity"
+                      onClick={() => void handleQtyChange(item.id, "inc")}
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                  <span className={styles.itemPrice}>
+                    {item.available ? `₹${(item.price * item.qty).toLocaleString("en-IN")}` : "—"}
                   </span>
-                  <button
-                    type="button"
-                    disabled={couponBusy}
-                    onClick={() => void handleRemoveCoupon()}
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      color: "var(--color-danger)",
-                      cursor: "pointer",
-                      fontWeight: 600,
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    Remove
-                  </button>
                 </div>
-              ) : (
-                <div style={{ display: "flex", gap: 8 }}>
+              ))}
+            </div>
+
+            <ValueProps compact />
+          </div>
+
+          <aside className={styles.summarySidebar}>
+            <div className={styles.summaryCard}>
+              <h2 className={styles.summaryTitle}>Order summary</h2>
+              <dl className={styles.summaryRows}>
+                <div className={styles.row}>
+                  <dt>Subtotal</dt>
+                  <dd>₹{subtotal.toLocaleString("en-IN")}</dd>
+                </div>
+                {discountAmount > 0 ? (
+                  <div className={styles.row}>
+                    <dt>Discount{couponCode ? ` (${couponCode})` : ""}</dt>
+                    <dd className={styles.positive}>−₹{discountAmount.toLocaleString("en-IN")}</dd>
+                  </div>
+                ) : null}
+                <div className={styles.row}>
+                  <dt>Shipping</dt>
+                  <dd className={shipping === 0 ? styles.positive : ""}>
+                    {shipping === 0 ? "Free" : `₹${shipping}`}
+                  </dd>
+                </div>
+                <div className={styles.row}>
+                  <dt>{taxLabel}</dt>
+                  <dd>₹{tax.toLocaleString("en-IN")}</dd>
+                </div>
+                <div className={styles.rowBold}>
+                  <dt>Total</dt>
+                  <dd>₹{total.toLocaleString("en-IN")}</dd>
+                </div>
+              </dl>
+
+              <div className={styles.couponBlock}>
+                <label htmlFor="coupon-code" className={styles.couponLabel}>
+                  <Tag size={14} aria-hidden="true" />
+                  Coupon code
+                </label>
+                {couponCode ? (
+                  <div className={styles.couponApplied}>
+                    <span>
+                      <strong>{couponCode}</strong> applied
+                    </span>
+                    <button
+                      type="button"
+                      disabled={couponBusy}
+                      onClick={() => void handleRemoveCoupon()}
+                      className={styles.couponRemove}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className={styles.couponRow}>
+                    <input
+                      id="coupon-code"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value)}
+                      placeholder="e.g. WELCOME10"
+                      disabled={couponBusy || availableItems.length === 0}
+                      className={styles.couponInput}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void handleApplyCoupon();
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={couponBusy || !couponInput.trim() || availableItems.length === 0}
+                      onClick={() => void handleApplyCoupon()}
+                    >
+                      {couponBusy ? "…" : "Apply"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <Button
+                variant="primary"
+                fullWidth
+                size="lg"
+                disabled={availableItems.length === 0 || cartLoading}
+                onClick={handleProceedToCheckout}
+                rightIcon={<ArrowRight size={18} />}
+              >
+                Proceed to checkout
+              </Button>
+
+              <p className={styles.termsText}>
+                You&apos;ll confirm your address and place the order on the next step.
+              </p>
+
+              <PaymentMarks className={styles.acceptRow} />
+
+              <div className={styles.secureCheckout}>
+                <Lock size={12} />
+                <span>Secure checkout</span>
+              </div>
+            </div>
+
+            <fieldset className={styles.methodsCard}>
+              <legend className={styles.methodTitle}>Preferred payment</legend>
+              <p className={styles.methodHint}>We&apos;ll pre-select this at checkout.</p>
+              {paymentOptions.map((option) => (
+                <label
+                  key={option.value}
+                  className={`${styles.radioItem} ${
+                    selectedMethod === option.value ? styles.radioItemActive : ""
+                  }`}
+                >
                   <input
-                    value={couponInput}
-                    onChange={(e) => setCouponInput(e.target.value)}
-                    placeholder="e.g. WELCOME10"
-                    disabled={couponBusy || availableItems.length === 0}
-                    style={{
-                      flex: 1,
-                      padding: "10px 12px",
-                      border: "1px solid var(--color-border-dark)",
-                      borderRadius: 8,
-                      fontSize: "0.875rem",
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void handleApplyCoupon();
-                      }
-                    }}
+                    type="radio"
+                    name="cart-payment"
+                    className={styles.radio}
+                    checked={selectedMethod === option.value}
+                    onChange={() => setSelectedMethod(option.value)}
                   />
-                  <Button
-                    variant="outline"
-                    disabled={couponBusy || !couponInput.trim() || availableItems.length === 0}
-                    onClick={() => void handleApplyCoupon()}
-                  >
-                    {couponBusy ? "…" : "Apply"}
-                  </Button>
-                </div>
-              )}
-            </div>
+                  <span className={styles.radioLabel}>{option.label}</span>
+                  {option.brands.length > 0 ? (
+                    <span className={styles.radioBrands}>
+                      {option.brands.map((brand) => (
+                        <PaymentIcon key={brand} brand={brand} />
+                      ))}
+                    </span>
+                  ) : null}
+                </label>
+              ))}
+            </fieldset>
+          </aside>
+        </div>
+      )}
 
-            <Button
-              variant="primary"
-              fullWidth
-              size="lg"
-              disabled={availableItems.length === 0 || cartLoading}
-              onClick={handleProceedToCheckout}
-            >
-              Proceed to Checkout
-            </Button>
-
-            <p className={styles.termsText}>
-              Payment method below pre-selects on checkout. You&apos;ll confirm shipping
-              and place the order on the next page.
-            </p>
-
-            <div className={styles.acceptRow}>
-              <span className={styles.acceptTitle}>We accept</span>
-              <div className={styles.acceptLogos}>
-                <span
-                  style={{
-                    fontSize: "0.7rem",
-                    fontWeight: "700",
-                    border: "1px solid var(--color-border-dark)",
-                    padding: "2px 6px",
-                    borderRadius: "4px",
-                  }}
-                >
-                  VISA
-                </span>
-                <span
-                  style={{
-                    fontSize: "0.7rem",
-                    fontWeight: "700",
-                    border: "1px solid var(--color-border-dark)",
-                    padding: "2px 6px",
-                    borderRadius: "4px",
-                  }}
-                >
-                  Mastercard
-                </span>
-                <span
-                  style={{
-                    fontSize: "0.7rem",
-                    fontWeight: "700",
-                    border: "1px solid var(--color-border-dark)",
-                    padding: "2px 6px",
-                    borderRadius: "4px",
-                  }}
-                >
-                  RuPay
-                </span>
-                <span
-                  style={{
-                    fontSize: "0.7rem",
-                    fontWeight: "700",
-                    border: "1px solid var(--color-border-dark)",
-                    padding: "2px 6px",
-                    borderRadius: "4px",
-                  }}
-                >
-                  UPI
-                </span>
-              </div>
-            </div>
-
-            <div className={styles.secureCheckout}>
-              <Lock size={12} />
-              <span>Secure checkout</span>
-            </div>
+      {recommendations.length > 0 ? (
+        <section className={styles.recommendations}>
+          <div className={styles.recHeader}>
+            <h2 className={styles.recTitle}>You may also like</h2>
+            <Link href="/shop" className={styles.viewAllLink}>
+              <span>View all</span>
+              <ArrowRight size={14} />
+            </Link>
           </div>
 
-          {/* Payment Methods */}
-          <div className={styles.methodsCard}>
-            <h3 className={styles.methodTitle}>Payment Methods</h3>
-
-            <label
-              className={`${styles.radioItem} ${
-                selectedMethod === "card" ? styles.radioItemActive : ""
-              }`}
-              onClick={() => setSelectedMethod("card")}
-            >
-              <span className={styles.radioLeft}>
-                <input
-                  type="radio"
-                  className={styles.radio}
-                  checked={selectedMethod === "card"}
-                  onChange={() => setSelectedMethod("card")}
-                />
-                <span>Credit / Debit Card</span>
-              </span>
-              <div className={styles.methodLogos}>
-                {/* placeholders for card symbols */}
-                <span
-                  style={{
-                    fontSize: "0.6rem",
-                    fontWeight: "700",
-                    border: "1px solid var(--color-border-dark)",
-                    padding: "1px 4px",
-                    borderRadius: "2px",
+          <div className={styles.productsGrid}>
+            {recommendations.map((product) => (
+              <ProductCard key={product.id} href={productHref(product)} productId={product.id}>
+                <ProductCard.Image
+                  src={productImageUrl(product)}
+                  alt={product.title}
+                  onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                    (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
                   }}
-                >
-                  VISA
-                </span>
-                <span
-                  style={{
-                    fontSize: "0.6rem",
-                    fontWeight: "700",
-                    border: "1px solid var(--color-border-dark)",
-                    padding: "1px 4px",
-                    borderRadius: "2px",
-                  }}
-                >
-                  MC
-                </span>
-              </div>
-            </label>
-
-            <label
-              className={`${styles.radioItem} ${
-                selectedMethod === "upi" ? styles.radioItemActive : ""
-              }`}
-              onClick={() => setSelectedMethod("upi")}
-            >
-              <span className={styles.radioLeft}>
-                <input
-                  type="radio"
-                  className={styles.radio}
-                  checked={selectedMethod === "upi"}
-                  onChange={() => setSelectedMethod("upi")}
                 />
-                <span>UPI</span>
-              </span>
-            </label>
-
-            <label
-              className={`${styles.radioItem} ${
-                selectedMethod === "netbanking" ? styles.radioItemActive : ""
-              }`}
-              onClick={() => setSelectedMethod("netbanking")}
-            >
-              <span className={styles.radioLeft}>
-                <input
-                  type="radio"
-                  className={styles.radio}
-                  checked={selectedMethod === "netbanking"}
-                  onChange={() => setSelectedMethod("netbanking")}
-                />
-                <span>Net Banking</span>
-              </span>
-            </label>
-
-            <label
-              className={`${styles.radioItem} ${
-                selectedMethod === "wallets" ? styles.radioItemActive : ""
-              }`}
-              onClick={() => setSelectedMethod("wallets")}
-            >
-              <span className={styles.radioLeft}>
-                <input
-                  type="radio"
-                  className={styles.radio}
-                  checked={selectedMethod === "wallets"}
-                  onChange={() => setSelectedMethod("wallets")}
-                />
-                <span>Wallets</span>
-              </span>
-            </label>
+                <ProductCard.Body>
+                  <ProductCard.Title>{product.title}</ProductCard.Title>
+                  <ProductCard.Subtitle>{product.shopName}</ProductCard.Subtitle>
+                  <ProductCard.Price
+                    amount={product.price}
+                    originalAmount={product.compareAtPrice ?? undefined}
+                    discountPercentage={product.discountPercent ?? undefined}
+                  />
+                  <ProductCard.Rating rating={product.avgRating} reviewsCount={product.reviewCount} />
+                </ProductCard.Body>
+              </ProductCard>
+            ))}
           </div>
-        </aside>
-      </div>
-
-      {/* Recommended Items */}
-      <section className={styles.recommendations}>
-        <div className={styles.recHeader}>
-          <Heading level={3}>You may also like</Heading>
-          <Link
-            href="/shop"
-            className={styles.viewAllLink}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              color: "var(--color-primary)",
-              fontWeight: "600",
-              fontSize: "0.875rem",
-            }}
-          >
-            <span>View all</span>
-            <ArrowRight size={14} />
-          </Link>
-        </div>
-
-        <div className={styles.productsGrid}>
-          {recommendations.map((product) => (
-            <ProductCard key={product.id} href={productHref(product)}>
-              <ProductCard.Image
-                src={productImageUrl(product)}
-                alt={product.title}
-                onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                  (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
-                }}
-              />
-              <ProductCard.Body>
-                <ProductCard.Title>{product.title}</ProductCard.Title>
-                <ProductCard.Subtitle>{product.shopName}</ProductCard.Subtitle>
-                <ProductCard.Price amount={product.price} />
-                <ProductCard.Rating
-                  rating={product.avgRating}
-                  reviewsCount={product.reviewCount}
-                />
-              </ProductCard.Body>
-            </ProductCard>
-          ))}
-        </div>
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

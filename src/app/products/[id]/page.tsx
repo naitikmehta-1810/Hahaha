@@ -4,24 +4,25 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
+  Bell,
   Heart,
-  Maximize2,
+  Minus,
+  Plus,
   Star,
   Check,
   ShoppingCart,
   ChevronDown,
-  Truck,
-  RotateCcw,
-  ShieldCheck,
-  Headphones,
   Sparkles,
   Store,
+  PackageX,
 } from "lucide-react";
 import styles from "./product-details.module.css";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
-import Button from "@/components/ui/Button/Button";
+import Button, { ButtonLink } from "@/components/ui/Button/Button";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
+import EmptyState from "@/components/ui/EmptyState/EmptyState";
+import Notice from "@/components/ui/Notice/Notice";
+import ValueProps from "@/components/ui/ValueProps/ValueProps";
+import ProductReviews from "@/components/reviews/ProductReviews";
 import { addToCart } from "@/utils/cart";
 import {
   asSpecLines,
@@ -37,7 +38,7 @@ import ProductCard from "@/components/ui/ProductCard/ProductCard";
 import { isWished, toggleWishlist } from "@/utils/wishlist";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
-import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
+import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
 
 const FALLBACK_IMAGE = FALLBACK_PRODUCT_IMAGE;
 
@@ -189,8 +190,17 @@ export default function ProductDetailsPage() {
 
   if (loading) {
     return (
-      <div className={styles.container}>
-        <Text color="muted">Loading product…</Text>
+      <div className={styles.container} aria-busy="true">
+        <div className={styles.productLayout}>
+          <div className={`${styles.skeletonBlock} ${styles.skeletonGallery}`} />
+          <div className={styles.detailsSection}>
+            <div className={`${styles.skeletonBlock} ${styles.skeletonTitle}`} />
+            <div className={`${styles.skeletonBlock} ${styles.skeletonLine}`} />
+            <div className={`${styles.skeletonBlock} ${styles.skeletonPrice}`} />
+            <div className={`${styles.skeletonBlock} ${styles.skeletonLine}`} />
+            <div className={`${styles.skeletonBlock} ${styles.skeletonLine}`} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -198,18 +208,54 @@ export default function ProductDetailsPage() {
   if (!product) {
     return (
       <div className={styles.container}>
-        <Heading level={2}>Product not found</Heading>
-        <Text color="muted">{error ?? "This product is unavailable."}</Text>
-        <Button variant="outline" onClick={() => router.push("/shop")} style={{ marginTop: 16 }}>
-          Back to shop
-        </Button>
+        <EmptyState
+          icon={<PackageX size={24} />}
+          title="Product not found"
+          description={error ?? "This product is unavailable or has been removed by the seller."}
+          action={<ButtonLink href="/shop">Browse the shop</ButtonLink>}
+        />
       </div>
     );
   }
 
+  const ratingRounded = Math.round(product.avgRating);
+  const shipMin = product.processingDays;
+  const shipMax = Math.max(product.processingDaysMax ?? shipMin + 1, shipMin);
+  const shipsIn =
+    shipMax === shipMin
+      ? shipMin === 0
+        ? "Ships today"
+        : `Ships in ${shipMin} day${shipMin === 1 ? "" : "s"}`
+      : `Ships in ${shipMin}–${shipMax} days`;
+  const description = product.description || product.shortDescription || "";
+  const longDescription = description.length > 280;
+
+  const notifyWhenBack = () => {
+    void (async () => {
+      if (!product || !selectedVariant) return;
+      if (authStatus === "loading") return;
+      if (!isAuthenticated) {
+        redirectToLogin(`/products/${product.slug}`);
+        return;
+      }
+      setNotifyBusy(true);
+      setNotifyMessage(null);
+      setActionError(null);
+      const result = await apiRequest("POST", `/api/products/${product.id}/notify-stock`, {
+        body: { variantId: selectedVariant.id },
+      });
+      setNotifyBusy(false);
+      if (result.error) {
+        setActionError(result.error);
+        return;
+      }
+      setNotifyMessage("We'll email you when this is back in stock.");
+    })();
+  };
+
   return (
     <div className={styles.container}>
-      <Breadcrumbs>
+      <Breadcrumbs className={styles.crumbs}>
         <Breadcrumbs.Item href="/">Home</Breadcrumbs.Item>
         {product.breadcrumb.map((crumb) => (
           <Breadcrumbs.Item key={crumb.id} href={`/shop?category=${encodeURIComponent(crumb.slug)}`}>
@@ -221,46 +267,55 @@ export default function ProductDetailsPage() {
 
       <div className={styles.productLayout}>
         <div className={styles.gallerySection}>
-          <div className={styles.thumbnailsList}>
-            {images.map((img, idx) => (
-              <button
-                key={`${img}-${idx}`}
-                type="button"
-                className={`${styles.thumbnailBtn} ${
-                  activeThumbnail === idx ? styles.activeThumbnailBtn : ""
-                }`}
-                onClick={() => setActiveThumbnail(idx)}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={img}
-                  alt={`Angle ${idx + 1}`}
-                  className={styles.thumbnailImg}
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = FALLBACK_IMAGE;
-                  }}
-                />
-              </button>
-            ))}
-          </div>
+          {images.length > 1 ? (
+            <div className={styles.thumbnailsList} role="tablist" aria-label="Product images">
+              {images.map((img, idx) => (
+                <button
+                  key={`${img}-${idx}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeThumbnail === idx}
+                  aria-label={`Show image ${idx + 1}`}
+                  className={`${styles.thumbnailBtn} ${
+                    activeThumbnail === idx ? styles.activeThumbnailBtn : ""
+                  }`}
+                  onClick={() => setActiveThumbnail(idx)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={optimizedImage(img, 200)}
+                    alt=""
+                    className={styles.thumbnailImg}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = FALLBACK_IMAGE;
+                    }}
+                  />
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className={styles.mainImageWrapper}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={images[activeThumbnail] ?? FALLBACK_IMAGE}
+              src={optimizedImage(images[activeThumbnail] ?? FALLBACK_IMAGE, 1200)}
               alt={product.title}
               className={styles.mainImage}
               onError={(e) => {
                 (e.target as HTMLImageElement).src = FALLBACK_IMAGE;
               }}
             />
-            <button type="button" className={styles.expandBtn} aria-label="Expand image">
-              <Maximize2 size={18} />
-            </button>
+            {product.isBestseller ? (
+              <span className={styles.imageBadge}>
+                <Sparkles size={13} aria-hidden="true" />
+                Bestseller
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={() => void handleWishlistToggle()}
               className={`${styles.likeBtn} ${liked ? styles.liked : ""}`}
-              aria-label={liked ? "Remove from wishlist" : "Add to wishlist"}
+              aria-label={liked ? "Remove from wishlist" : "Save to wishlist"}
+              aria-pressed={liked}
             >
               <Heart size={18} fill={liked ? "currentColor" : "none"} />
             </button>
@@ -269,50 +324,49 @@ export default function ProductDetailsPage() {
 
         <div className={styles.detailsSection}>
           <div className={styles.titleArea}>
-            <Heading level={2}>{product.title}</Heading>
-            <span className={styles.makerLink}>
-              Handmade by{" "}
-              <Link href={shopHref(product.shopSlug)}>
-                <strong>{product.makerName || product.shopName}</strong>
-              </Link>
-            </span>
+            <Link href={shopHref(product.shopSlug)} className={styles.shopEyebrow}>
+              <Store size={14} aria-hidden="true" />
+              {product.seller.shopName}
+            </Link>
+            <h1 className={styles.productTitle}>{product.title}</h1>
+            {product.makerName && product.makerName !== product.seller.shopName ? (
+              <span className={styles.makerLink}>Handmade by {product.makerName}</span>
+            ) : null}
           </div>
 
           <div className={styles.metaRow}>
-            <div className={styles.ratingRow}>
-              <span className={styles.stars}>
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star
-                    key={i}
-                    size={16}
-                    className={i < Math.floor(product.avgRating) ? styles.starFilled : ""}
-                  />
-                ))}
-              </span>
-              <span>{product.avgRating.toFixed(1)}</span>
-            </div>
-            <span style={{ color: "var(--color-text-light)" }}>|</span>
-            <Text size="sm" color="muted">
-              {product.reviewCount} reviews
-            </Text>
-            {product.isBestseller ? (
-              <div className={styles.bestsellerBadge}>
-                <Sparkles size={14} />
-                <span>Bestseller</span>
-              </div>
-            ) : null}
+            {product.reviewCount > 0 ? (
+              <>
+                <span className={styles.ratingRow}>
+                  <span className={styles.stars} aria-hidden="true">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star key={i} size={16} className={i < ratingRounded ? styles.starFilled : ""} />
+                    ))}
+                  </span>
+                  <span>{product.avgRating.toFixed(1)}</span>
+                </span>
+                <span className={styles.metaDivider} aria-hidden="true" />
+                <a href="#reviews" className={`${styles.metaMuted} ${styles.metaLink}`}>
+                  {product.reviewCount.toLocaleString("en-IN")} review{product.reviewCount === 1 ? "" : "s"}
+                </a>
+              </>
+            ) : (
+              <a href="#reviews" className={`${styles.metaMuted} ${styles.metaLink}`}>
+                No reviews yet
+              </a>
+            )}
           </div>
 
           <div className={styles.priceArea}>
             <div className={styles.priceRow}>
               <span className={styles.price}>₹{price.toLocaleString("en-IN")}</span>
-              {product.compareAtPrice ? (
+              {product.compareAtPrice && product.compareAtPrice > price ? (
                 <span className={styles.originalPrice}>
                   ₹{product.compareAtPrice.toLocaleString("en-IN")}
                 </span>
               ) : null}
               {product.discountPercent ? (
-                <span className={styles.discount}>-{product.discountPercent}%</span>
+                <span className={styles.discount}>{product.discountPercent}% off</span>
               ) : null}
             </div>
             <span className={styles.priceTax}>
@@ -324,63 +378,70 @@ export default function ProductDetailsPage() {
             <ul className={styles.bullets}>
               {bullets.map((bullet, idx) => (
                 <li key={idx} className={styles.bulletItem}>
-                  <Check size={16} className={styles.bulletIcon} strokeWidth={3} />
+                  <Check size={16} className={styles.bulletIcon} strokeWidth={3} aria-hidden="true" />
                   <span>{bullet}</span>
                 </li>
               ))}
             </ul>
           ) : null}
 
-          <div className={styles.stockRow}>
-            <span className={styles.stockDot}></span>
+          <div className={`${styles.stockRow} ${inStock ? "" : styles.stockRowOut}`}>
+            <span className={styles.stockDot} aria-hidden="true" />
             <span>
               {inStock
-                ? `In stock · Ships in ${product.processingDays}-${product.processingDays + 1} days`
+                ? `In stock · ${shipsIn}`
                 : "Out of stock"}
             </span>
           </div>
 
-          {product.variants.length > 1 ? (
-            <div className={styles.quantityGroup}>
-              <span className={styles.quantityLabel}>Variant</span>
-              <select
-                className={styles.qtyVal}
-                value={selectedVariant?.id}
-                onChange={(e) => setSelectedVariantId(e.target.value)}
-                style={{ padding: "8px 12px", borderRadius: 8 }}
-              >
-                {product.variants.map((variant) => {
-                  const label = Object.values(variant.optionValues).join(" · ") || variant.sku;
-                  return (
-                    <option key={variant.id} value={variant.id}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          ) : null}
+          <div className={styles.optionsRow}>
+            {product.variants.length > 1 ? (
+              <label className={styles.optionGroup}>
+                <span className={styles.quantityLabel}>Option</span>
+                <select
+                  className={styles.variantSelect}
+                  value={selectedVariant?.id}
+                  onChange={(e) => setSelectedVariantId(e.target.value)}
+                >
+                  {product.variants.map((variant) => {
+                    const label = Object.values(variant.optionValues).join(" · ") || variant.sku;
+                    return (
+                      <option key={variant.id} value={variant.id}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+            ) : null}
 
-          <div className={styles.quantityGroup}>
-            <span className={styles.quantityLabel}>Quantity</span>
-            <div className={styles.quantitySelector}>
-              <button
-                type="button"
-                className={styles.qtyBtn}
-                onClick={() => handleQtyChange("dec")}
-                disabled={busy}
-              >
-                -
-              </button>
-              <span className={styles.qtyVal}>{qty}</span>
-              <button
-                type="button"
-                className={styles.qtyBtn}
-                onClick={() => handleQtyChange("inc")}
-                disabled={busy}
-              >
-                +
-              </button>
+            <div className={styles.optionGroup}>
+              <span className={styles.quantityLabel} id="qty-label">
+                Quantity
+              </span>
+              <div className={styles.quantitySelector} role="group" aria-labelledby="qty-label">
+                <button
+                  type="button"
+                  className={styles.qtyBtn}
+                  aria-label="Decrease quantity"
+                  onClick={() => handleQtyChange("dec")}
+                  disabled={busy || qty <= 1}
+                >
+                  <Minus size={16} />
+                </button>
+                <span className={styles.qtyVal} aria-live="polite">
+                  {qty}
+                </span>
+                <button
+                  type="button"
+                  className={styles.qtyBtn}
+                  aria-label="Increase quantity"
+                  onClick={() => handleQtyChange("inc")}
+                  disabled={busy}
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -398,147 +459,81 @@ export default function ProductDetailsPage() {
                 onChange={(event) => setCustomizationNote(event.target.value)}
               />
               <span className={styles.customHint}>
-                The seller sees this on the order. Required for this product.
+                Required for this product. The maker sees this note on your order.
               </span>
             </label>
           ) : null}
 
-          {actionError ? (
-            <Text size="sm" style={{ color: "var(--color-danger)", marginBottom: 8 }}>
-              {actionError}
-            </Text>
-          ) : null}
+          {actionError ? <Notice tone="danger">{actionError}</Notice> : null}
 
-          <div className={styles.actionsRow}>
-            <Button
-              variant="primary"
-              size="lg"
-              leftIcon={<ShoppingCart size={18} />}
-              style={{ flex: 1 }}
-              onClick={handleAddToCart}
-              disabled={busy || !inStock}
-            >
-              Add to Cart
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              style={{ flex: 1 }}
-              onClick={handleBuyNow}
-              disabled={busy || !inStock}
-            >
-              Buy Now
-            </Button>
-          </div>
-
-          {!inStock && selectedVariant ? (
-            <div style={{ marginTop: 12 }}>
+          {inStock ? (
+            <div className={styles.actionsRow}>
+              <Button
+                variant="primary"
+                size="lg"
+                leftIcon={<ShoppingCart size={18} />}
+                className={styles.actionBtn}
+                onClick={handleAddToCart}
+                disabled={busy}
+              >
+                Add to cart
+              </Button>
               <Button
                 variant="outline"
                 size="lg"
-                style={{ width: "100%" }}
-                disabled={notifyBusy}
-                onClick={() => {
-                  void (async () => {
-                    if (!product || !selectedVariant) return;
-                    if (authStatus === "loading") return;
-                    if (!isAuthenticated) {
-                      redirectToLogin(`/products/${product.slug}`);
-                      return;
-                    }
-                    setNotifyBusy(true);
-                    setNotifyMessage(null);
-                    setActionError(null);
-                    const result = await apiRequest("POST", `/api/products/${product.id}/notify-stock`, {
-                      body: { variantId: selectedVariant.id },
-                    });
-                    setNotifyBusy(false);
-                    if (result.error) {
-                      setActionError(result.error);
-                      return;
-                    }
-                    setNotifyMessage("We'll email you when this is back in stock.");
-                  })();
-                }}
+                className={styles.actionBtn}
+                onClick={handleBuyNow}
+                disabled={busy}
               >
-                {notifyBusy ? "Saving…" : "Notify Me"}
+                Buy now
               </Button>
-              {notifyMessage ? (
-                <Text size="sm" color="muted" style={{ marginTop: 8 }}>
-                  {notifyMessage}
-                </Text>
-              ) : null}
+            </div>
+          ) : selectedVariant ? (
+            <div className={styles.notifyBox}>
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                leftIcon={<Bell size={18} />}
+                disabled={notifyBusy || Boolean(notifyMessage)}
+                onClick={notifyWhenBack}
+              >
+                {notifyBusy ? "Saving…" : notifyMessage ? "You'll be notified" : "Notify me when it's back"}
+              </Button>
+              {notifyMessage ? <Notice tone="success">{notifyMessage}</Notice> : null}
             </div>
           ) : null}
 
           <button
             type="button"
-            onClick={() => setLiked(!liked)}
-            className={styles.wishlistBtn}
+            onClick={() => void handleWishlistToggle()}
+            className={`${styles.wishlistBtn} ${liked ? styles.wishlistBtnOn : ""}`}
+            aria-pressed={liked}
           >
-            <Heart size={16} fill={liked ? "var(--color-danger)" : "none"} />
-            <span>Add to Wishlist</span>
+            <Heart size={16} fill={liked ? "currentColor" : "none"} />
+            <span>{liked ? "Saved to wishlist" : "Add to wishlist"}</span>
           </button>
-
-          <div style={{ marginTop: 16 }}>
-            <Link href={shopHref(product.shopSlug)} style={{ color: "var(--color-primary)" }}>
-              View shop · {product.seller.shopName}
-              {product.seller.badge ? ` · ${product.seller.badge}` : ""}
-            </Link>
-          </div>
         </div>
       </div>
 
-      <section className={styles.valueProps}>
-        <div className={styles.propItem}>
-          <Truck size={20} className={styles.propIcon} />
-          <div className={styles.propText}>
-            <span className={styles.propTitle}>Free Shipping</span>
-            <span className={styles.propDesc}>On orders over ₹499</span>
-          </div>
-        </div>
-        <div className={styles.propItem}>
-          <RotateCcw size={20} className={styles.propIcon} />
-          <div className={styles.propText}>
-            <span className={styles.propTitle}>Easy Returns</span>
-            <span className={styles.propDesc}>Within 7 days</span>
-          </div>
-        </div>
-        <div className={styles.propItem}>
-          <ShieldCheck size={20} className={styles.propIcon} />
-          <div className={styles.propText}>
-            <span className={styles.propTitle}>Secure Payments</span>
-            <span className={styles.propDesc}>100% protected</span>
-          </div>
-        </div>
-        <div className={styles.propItem}>
-          <Headphones size={20} className={styles.propIcon} />
-          <div className={styles.propText}>
-            <span className={styles.propTitle}>24/7 Support</span>
-            <span className={styles.propDesc}>We&apos;re here to help</span>
-          </div>
-        </div>
-      </section>
+      <ValueProps variant="tinted" />
 
       <section className={styles.detailsBox}>
-        <h3 className={styles.boxTitle}>Product Details</h3>
+        <h2 className={styles.boxTitle}>Product details</h2>
         <p className={styles.boxDesc}>
-          {showFullDescription
-            ? product.description || product.shortDescription
-            : (product.shortDescription || product.description || "").slice(0, 220)}
-          {!showFullDescription &&
-          (product.description || product.shortDescription || "").length > 220
-            ? "…"
-            : ""}
+          {showFullDescription || !longDescription ? description : `${description.slice(0, 280)}…`}
         </p>
-        <button
-          type="button"
-          className={styles.showMoreBtn}
-          onClick={() => setShowFullDescription((v) => !v)}
-        >
-          <span>{showFullDescription ? "Show less" : "Show more"}</span>
-          <ChevronDown size={14} />
-        </button>
+        {longDescription ? (
+          <button
+            type="button"
+            className={styles.showMoreBtn}
+            aria-expanded={showFullDescription}
+            onClick={() => setShowFullDescription((v) => !v)}
+          >
+            <span>{showFullDescription ? "Show less" : "Show more"}</span>
+            <ChevronDown size={14} className={showFullDescription ? styles.chevronUp : ""} />
+          </button>
+        ) : null}
       </section>
 
       <section className={styles.sellerCard}>
@@ -546,66 +541,52 @@ export default function ProductDetailsPage() {
           <div className={styles.sellerAvatar} aria-hidden>
             {product.seller.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={product.seller.logoUrl} alt="" />
+              <img src={optimizedImage(product.seller.logoUrl, 120)} alt="" />
             ) : (
               <Store size={22} />
             )}
           </div>
           <div>
-            <h3 className={styles.sellerName}>{product.seller.shopName}</h3>
+            <p className={styles.sellerKicker}>Sold by</p>
+            <h2 className={styles.sellerName}>
+              {product.seller.shopName}
+              {product.seller.badge ? <span className={styles.sellerBadge}>{product.seller.badge}</span> : null}
+            </h2>
             <p className={styles.sellerMeta}>
               {product.seller.rating > 0
                 ? `${product.seller.rating.toFixed(1)} shop rating · `
                 : ""}
-              {product.seller.reviewCount} reviews
-              {product.seller.badge ? ` · ${product.seller.badge}` : ""}
+              {product.seller.reviewCount.toLocaleString("en-IN")} review
+              {product.seller.reviewCount === 1 ? "" : "s"}
             </p>
           </div>
         </div>
-        <Link href={shopHref(product.shopSlug)} className={styles.sellerCta}>
+        <ButtonLink href={shopHref(product.shopSlug)} variant="outline">
           Visit shop
-        </Link>
+        </ButtonLink>
       </section>
 
-      <section className={styles.reviewsBox}>
-        <h3 className={styles.boxTitle}>Customer Reviews</h3>
-        <div className={styles.reviewsSummary}>
-          <div className={styles.reviewsScore}>
-            <span className={styles.reviewsScoreNum}>
-              {product.avgRating > 0 ? product.avgRating.toFixed(1) : "—"}
-            </span>
-            <div className={styles.reviewsStars}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Star
-                  key={i}
-                  size={16}
-                  fill={i < Math.round(product.avgRating) ? "#ffab00" : "none"}
-                  color="#ffab00"
-                />
-              ))}
-            </div>
-            <span className={styles.reviewsCount}>
-              Based on {product.reviewCount} review{product.reviewCount === 1 ? "" : "s"}
-            </span>
-          </div>
-          <Text size="sm" color="muted">
-            Verified buyers can write a review from their delivered order details. Full
-            review listings ship in a later release.
-          </Text>
-        </div>
-      </section>
+      <ProductReviews
+        productId={product.id}
+        productSlug={product.slug}
+        onReviewPosted={() => {
+          void fetchProductBySlug(product.slug).then((result) => {
+            if (result.product) setProduct(result.product);
+          });
+        }}
+      />
 
       {related.length > 0 ? (
         <section className={styles.relatedSection}>
           <div className={styles.relatedHeader}>
-            <h3 className={styles.boxTitle}>You may also like</h3>
+            <h2 className={styles.boxTitle}>You may also like</h2>
             <Link href="/shop" className={styles.relatedAll}>
               View all
             </Link>
           </div>
           <div className={styles.relatedGrid}>
             {related.map((item) => (
-              <ProductCard key={item.id} href={productHref(item)}>
+              <ProductCard key={item.id} href={productHref(item)} productId={item.id}>
                 <ProductCard.Image
                   src={productImageUrl(item) || FALLBACK_IMAGE}
                   alt={item.title}
@@ -621,10 +602,7 @@ export default function ProductDetailsPage() {
                     originalAmount={item.compareAtPrice ?? undefined}
                     discountPercentage={item.discountPercent ?? undefined}
                   />
-                  <ProductCard.Rating
-                    rating={item.avgRating}
-                    reviewsCount={item.reviewCount}
-                  />
+                  <ProductCard.Rating rating={item.avgRating} reviewsCount={item.reviewCount} />
                 </ProductCard.Body>
               </ProductCard>
             ))}

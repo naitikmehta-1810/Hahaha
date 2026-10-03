@@ -107,7 +107,7 @@ export async function openRazorpayCheckout(opts: {
     amount: opts.amountPaise,
     currency: opts.currency,
     name: "Stuffsy",
-    image: "/brand/stuffsy-logo.png",
+    image: "/brand/stuffsy-mark.png",
     description: "Order payment",
     order_id: opts.razorpayOrderId,
     prefill: {

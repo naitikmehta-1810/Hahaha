@@ -52,8 +52,34 @@ export async function removeFromWishlist(productId: string) {
 }
 
 export async function toggleWishlist(productId: string, currentlyWished: boolean) {
-  if (currentlyWished) {
-    return removeFromWishlist(productId);
+  const result = currentlyWished
+    ? await removeFromWishlist(productId)
+    : await addToWishlist(productId);
+  if (!result.error && wishedIdsPromise) {
+    const ids = await wishedIdsPromise;
+    if (currentlyWished) ids.delete(productId);
+    else ids.add(productId);
   }
-  return addToWishlist(productId);
+  return result;
+}
+
+let wishedIdsPromise: Promise<Set<string>> | null = null;
+
+/**
+ * Product ids in the signed-in user's wishlist, fetched once and shared by
+ * every product card on the page. Only call this when authenticated: the
+ * endpoint 401s for guests and would bounce them to the login page.
+ */
+export function getWishedProductIds() {
+  if (!wishedIdsPromise) {
+    wishedIdsPromise = fetchWishlist().then(
+      (result) => new Set(result.items.map((item) => item.productId))
+    );
+  }
+  return wishedIdsPromise;
+}
+
+/** Drop the cached ids, e.g. after sign-out. */
+export function resetWishedProductIds() {
+  wishedIdsPromise = null;
 }

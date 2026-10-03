@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
+import PageHeader from "@/components/ui/PageHeader/PageHeader";
+import Notice from "@/components/ui/Notice/Notice";
+import StatusPill from "@/components/ui/StatusPill/StatusPill";
 import { apiRequest } from "@/utils/api-client";
-import styles from "../admin.module.css";
+import { formatDate, rupees } from "@/utils/format";
+import ui from "@/components/console/console.module.css";
 
 type ReturnRequest = {
   id: string;
@@ -57,43 +59,51 @@ export default function AdminReturnsPage() {
     await load();
   }
 
+  const waiting = rows.filter((r) => r.status === "requested").length;
+
   return (
     <>
-      <div className={styles.headerRow}>
-        <div>
-          <Heading level={2}>Returns</Heading>
-          <Text size="sm" color="muted">
-            Approve or reject return requests
-          </Text>
+      <PageHeader
+        title="Returns"
+        description="Approve or reject return requests from buyers."
+      />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className={`${ui.card} ${ui.cardFlush}`}>
+        <div className={ui.cardHead}>
+          <div>
+            <h2 className={ui.cardTitle}>Return requests</h2>
+            <p className={ui.cardSub}>
+              {loading ? "Loading…" : `${waiting} waiting for a decision · ${rows.length} total`}
+            </p>
+          </div>
         </div>
-      </div>
-      {error ? <p className={styles.error}>{error}</p> : null}
-      {loading ? (
-        <Text color="muted">Loading…</Text>
-      ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
+        <div className={ui.tableWrap}>
+          <table className={ui.table}>
             <thead>
               <tr>
-                <th>Order #</th>
+                <th>Order</th>
                 <th>Reason</th>
-                <th>Amount</th>
                 <th>Status</th>
-                <th>Created</th>
-                <th>Actions</th>
+                <th>Requested</th>
+                <th className={ui.num}>Amount</th>
+                <th className={ui.num}>Decision</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <td>{r.orderNumber}</td>
+                  <td className={`${ui.cellPrimary} ${ui.mono}`}>{r.orderNumber}</td>
                   <td>{r.reason}</td>
-                  <td>₹{r.totalAmount.toLocaleString("en-IN")}</td>
-                  <td>{r.status}</td>
-                  <td>{new Date(r.createdAt).toLocaleString()}</td>
+                  <td>
+                    <StatusPill status={r.status} />
+                  </td>
+                  <td className={ui.nowrap}>{formatDate(r.createdAt)}</td>
+                  <td className={`${ui.num} ${ui.cellPrimary}`}>{rupees(r.totalAmount)}</td>
                   <td>
                     {r.status === "requested" ? (
-                      <div className={styles.actions}>
+                      <div className={ui.rowActions}>
                         <Button
                           size="sm"
                           variant="primary"
@@ -104,7 +114,7 @@ export default function AdminReturnsPage() {
                         </Button>
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="danger"
                           disabled={busyId === r.id}
                           onClick={() => void decide(r.id, "rejected")}
                         >
@@ -112,14 +122,14 @@ export default function AdminReturnsPage() {
                         </Button>
                       </div>
                     ) : (
-                      <span className={styles.muted}>—</span>
+                      <span className={`${ui.rowActions} ${ui.muted}`}>Decided</span>
                     )}
                   </td>
                 </tr>
               ))}
-              {rows.length === 0 ? (
+              {!loading && rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className={styles.muted}>
+                  <td colSpan={6} className={ui.emptyCell}>
                     No return requests.
                   </td>
                 </tr>
@@ -127,7 +137,7 @@ export default function AdminReturnsPage() {
             </tbody>
           </table>
         </div>
-      )}
+      </section>
     </>
   );
 }

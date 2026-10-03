@@ -17,10 +17,13 @@ import {
   Calendar,
   Barcode,
   ShieldCheck,
+  Mail,
 } from "lucide-react";
 import styles from "./order.module.css";
-import Button from "@/components/ui/Button/Button";
+import Button, { buttonClassName } from "@/components/ui/Button/Button";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
+import StatusPill from "@/components/ui/StatusPill/StatusPill";
+import { SUPPORT_EMAIL, supportMailto } from "@/utils/support";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
 import {
@@ -30,10 +33,9 @@ import {
   formatOrderDate,
   formatOrderDateTime,
   formatOrderStatusLabel,
-  orderStatusBadgeClass,
   downloadOrderInvoice,
 } from "@/utils/cart";
-import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
+import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
 
 const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
 
@@ -45,15 +47,6 @@ const STAGE_ICONS: Record<string, React.ReactNode> = {
   out_for_delivery: <ShoppingBag size={18} />,
   delivered: <Check size={18} />,
 };
-
-function badgeClass(status: string) {
-  const key = orderStatusBadgeClass(status);
-  if (key === "delivered") return styles.delivered;
-  if (key === "shipped") return styles.shipped;
-  if (key === "outForDelivery") return styles.outForDelivery;
-  if (key === "cancelled") return styles.cancelled;
-  return styles.processing;
-}
 
 function formatOptions(values: Record<string, unknown>) {
   return Object.entries(values)
@@ -155,9 +148,7 @@ export default function OrderTrackingPage() {
         <div className={styles.titleBlock}>
           <h1>
             Order #{order.orderNumber}
-            <span className={`${styles.statusBadge} ${badgeClass(order.status)}`}>
-              {formatOrderStatusLabel(order.status)}
-            </span>
+            <StatusPill status={order.status}>{formatOrderStatusLabel(order.status)}</StatusPill>
           </h1>
           <p className={styles.placedOn}>
             Placed on {formatOrderDate(order.placedAt || order.createdAt)}
@@ -229,7 +220,7 @@ export default function OrderTrackingPage() {
                     : `${formatOrderStatusLabel(order.status)}`}
             </div>
 
-            <div className={styles.deliveryGrid} style={{ marginTop: 20 }}>
+            <div className={`${styles.deliveryGrid} ${styles.deliveryGridSpaced}`}>
               <div className={styles.deliveryCell}>
                 <Calendar size={18} className={styles.deliveryCellIcon} />
                 <div>
@@ -312,21 +303,18 @@ export default function OrderTrackingPage() {
                     </div>
                   </div>
                   {events.length > 0 ? (
-                    <div
-                      className={styles.deliveryCell}
-                      style={{ gridColumn: "1 / -1", display: "block" }}
-                    >
+                    <div className={`${styles.deliveryCell} ${styles.activityCell}`}>
                       <div className={styles.deliveryCellLabel}>
                         Activity{shipment.shopName ? ` · ${shipment.shopName}` : ""}
                       </div>
-                      <ol style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+                      <ol className={styles.activityList}>
                         {events.map((ev, i) => (
-                          <li key={`${shipment.id}-${i}`} style={{ marginBottom: 8 }}>
+                          <li key={`${shipment.id}-${i}`} className={styles.activityItem}>
                             <strong>{ev.activity}</strong>
-                            <div style={{ fontSize: 12, opacity: 0.7 }}>
+                            <span>
                               {ev.date}
                               {ev.location ? ` · ${ev.location}` : ""}
-                            </div>
+                            </span>
                           </li>
                         ))}
                       </ol>
@@ -344,7 +332,7 @@ export default function OrderTrackingPage() {
               <div key={item.id} className={styles.orderItem}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={item.productThumbnailUrl || FALLBACK_THUMB}
+                  src={optimizedImage(item.productThumbnailUrl || FALLBACK_THUMB, 200)}
                   alt=""
                   className={styles.itemThumb}
                 />
@@ -426,14 +414,14 @@ export default function OrderTrackingPage() {
             <p className={styles.sidebarMuted}>
               Our support team is here to help you with this order.
             </p>
-            <div style={{ marginTop: 12 }}>
-              <Button variant="outline" fullWidth>
-                Contact Support
-              </Button>
-            </div>
-            <p className={styles.sidebarMuted} style={{ marginTop: 12 }}>
-              support@stuffsy.com · +91 1800 000 000
-            </p>
+            <a
+              href={supportMailto(`Help with order #${order.orderNumber}`)}
+              className={buttonClassName({ variant: "outline", fullWidth: true, className: styles.cardAction })}
+            >
+              <Mail size={16} aria-hidden="true" />
+              Contact support
+            </a>
+            <p className={`${styles.sidebarMuted} ${styles.cardAction}`}>{SUPPORT_EMAIL}</p>
           </div>
 
           <div className={styles.card}>

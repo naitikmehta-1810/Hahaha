@@ -3,18 +3,18 @@
 import React, { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Filter as FilterIcon,
-  ChevronDown,
-  Star,
   ChevronLeft,
   ChevronRight,
+  SearchX,
+  SlidersHorizontal,
+  Star,
+  X,
 } from "lucide-react";
 import styles from "./shop.module.css";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
 import Button from "@/components/ui/Button/Button";
 import ProductCard from "@/components/ui/ProductCard/ProductCard";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
+import EmptyState from "@/components/ui/EmptyState/EmptyState";
 import {
   buildPageNumbers,
   fetchCategories,
@@ -30,13 +30,17 @@ import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
 const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
 
 const SORT_OPTIONS: Array<{ value: ProductSort; label: string }> = [
-  { value: "popular", label: "Sort by: Popular" },
+  { value: "popular", label: "Popular" },
   { value: "featured", label: "Featured" },
-  { value: "price_asc", label: "Price: Low to High" },
-  { value: "price_desc", label: "Price: High to Low" },
-  { value: "rating", label: "Average Rating" },
+  { value: "price_asc", label: "Price: low to high" },
+  { value: "price_desc", label: "Price: high to low" },
+  { value: "rating", label: "Average rating" },
   { value: "newest", label: "Newest" },
 ];
+
+function sortFromUrl(value: string | null): ProductSort {
+  return SORT_OPTIONS.some((option) => option.value === value) ? (value as ProductSort) : "popular";
+}
 
 export default function ShopPage() {
   return (
@@ -52,6 +56,7 @@ function ShopPageInner() {
 
   const categorySlug = searchParams.get("category");
   const search = searchParams.get("search");
+  const sortParam = searchParams.get("sort");
   const pageFromUrl = Math.max(1, Number(searchParams.get("page") ?? 1) || 1);
 
   const [minPrice, setMinPrice] = useState(0);
@@ -60,7 +65,7 @@ function ShopPageInner() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(categorySlug);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [inStockOnly, setInStockOnly] = useState(false);
-  const [sort, setSort] = useState<ProductSort>("popular");
+  const [sort, setSort] = useState<ProductSort>(sortFromUrl(sortParam));
   const [page, setPage] = useState(pageFromUrl);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
@@ -76,8 +81,26 @@ function ShopPageInner() {
   }, [categorySlug, pageFromUrl]);
 
   useEffect(() => {
+    setSort(sortFromUrl(sortParam));
+  }, [sortParam]);
+
+  useEffect(() => {
     void fetchCategories().then(setCategories);
   }, []);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFiltersOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [filtersOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,14 +144,23 @@ function ShopPageInner() {
   };
   walk(categories);
 
-  const allCount = flatCategories
-    .filter((c) => !c.children?.length || categories.some((r) => r.id === c.id))
-    .reduce((sum, c) => sum + (categories.some((r) => r.id === c.id) ? c.productCount : 0), 0);
+  const allCount = categories.reduce((sum, c) => sum + c.productCount, 0);
 
   const sidebarCategories = [
-    { name: "All Items", slug: null as string | null, count: total || allCount },
+    { name: "All items", slug: null as string | null, count: allCount },
     ...categories.map((c) => ({ name: c.name, slug: c.slug, count: c.productCount })),
   ];
+
+  const selectCategory = (slug: string | null) => {
+    setSelectedCategory(slug);
+    setPage(1);
+    const params = new URLSearchParams();
+    if (slug) params.set("category", slug);
+    if (search) params.set("search", search);
+    if (sort !== "popular") params.set("sort", sort);
+    const qs = params.toString();
+    router.push(qs ? `/shop?${qs}` : "/shop");
+  };
 
   const handleClearFilters = () => {
     setMinPrice(priceBounds.min);
@@ -140,6 +172,16 @@ function ShopPageInner() {
     router.push("/shop");
   };
 
+  const categoryName = selectedCategory
+    ? flatCategories.find((c) => c.slug === selectedCategory)?.name ?? "Products"
+    : null;
+  const title = search ? `Results for “${search}”` : categoryName ?? "All products";
+  const filtersActive =
+    Boolean(selectedCategory) ||
+    selectedRating !== null ||
+    inStockOnly ||
+    (priceBounds.max > 0 && (minPrice !== priceBounds.min || maxPrice !== priceBounds.max));
+
   const showingFrom = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const showingTo = Math.min(page * pageSize, total);
 
@@ -148,48 +190,55 @@ function ShopPageInner() {
       <Breadcrumbs>
         <Breadcrumbs.Item href="/">Home</Breadcrumbs.Item>
         <Breadcrumbs.Item href="/shop">Shop</Breadcrumbs.Item>
-        <Breadcrumbs.Item active>
-          {selectedCategory
-            ? flatCategories.find((c) => c.slug === selectedCategory)?.name ?? "Products"
-            : "All Products"}
-        </Breadcrumbs.Item>
+        <Breadcrumbs.Item active>{search ? "Search" : categoryName ?? "All products"}</Breadcrumbs.Item>
       </Breadcrumbs>
 
       <div className={styles.titleSection}>
-        <Heading level={2}>All Products</Heading>
-        <div className={styles.controlsRow}>
+        <div className={styles.titleCopy}>
+          <h1 className={styles.pageTitle}>{title}</h1>
           <span className={styles.resultsText}>
             {loading
-              ? "Loading…"
-              : `Showing ${showingFrom}–${showingTo} of ${total} results`}
+              ? "Loading products…"
+              : total === 0
+                ? "No results"
+                : `Showing ${showingFrom}–${showingTo} of ${total.toLocaleString("en-IN")} results`}
           </span>
-          <select
-            className={styles.select}
-            value={sort}
-            onChange={(e) => {
-              setSort(e.target.value as ProductSort);
-              setPage(1);
-            }}
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        </div>
+        <div className={styles.controlsRow}>
           <button
             type="button"
             className={styles.filterBtn}
             onClick={() => setFiltersOpen(true)}
+            aria-expanded={filtersOpen}
+            aria-controls="shop-filters"
           >
-            <FilterIcon size={16} />
-            <span>Filter</span>
+            <SlidersHorizontal size={16} />
+            <span>Filters</span>
+            {filtersActive ? <span className={styles.filterDot} aria-label="Filters applied" /> : null}
           </button>
+          <label className={styles.sortLabel}>
+            <span className="sr-only">Sort products</span>
+            <select
+              className={styles.select}
+              value={sort}
+              onChange={(e) => {
+                setSort(e.target.value as ProductSort);
+                setPage(1);
+              }}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  Sort: {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
 
       <div className={styles.layout}>
         <aside
+          id="shop-filters"
           className={`${styles.sidebar} ${filtersOpen ? styles.sidebarOpen : ""}`}
           onClick={(e) => {
             if (e.target === e.currentTarget) setFiltersOpen(false);
@@ -201,217 +250,218 @@ function ShopPageInner() {
               <button
                 type="button"
                 className={styles.filterClose}
+                aria-label="Close filters"
                 onClick={() => setFiltersOpen(false)}
               >
-                Close
+                <X size={18} />
               </button>
             </div>
-            <div className={styles.filterGroup}>
-              <div className={styles.filterGroupTitle}>
-                <span>Categories</span>
-                <ChevronDown size={16} />
-              </div>
+
+            <fieldset className={styles.filterGroup}>
+              <legend className={styles.filterGroupTitle}>Category</legend>
               <div className={styles.checkboxList}>
-                {sidebarCategories.map((cat) => (
-                  <label key={cat.slug ?? "all"} className={styles.checkboxItem}>
-                    <span className={styles.checkboxLabel}>
-                      <input
-                        type="checkbox"
-                        className={styles.checkbox}
-                        checked={
-                          cat.slug === null
-                            ? selectedCategory === null
-                            : selectedCategory === cat.slug
-                        }
-                        onChange={() => {
-                          setSelectedCategory(cat.slug);
-                          setPage(1);
-                          const params = new URLSearchParams();
-                          if (cat.slug) params.set("category", cat.slug);
-                          if (search) params.set("search", search);
-                          const qs = params.toString();
-                          router.push(qs ? `/shop?${qs}` : "/shop");
-                        }}
-                      />
-                      <span>{cat.name}</span>
-                    </span>
-                    <span>({cat.count})</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className={styles.filterGroup}>
-              <div className={styles.filterGroupTitle}>
-                <span>Price</span>
-                <ChevronDown size={16} />
-              </div>
-              <input
-                type="range"
-                min={priceBounds.min || 0}
-                max={priceBounds.max || 1}
-                value={maxPrice || priceBounds.max || 0}
-                onChange={(e) => {
-                  setMaxPrice(Number(e.target.value));
-                  setPage(1);
-                }}
-                className={styles.rangeSlider}
-              />
-              <div className={styles.priceRangeInputs}>
-                <div className={styles.priceInputWrapper}>
-                  <span className={styles.priceSymbol}>₹</span>
-                  <input
-                    type="number"
-                    value={minPrice}
-                    onChange={(e) => {
-                      setMinPrice(Number(e.target.value));
-                      setPage(1);
-                    }}
-                    className={styles.priceInput}
-                  />
-                </div>
-                <span className={styles.priceSymbol} style={{ position: "static" }}>
-                  –
-                </span>
-                <div className={styles.priceInputWrapper}>
-                  <span className={styles.priceSymbol}>₹</span>
-                  <input
-                    type="number"
-                    value={maxPrice}
-                    onChange={(e) => {
-                      setMaxPrice(Number(e.target.value));
-                      setPage(1);
-                    }}
-                    className={styles.priceInput}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.filterGroup}>
-              <div className={styles.filterGroupTitle}>
-                <span>Rating</span>
-                <ChevronDown size={16} />
-              </div>
-              <div className={styles.ratingList}>
-                {[5, 4, 3, 2, 1].map((rating) => (
-                  <label
-                    key={rating}
-                    className={styles.ratingItem}
-                    onClick={() => {
-                      setSelectedRating(selectedRating === rating ? null : rating);
-                      setPage(1);
-                    }}
-                  >
-                    <span className={styles.checkboxLabel}>
-                      <input
-                        type="checkbox"
-                        className={styles.checkbox}
-                        checked={selectedRating === rating}
-                        onChange={() => {
-                          setSelectedRating(selectedRating === rating ? null : rating);
-                          setPage(1);
-                        }}
-                      />
-                      <span className={styles.stars}>
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star
-                            key={i}
-                            size={14}
-                            className={i < rating ? styles.starFilled : styles.starEmpty}
-                          />
-                        ))}
+                {sidebarCategories.map((cat) => {
+                  const checked =
+                    cat.slug === null ? selectedCategory === null : selectedCategory === cat.slug;
+                  return (
+                    <label
+                      key={cat.slug ?? "all"}
+                      className={`${styles.checkboxItem} ${checked ? styles.checkboxItemOn : ""}`}
+                    >
+                      <span className={styles.checkboxLabel}>
+                        <input
+                          type="radio"
+                          name="shop-category"
+                          className={styles.checkbox}
+                          checked={checked}
+                          onChange={() => selectCategory(cat.slug)}
+                        />
+                        <span>{cat.name}</span>
                       </span>
-                      <span>&amp; up</span>
-                    </span>
-                  </label>
-                ))}
+                      <span className={styles.count}>{cat.count}</span>
+                    </label>
+                  );
+                })}
               </div>
-            </div>
+            </fieldset>
 
-            <div className={styles.filterGroup}>
-              <div className={styles.filterGroupTitle}>
-                <span>Availability</span>
-                <ChevronDown size={16} />
-              </div>
-              <div className={styles.checkboxList}>
-                <label className={styles.checkboxItem}>
-                  <span className={styles.checkboxLabel}>
+            {priceBounds.max > 0 ? (
+              <fieldset className={styles.filterGroup}>
+                <legend className={styles.filterGroupTitle}>Price</legend>
+                <input
+                  type="range"
+                  min={priceBounds.min || 0}
+                  max={priceBounds.max || 1}
+                  value={maxPrice || priceBounds.max || 0}
+                  aria-label="Maximum price"
+                  onChange={(e) => {
+                    setMaxPrice(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className={styles.rangeSlider}
+                />
+                <div className={styles.priceRangeInputs}>
+                  <label className={styles.priceInputWrapper}>
+                    <span className={styles.priceSymbol}>₹</span>
                     <input
-                      type="checkbox"
-                      className={styles.checkbox}
-                      checked={inStockOnly}
+                      type="number"
+                      value={minPrice}
+                      aria-label="Minimum price"
                       onChange={(e) => {
-                        setInStockOnly(e.target.checked);
+                        setMinPrice(Number(e.target.value));
                         setPage(1);
                       }}
+                      className={styles.priceInput}
                     />
-                    <span>In Stock</span>
+                  </label>
+                  <span className={styles.priceDash} aria-hidden="true">
+                    –
                   </span>
-                </label>
-              </div>
-            </div>
+                  <label className={styles.priceInputWrapper}>
+                    <span className={styles.priceSymbol}>₹</span>
+                    <input
+                      type="number"
+                      value={maxPrice}
+                      aria-label="Maximum price"
+                      onChange={(e) => {
+                        setMaxPrice(Number(e.target.value));
+                        setPage(1);
+                      }}
+                      className={styles.priceInput}
+                    />
+                  </label>
+                </div>
+              </fieldset>
+            ) : null}
 
-            <Button
-              variant="outline"
-              fullWidth
-              className={styles.clearBtn}
-              onClick={handleClearFilters}
-            >
-              Clear All Filters
-            </Button>
+            <fieldset className={styles.filterGroup}>
+              <legend className={styles.filterGroupTitle}>Rating</legend>
+              <div className={styles.checkboxList}>
+                {[null, 4, 3, 2].map((rating) => {
+                  const checked = selectedRating === rating;
+                  return (
+                    <label
+                      key={rating ?? "any"}
+                      className={`${styles.checkboxItem} ${checked ? styles.checkboxItemOn : ""}`}
+                    >
+                      <span className={styles.checkboxLabel}>
+                        <input
+                          type="radio"
+                          name="shop-rating"
+                          className={styles.checkbox}
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedRating(rating);
+                            setPage(1);
+                          }}
+                        />
+                        {rating === null ? (
+                          <span>Any rating</span>
+                        ) : (
+                          <>
+                            <span className={styles.stars} aria-hidden="true">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star
+                                  key={i}
+                                  size={14}
+                                  className={i < rating ? styles.starFilled : styles.starEmpty}
+                                />
+                              ))}
+                            </span>
+                            <span>
+                              <span className="sr-only">{rating} stars</span> &amp; up
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <fieldset className={styles.filterGroup}>
+              <legend className={styles.filterGroupTitle}>Availability</legend>
+              <label className={styles.checkboxItem}>
+                <span className={styles.checkboxLabel}>
+                  <input
+                    type="checkbox"
+                    className={styles.checkbox}
+                    checked={inStockOnly}
+                    onChange={(e) => {
+                      setInStockOnly(e.target.checked);
+                      setPage(1);
+                    }}
+                  />
+                  <span>In stock only</span>
+                </span>
+              </label>
+            </fieldset>
+
+            <div className={styles.filterActions}>
+              <Button variant="secondary" fullWidth disabled={!filtersActive} onClick={handleClearFilters}>
+                Clear filters
+              </Button>
+              <Button variant="primary" fullWidth className={styles.applyBtn} onClick={() => setFiltersOpen(false)}>
+                Show {total.toLocaleString("en-IN")} results
+              </Button>
+            </div>
           </div>
         </aside>
 
-        <main className={styles.mainContent}>
+        <div className={styles.mainContent}>
           {!loading && products.length === 0 ? (
-            <div className={styles.emptyState}>
-              <span className={styles.emptyIcon}>🔍</span>
-              <Text size="lg" weight="medium">
-                No products match your filters
-              </Text>
-              <Text size="sm" color="muted">
-                Try adjusting the price range, category, or rating filters.
-              </Text>
-              <Button variant="outline" onClick={handleClearFilters}>
-                Clear All Filters
-              </Button>
-            </div>
+            <EmptyState
+              icon={<SearchX size={24} />}
+              title="No products match"
+              description={
+                search
+                  ? `We couldn’t find anything for “${search}”. Try a different word or clear your filters.`
+                  : "Try adjusting the price range, category, or rating filters."
+              }
+              action={
+                <Button variant="outline" onClick={handleClearFilters}>
+                  Clear all filters
+                </Button>
+              }
+            />
           ) : (
             <>
-              <div className={styles.productsGrid}>
-                {products.map((product) => (
-                  <ProductCard key={product.id} href={productHref(product)}>
-                    <ProductCard.Image
-                      src={productImageUrl(product)}
-                      alt={product.title}
-                      onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                        (e.target as HTMLImageElement).src = FALLBACK_THUMB;
-                      }}
-                    >
-                      {product.isBestseller ? (
-                        <ProductCard.Badge>Bestseller</ProductCard.Badge>
-                      ) : null}
-                    </ProductCard.Image>
-                    <ProductCard.Body>
-                      <ProductCard.Title>{product.title}</ProductCard.Title>
-                      <ProductCard.Subtitle>{product.shopName}</ProductCard.Subtitle>
-                      <ProductCard.Price
-                        amount={product.price}
-                        originalAmount={product.compareAtPrice ?? undefined}
-                        discountPercentage={product.discountPercent ?? undefined}
-                      />
-                      <ProductCard.Rating
-                        rating={product.avgRating}
-                        reviewsCount={product.reviewCount}
-                      />
-                    </ProductCard.Body>
-                  </ProductCard>
-                ))}
+              <div className={styles.productsGrid} aria-busy={loading}>
+                {loading
+                  ? Array.from({ length: 8 }).map((_, index) => <ProductCard.Skeleton key={index} />)
+                  : products.map((product) => (
+                      <ProductCard key={product.id} href={productHref(product)} productId={product.id}>
+                        <ProductCard.Image
+                          src={productImageUrl(product)}
+                          alt={product.title}
+                          onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                            (e.target as HTMLImageElement).src = FALLBACK_THUMB;
+                          }}
+                        >
+                          {product.isBestseller ? (
+                            <ProductCard.Badge>Bestseller</ProductCard.Badge>
+                          ) : null}
+                        </ProductCard.Image>
+                        <ProductCard.Body>
+                          <ProductCard.Title>{product.title}</ProductCard.Title>
+                          <ProductCard.Subtitle>{product.shopName}</ProductCard.Subtitle>
+                          <ProductCard.Price
+                            amount={product.price}
+                            originalAmount={product.compareAtPrice ?? undefined}
+                            discountPercentage={product.discountPercent ?? undefined}
+                          />
+                          <ProductCard.Rating
+                            rating={product.avgRating}
+                            reviewsCount={product.reviewCount}
+                          />
+                        </ProductCard.Body>
+                      </ProductCard>
+                    ))}
               </div>
 
               {totalPages > 1 ? (
-                <div className={styles.pagination}>
+                <nav className={styles.pagination} aria-label="Pagination">
                   <button
                     type="button"
                     className={styles.pageBtn}
@@ -424,15 +474,14 @@ function ShopPageInner() {
                   {buildPageNumbers(page, totalPages).map((entry, idx) =>
                     entry === "ellipsis" ? (
                       <span key={`e-${idx}`} className={styles.pageEllipsis}>
-                        ...
+                        …
                       </span>
                     ) : (
                       <button
                         key={entry}
                         type="button"
-                        className={`${styles.pageBtn} ${
-                          page === entry ? styles.activePageBtn : ""
-                        }`}
+                        className={`${styles.pageBtn} ${page === entry ? styles.activePageBtn : ""}`}
+                        aria-current={page === entry ? "page" : undefined}
                         onClick={() => setPage(entry)}
                       >
                         {entry}
@@ -448,11 +497,11 @@ function ShopPageInner() {
                   >
                     <ChevronRight size={16} />
                   </button>
-                </div>
+                </nav>
               ) : null}
             </>
           )}
-        </main>
+        </div>
       </div>
     </div>
   );

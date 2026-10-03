@@ -3,17 +3,16 @@ import Link from "next/link";
 import { Share2, Globe, PlayCircle } from "lucide-react";
 import styles from "./Footer.module.css";
 import BrandLogo from "@/components/brand/BrandLogo";
+import PaymentMarks from "@/components/ui/PaymentMarks/PaymentMarks";
+import { supportMailto } from "@/utils/support";
 
 export const Footer = () => {
   return (
     <footer className={styles.footerWrapper}>
       <div className={styles.footer}>
         <div className={styles.brandCol}>
-          <Link href="/" className={styles.logoArea}>
-            <span className={styles.logoIcon}>
-              <BrandLogo size={36} decorative />
-            </span>
-            Stuffsy
+          <Link href="/" className={styles.logoArea} aria-label="Stuffsy home">
+            <BrandLogo variant="lockup" size={38} decorative />
           </Link>
           <p className={styles.brandDesc}>
             Discover unique handmade treasures and crafts created by passionate artisans
@@ -106,7 +105,7 @@ export const Footer = () => {
           <h4 className={styles.linksTitle}>Help</h4>
           <ul className={styles.linksList}>
             <li>
-              <a href="mailto:support@stuffsy.in" className={styles.link}>
+              <a href={supportMailto()} className={styles.link}>
                 Contact Support
               </a>
             </li>
@@ -129,16 +128,7 @@ export const Footer = () => {
         </div>
       </div>
 
-      <div className={styles.paymentsRow}>
-        <span className={styles.paymentsLabel}>We accept</span>
-        <div className={styles.payMarks}>
-          <span className={styles.payMark}>VISA</span>
-          <span className={styles.payMark}>Mastercard</span>
-          <span className={styles.payMark}>RuPay</span>
-          <span className={styles.payMark}>UPI</span>
-          <span className={styles.payMark}>Paytm</span>
-        </div>
-      </div>
+      <PaymentMarks className={styles.paymentsRow} />
 
       <div className={styles.bottomBar}>
         <p className={styles.copyright}>

@@ -17,6 +17,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import { supportMailto } from "@/utils/support";
 import styles from "./shop.module.css";
 import Heading from "@/components/ui/Heading/Heading";
 import Text from "@/components/ui/Text/Text";
@@ -45,6 +46,7 @@ import {
   FALLBACK_PRODUCT_IMAGE,
   FALLBACK_SHOP_LOGO,
   FALLBACK_SHOP_BANNER,
+  optimizedImage,
 } from "@/utils/media";
 
 const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
@@ -110,6 +112,12 @@ function ShopStorefrontInner() {
         setShop(null);
         return;
       }
+      // The shop was renamed: this old slug still resolves, so move to the current URL.
+      if (result.shop.shopSlug && result.shop.shopSlug !== slug) {
+        const query = typeof window !== "undefined" ? window.location.search : "";
+        router.replace(`/shops/${result.shop.shopSlug}${query}`);
+        return;
+      }
       setShop(result.shop);
       setCategories(result.categories);
       setLoadError(null);
@@ -117,7 +125,7 @@ function ShopStorefrontInner() {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, router]);
 
   useEffect(() => {
     if (!slug || !shop || tab !== "shop") return;
@@ -177,10 +185,11 @@ function ShopStorefrontInner() {
     }
   };
 
+  // In-app messaging isn’t built yet, so route questions through Stuffsy support.
   const handleMessage = () => {
-    setMessageNote(
-      "Messaging isn’t available yet — Contact Shop will open seller chat in a later phase."
-    );
+    if (!shop) return;
+    window.location.href = supportMailto(`Question about ${shop.shopName}`);
+    setMessageNote(`Your email app should open. Mention “${shop.shopName}” and we’ll connect you with the maker.`);
   };
 
   if (loadError && !shop) {
@@ -251,7 +260,7 @@ function ShopStorefrontInner() {
           <div className={styles.sellerCard}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={shop.logoUrl || FALLBACK_AVATAR}
+              src={optimizedImage(shop.logoUrl || FALLBACK_AVATAR, 240)}
               alt={shop.shopName}
               className={styles.avatar}
             />
@@ -395,7 +404,7 @@ function ShopStorefrontInner() {
             </div>
             <div className={styles.bannerVisual}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={bannerSrc} alt="" className={styles.bannerImg} />
+              <img src={optimizedImage(bannerSrc, 1800)} alt="" className={styles.bannerImg} />
             </div>
           </div>
 
@@ -577,8 +586,8 @@ function ShopStorefrontInner() {
               <h3>Reviews</h3>
               <p>
                 Shop rating {shop.stats.rating.toFixed(1)} from{" "}
-                {shop.stats.reviewCount} product reviews. A dedicated shop-reviews feed
-                lands in a later phase — product reviews are available on each listing.
+                {shop.stats.reviewCount} product reviews. Read individual reviews on each
+                product page.
               </p>
             </div>
           ) : null}
@@ -589,23 +598,23 @@ function ShopStorefrontInner() {
               {shop.shopPolicies?.returns ||
               shop.shopPolicies?.shipping ||
               shop.shopPolicies?.payment ? (
-                <div style={{ display: "grid", gap: 16 }}>
+                <div className={styles.policyList}>
                   {shop.shopPolicies.returns ? (
                     <div>
                       <h4>Returns &amp; exchanges</h4>
-                      <p style={{ whiteSpace: "pre-wrap" }}>{shop.shopPolicies.returns}</p>
+                      <p className={styles.policyText}>{shop.shopPolicies.returns}</p>
                     </div>
                   ) : null}
                   {shop.shopPolicies.shipping ? (
                     <div>
                       <h4>Shipping</h4>
-                      <p style={{ whiteSpace: "pre-wrap" }}>{shop.shopPolicies.shipping}</p>
+                      <p className={styles.policyText}>{shop.shopPolicies.shipping}</p>
                     </div>
                   ) : null}
                   {shop.shopPolicies.payment ? (
                     <div>
                       <h4>Payment</h4>
-                      <p style={{ whiteSpace: "pre-wrap" }}>{shop.shopPolicies.payment}</p>
+                      <p className={styles.policyText}>{shop.shopPolicies.payment}</p>
                     </div>
                   ) : null}
                 </div>

@@ -3,8 +3,30 @@
 import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ArrowRight,
+  Bell,
+  Calendar,
+  CreditCard,
+  Edit3,
+  Heart,
+  LayoutDashboard,
+  LogOut,
+  Mail,
+  MapPin,
+  Menu,
+  Phone,
+  Settings as SettingsIcon,
+  ShieldCheck,
+  ShoppingBag,
+  Star,
+  Store,
+  Trash2,
+  User,
+  X,
+} from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { redirectToLogin } from "@/utils/api-client";
+import { apiRequest, redirectToLogin } from "@/utils/api-client";
 import {
   fetchOrderDetail,
   fetchOrders,
@@ -15,17 +37,59 @@ import {
   updateMyProfile,
   uploadMyAvatar,
   formatOrderStatusLabel,
-  orderStatusBadgeClass,
   type OrderListItem,
   type AddressRecord,
 } from "@/utils/cart";
-import {
-  fetchWishlist,
-  removeFromWishlist,
-  type WishlistItem,
-} from "@/utils/wishlist";
+import { fetchWishlist, toggleWishlist, type WishlistItem } from "@/utils/wishlist";
 import { productHref } from "@/utils/catalog";
-import { FALLBACK_PRODUCT_IMAGE } from "@/utils/media";
+import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
+import styles from "./account.module.css";
+import Button, { ButtonLink } from "@/components/ui/Button/Button";
+import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
+import EmptyState from "@/components/ui/EmptyState/EmptyState";
+import Notice, { type NoticeTone } from "@/components/ui/Notice/Notice";
+import StatusPill from "@/components/ui/StatusPill/StatusPill";
+import Sidebar from "@/components/layout/Sidebar/Sidebar";
+import MyReviews from "@/components/reviews/MyReviews";
+
+type TabKey =
+  | "dashboard"
+  | "orders"
+  | "wishlist"
+  | "reviews"
+  | "addresses"
+  | "payment-methods"
+  | "profile-details"
+  | "notifications"
+  | "settings";
+
+const TABS: Array<{ key: TabKey; label: string; Icon: typeof User }> = [
+  { key: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
+  { key: "orders", label: "Orders", Icon: ShoppingBag },
+  { key: "wishlist", label: "Wishlist", Icon: Heart },
+  { key: "reviews", label: "Reviews", Icon: Star },
+  { key: "addresses", label: "Addresses", Icon: MapPin },
+  { key: "payment-methods", label: "Payment methods", Icon: CreditCard },
+  { key: "profile-details", label: "Profile details", Icon: User },
+  { key: "notifications", label: "Notifications", Icon: Bell },
+  { key: "settings", label: "Settings", Icon: SettingsIcon },
+];
+
+const TAB_TITLES: Record<TabKey, { title: string; description: string }> = {
+  dashboard: { title: "My account", description: "" },
+  orders: { title: "Your orders", description: "Track, review and manage everything you’ve ordered." },
+  wishlist: { title: "Wishlist", description: "Pieces you’ve saved for later." },
+  reviews: { title: "Reviews", description: "Ratings you’ve shared with makers." },
+  addresses: { title: "Addresses", description: "Where we deliver your orders." },
+  "payment-methods": { title: "Payment methods", description: "How you pay on Stuffsy." },
+  "profile-details": { title: "Profile details", description: "Your name, photo and password." },
+  notifications: { title: "Notifications", description: "Choose what we tell you about, and how." },
+  settings: { title: "Settings", description: "Account preferences." },
+};
+
+function isTab(value: string | null): value is TabKey {
+  return TABS.some((tab) => tab.key === value);
+}
 
 function initialsFromName(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -33,34 +97,16 @@ function initialsFromName(name: string) {
   return letters.toUpperCase() || "U";
 }
 
-import {
-  LayoutDashboard,
-  ShoppingBag,
-  Heart,
-  Star,
-  MapPin,
-  CreditCard,
-  User,
-  Bell,
-  Store,
-  Settings as SettingsIcon,
-  LogOut,
-  Mail,
-  Phone,
-  Edit3,
-  Calendar,
-  ShieldCheck,
-  ArrowRight,
-  Menu,
-  X,
-} from "lucide-react";
-import styles from "./account.module.css";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
-import Button from "@/components/ui/Button/Button";
-import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
-import Sidebar from "@/components/layout/Sidebar/Sidebar";
-import { apiRequest } from "@/utils/api-client";
+const EMPTY_ADDRESS = {
+  label: "Home",
+  recipientName: "",
+  phoneNumber: "",
+  line1: "",
+  line2: "",
+  city: "",
+  state: "",
+  postalCode: "",
+};
 
 type DisplayOrder = {
   id: string;
@@ -85,7 +131,7 @@ type PrefsState = {
 function NotificationPrefsPanel() {
   const [prefs, setPrefs] = useState<PrefsState | null>(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ tone: NoticeTone; text: string } | null>(null);
   const [pushConfigured, setPushConfigured] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
 
@@ -102,149 +148,132 @@ function NotificationPrefsPanel() {
   }, []);
 
   if (!prefs) {
-    return (
-      <Text size="sm" color="muted">
-        Loading preferences…
-      </Text>
-    );
+    return <p className={styles.muted}>Loading preferences…</p>;
   }
 
   const rows: Array<{ key: keyof PrefsState; label: string; hint: string }> = [
     {
       key: "orderUpdates",
       label: "Order updates",
-      hint: "Email + push: confirmation, shipping, out for delivery, delivered",
+      hint: "Confirmation, shipping, out for delivery and delivered.",
     },
     {
       key: "marketing",
       label: "Offers & discounts",
-      hint: "Email + push: coupon campaigns from Stuffsy",
+      hint: "Coupon campaigns from Stuffsy.",
     },
     {
       key: "priceDrop",
       label: "Cart price drops",
-      hint: "Email + push: when an item in your cart gets cheaper",
+      hint: "When an item in your cart gets cheaper.",
     },
     {
       key: "abandonedCart",
       label: "Cart reminders",
-      hint: "Email + push: when you leave items in your cart",
+      hint: "When you leave items in your cart.",
     },
     {
       key: "recentlyViewed",
       label: "Recently viewed digests",
-      hint: "Email + push: occasional reminders of pieces you browsed",
+      hint: "Occasional reminders of pieces you browsed.",
     },
   ];
 
-  return (
-    <div>
-      <Text size="sm" color="muted" style={{ marginBottom: 12 }}>
-        Transactional auth emails (verify / reset password) are always sent by email.
-        Order and marketing alerts go by email and browser push when enabled.
-      </Text>
+  const runPush = (mode: "enable" | "disable") => {
+    void (async () => {
+      setPushBusy(true);
+      setMessage(null);
+      const push = await import("@/utils/push");
+      const result = mode === "enable" ? await push.enableBrowserPush() : await push.disableBrowserPush();
+      setPushBusy(false);
+      setMessage({ tone: "info", text: result.message });
+    })();
+  };
 
-      <div
-        style={{
-          marginBottom: 16,
-          padding: "12px 0",
-          borderBottom: "1px solid #eee",
-        }}
-      >
-        <strong>Browser push</strong>
-        <div style={{ fontSize: 13, opacity: 0.7, margin: "4px 0 10px" }}>
-          {pushConfigured
-            ? "Allow notifications in this browser to get live order updates on your device."
-            : "Push is not configured on the server yet (missing VAPID keys). Email still works."}
+  return (
+    <div className={styles.stack}>
+      <section className={styles.panel}>
+        <div className={styles.panelHead}>
+          <div>
+            <h2 className={styles.panelTitle}>Browser notifications</h2>
+            <p className={styles.panelSub}>
+              {pushConfigured
+                ? "Get live order updates on this device."
+                : "Browser push isn’t available yet. Email notifications still work."}
+            </p>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className={styles.buttonRow}>
           <Button
             variant="primary"
             size="sm"
+            leftIcon={<Bell size={14} />}
             disabled={pushBusy || !pushConfigured}
-            onClick={() => {
-              void (async () => {
-                setPushBusy(true);
-                setMessage(null);
-                const { enableBrowserPush } = await import("@/utils/push");
-                const result = await enableBrowserPush();
-                setPushBusy(false);
-                setMessage(result.message);
-              })();
-            }}
+            onClick={() => runPush("enable")}
           >
-            {pushBusy ? "Working…" : "Enable browser notifications"}
+            {pushBusy ? "Working…" : "Enable on this device"}
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={pushBusy}
-            onClick={() => {
-              void (async () => {
-                setPushBusy(true);
-                setMessage(null);
-                const { disableBrowserPush } = await import("@/utils/push");
-                const result = await disableBrowserPush();
-                setPushBusy(false);
-                setMessage(result.message);
-              })();
-            }}
-          >
-            Disable on this device
+          <Button variant="secondary" size="sm" disabled={pushBusy} onClick={() => runPush("disable")}>
+            Turn off on this device
           </Button>
         </div>
-      </div>
+      </section>
 
-      {rows.map((row) => (
-        <label
-          key={row.key}
-          className={styles.prefRow}
-        >
-          <input
-            type="checkbox"
-            checked={prefs[row.key]}
+      <section className={styles.panel}>
+        <div className={styles.panelHead}>
+          <div>
+            <h2 className={styles.panelTitle}>What we send you</h2>
+            <p className={styles.panelSub}>
+              By email, and by browser push when enabled. Sign-in and password emails are always sent.
+            </p>
+          </div>
+        </div>
+        <div className={styles.prefList}>
+          {rows.map((row) => (
+            <label key={row.key} className={styles.prefRow}>
+              <span className={styles.prefCopy}>
+                <strong>{row.label}</strong>
+                <span className={styles.prefHint}>{row.hint}</span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                className={styles.switch}
+                checked={prefs[row.key]}
+                disabled={saving}
+                onChange={(e) => setPrefs((p) => (p ? { ...p, [row.key]: e.target.checked } : p))}
+              />
+            </label>
+          ))}
+        </div>
+        {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+        <div className={styles.panelActions}>
+          <Button
+            variant="primary"
             disabled={saving}
-            onChange={(e) => setPrefs((p) => (p ? { ...p, [row.key]: e.target.checked } : p))}
-            style={{ marginTop: 4 }}
-          />
-          <span>
-            <strong>{row.label}</strong>
-            <div className={styles.prefHint}>{row.hint}</div>
-          </span>
-        </label>
-      ))}
-      <div style={{ marginTop: 16 }}>
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={saving}
-          onClick={() => {
-            void (async () => {
-              setSaving(true);
-              setMessage(null);
-              const result = await apiRequest<{ prefs: PrefsState }>(
-                "PATCH",
-                "/api/account/notification-prefs",
-                { body: prefs }
-              );
-              setSaving(false);
-              if (result.error) {
-                setMessage(result.error);
-                return;
-              }
-              if (result.data?.prefs) setPrefs(result.data.prefs);
-              setMessage("Saved.");
-            })();
-          }}
-        >
-          {saving ? "Saving…" : "Save preferences"}
-        </Button>
-      </div>
-      {message ? (
-        <Text size="sm" style={{ marginTop: 8 }}>
-          {message}
-        </Text>
-      ) : null}
+            onClick={() => {
+              void (async () => {
+                setSaving(true);
+                setMessage(null);
+                const result = await apiRequest<{ prefs: PrefsState }>(
+                  "PATCH",
+                  "/api/account/notification-prefs",
+                  { body: prefs }
+                );
+                setSaving(false);
+                if (result.error) {
+                  setMessage({ tone: "danger", text: result.error });
+                  return;
+                }
+                if (result.data?.prefs) setPrefs(result.data.prefs);
+                setMessage({ tone: "success", text: "Preferences saved." });
+              })();
+            }}
+          >
+            {saving ? "Saving…" : "Save preferences"}
+          </Button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -261,14 +290,14 @@ function mapOrdersForDisplay(
       title:
         order.previewTitle ??
         firstItem?.productTitle ??
-        `Order · ${order.itemCount} item(s)`,
+        `Order · ${order.itemCount} item${order.itemCount === 1 ? "" : "s"}`,
       date: new Date(order.createdAt).toLocaleDateString("en-IN", {
         year: "numeric",
         month: "short",
         day: "numeric",
       }),
       price: order.totalAmount,
-      qty: firstItem?.quantity ?? order.itemCount,
+      qty: order.itemCount,
       status: formatOrderStatusLabel(order.status),
       statusKey: order.status,
       image:
@@ -285,7 +314,7 @@ export default function AccountPage() {
     <Suspense
       fallback={
         <div className={styles.container}>
-          <Text>Loading account…</Text>
+          <p className={styles.muted}>Loading account…</p>
         </div>
       }
     >
@@ -300,14 +329,11 @@ function AccountPageInner() {
   const { user: sessionUser, status: authStatus, logout, refreshSession, setUser } = useAuth();
   const tabParam = searchParams.get("tab");
   const pendingOrderId = searchParams.get("pending");
-  const [activeTab, setActiveTab] = useState(tabParam ?? "dashboard");
+  const [activeTab, setActiveTab] = useState<TabKey>(isTab(tabParam) ? tabParam : "dashboard");
   const [recentOrders, setRecentOrders] = useState<DisplayOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersTotal, setOrdersTotal] = useState(0);
-  const [addressCount, setAddressCount] = useState(0);
   const [addresses, setAddresses] = useState<AddressRecord[]>([]);
-  const [defaultAddressLabel, setDefaultAddressLabel] = useState(
-    "Add an address to get started"
-  );
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [profileName, setProfileName] = useState("");
@@ -315,29 +341,21 @@ function AccountPageInner() {
   const [profileDob, setProfileDob] = useState("");
   const [profileGender, setProfileGender] = useState("");
   const [profileBusy, setProfileBusy] = useState(false);
-  const [profileMsg, setProfileMsg] = useState<string | null>(null);
+  const [profileMsg, setProfileMsg] = useState<{ tone: NoticeTone; text: string } | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
-  const [passwordMsg, setPasswordMsg] = useState<string | null>(null);
+  const [passwordMsg, setPasswordMsg] = useState<{ tone: NoticeTone; text: string } | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [addressBusy, setAddressBusy] = useState(false);
-  const [newAddress, setNewAddress] = useState({
-    label: "Home",
-    recipientName: "",
-    phoneNumber: "",
-    line1: "",
-    line2: "",
-    city: "",
-    state: "",
-    postalCode: "",
-  });
+  const [addressMsg, setAddressMsg] = useState<{ tone: NoticeTone; text: string } | null>(null);
+  const [newAddress, setNewAddress] = useState(EMPTY_ADDRESS);
   const [wishlistCount, setWishlistCount] = useState(0);
 
   useEffect(() => {
-    if (tabParam) {
+    if (isTab(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -345,6 +363,15 @@ function AccountPageInner() {
   useEffect(() => {
     setNavOpen(false);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNavOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [navOpen]);
 
   useEffect(() => {
     if (authStatus === "ready" && !sessionUser) {
@@ -360,41 +387,29 @@ function AccountPageInner() {
     let cancelled = false;
 
     void (async () => {
+      setOrdersLoading(true);
       const list = await fetchOrders(1, activeTab === "orders" ? 20 : 5);
       if (cancelled) return;
 
+      // Only fetch full details for orders the list endpoint did not preview.
       const detailEntries = await Promise.all(
-        list.orders.slice(0, activeTab === "orders" ? 10 : 3).map(async (order) => {
-          const detail = await fetchOrderDetail(order.id);
-          return [order.id, detail] as const;
-        })
+        list.orders
+          .filter((order) => !order.previewTitle || !order.previewThumbnailUrl)
+          .slice(0, activeTab === "orders" ? 10 : 3)
+          .map(async (order) => {
+            const detail = await fetchOrderDetail(order.id);
+            return [order.id, detail] as const;
+          })
       );
       if (cancelled) return;
 
       setOrdersTotal(list.total);
       setRecentOrders(mapOrdersForDisplay(list.orders, new Map(detailEntries)));
+      setOrdersLoading(false);
 
-      const addresses = await fetchAddresses();
+      const addressList = await fetchAddresses();
       if (!cancelled) {
-        setAddresses(addresses);
-        setAddressCount(addresses.length);
-        const defaultAddress =
-          addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
-        if (defaultAddress) {
-          setDefaultAddressLabel(
-            [
-              defaultAddress.line1,
-              defaultAddress.line2,
-              defaultAddress.city,
-              defaultAddress.state,
-              defaultAddress.postalCode,
-            ]
-              .filter(Boolean)
-              .join(", ")
-          );
-        } else {
-          setDefaultAddressLabel("Add an address to get started");
-        }
+        setAddresses(addressList);
       }
 
       if (!cancelled) {
@@ -410,10 +425,11 @@ function AccountPageInner() {
           fromList?.status ??
           (await fetchOrderDetail(pendingOrderId))?.status ??
           "pending_payment";
+        const ref = fromList?.orderNumber ? `#${fromList.orderNumber}` : "Your order";
         setPendingNotice(
           status === "pending_payment"
-            ? `Order ${pendingOrderId.slice(0, 8)}… is awaiting payment. Complete checkout when Razorpay is enabled (Phase 4).`
-            : `Order ${pendingOrderId.slice(0, 8)}… was placed (${formatOrderStatusLabel(status)}).`
+            ? `${ref} is waiting for payment. Complete payment to confirm it.`
+            : `${ref} was placed (${formatOrderStatusLabel(status)}).`
         );
       }
 
@@ -429,19 +445,28 @@ function AccountPageInner() {
     };
   }, [authStatus, sessionUser, activeTab, pendingOrderId]);
 
+  const changeTab = (tab: TabKey) => {
+    setActiveTab(tab);
+    setNavOpen(false);
+    router.replace(tab === "dashboard" ? "/account" : `/account?tab=${tab}`, { scroll: false });
+  };
+
+  const defaultAddress = addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
+  const memberSinceDate = sessionUser?.createdAt ? new Date(sessionUser.createdAt) : null;
+
   const user = {
     name: sessionUser?.fullName ?? "",
     email: sessionUser?.email ?? "",
-    phone: sessionUser?.phoneNumber ?? "Not set",
-    memberSince: sessionUser?.createdAt
-      ? new Date(sessionUser.createdAt).toLocaleDateString("en-IN", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        })
-      : "",
-    status: sessionUser?.status === "active" ? "Active" : (sessionUser?.status ?? ""),
-    address: defaultAddressLabel,
+    phone: sessionUser?.phoneNumber || "Not added",
+    memberSince: memberSinceDate
+      ? memberSinceDate.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" })
+      : "—",
+    status: sessionUser?.status ?? "active",
+    address: defaultAddress
+      ? [defaultAddress.line1, defaultAddress.line2, defaultAddress.city, defaultAddress.state, defaultAddress.postalCode]
+          .filter(Boolean)
+          .join(", ")
+      : "No address saved yet",
     avatarUrl: sessionUser?.avatarUrl ?? null,
     avatarInitials: initialsFromName(sessionUser?.fullName ?? ""),
     emailVerified: Boolean(sessionUser?.emailVerifiedAt),
@@ -449,67 +474,122 @@ function AccountPageInner() {
 
   const stats = [
     {
-      val: String(ordersTotal),
-      label: "Total Orders",
-      linkText: "View all orders",
-      href: "/account?tab=orders",
-      icon: <ShoppingBag size={20} />,
-      bg: "#f5f3ff",
-      color: "var(--color-primary)",
+      val: ordersTotal.toLocaleString("en-IN"),
+      label: "Orders",
+      tab: "orders" as TabKey,
+      linkText: "View orders",
+      Icon: ShoppingBag,
+      tone: styles.toneViolet,
     },
     {
-      val: String(wishlistCount),
-      label: "Wishlist Items",
+      val: wishlistCount.toLocaleString("en-IN"),
+      label: "Wishlist items",
+      tab: "wishlist" as TabKey,
       linkText: "View wishlist",
-      href: "/account?tab=wishlist",
-      icon: <Heart size={20} />,
-      bg: "#fff5f5",
-      color: "var(--color-danger)",
+      Icon: Heart,
+      tone: styles.toneRed,
     },
     {
-      val: "—",
-      label: "Reviews Given",
-      linkText: "Not available yet",
-      href: "/account?tab=reviews",
-      icon: <Star size={20} />,
-      bg: "#fffbeb",
-      color: "var(--color-warning)",
-    },
-    {
-      val: String(addressCount),
-      label: "Saved Addresses",
+      val: addresses.length.toLocaleString("en-IN"),
+      label: "Saved addresses",
+      tab: "addresses" as TabKey,
       linkText: "Manage addresses",
-      href: "/account?tab=addresses",
-      icon: <MapPin size={20} />,
-      bg: "#eff6ff",
-      color: "var(--color-info)",
+      Icon: MapPin,
+      tone: styles.toneBlue,
+    },
+    {
+      val: memberSinceDate
+        ? memberSinceDate.toLocaleDateString("en-IN", { month: "short", year: "numeric" })
+        : "—",
+      label: "Member since",
+      tab: "profile-details" as TabKey,
+      linkText: "Edit profile",
+      Icon: Calendar,
+      tone: styles.toneAmber,
     },
   ];
 
   if (authStatus !== "ready" || !sessionUser) {
     return (
       <div className={styles.container}>
-        <Text>Checking your session...</Text>
+        <p className={styles.muted}>Checking your session…</p>
       </div>
     );
   }
+
+  const avatar = (className: string) =>
+    user.avatarUrl ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={optimizedImage(user.avatarUrl, 160)} alt="" className={className} />
+    ) : (
+      <div className={className} aria-hidden>
+        {user.avatarInitials}
+      </div>
+    );
+
+  const ordersList = (
+    <div className={styles.ordersList}>
+      {ordersLoading && recentOrders.length === 0 ? <p className={styles.muted}>Loading orders…</p> : null}
+      {!ordersLoading && recentOrders.length === 0 ? (
+        <EmptyState
+          bare
+          icon={<ShoppingBag size={22} />}
+          title="No orders yet"
+          description="When you place an order, you can track it here."
+          action={<ButtonLink href="/shop" size="sm">Start shopping</ButtonLink>}
+        />
+      ) : null}
+      {recentOrders.map((order) => (
+        <Link key={order.id} href={`/orders/${order.id}/details`} className={styles.orderRow}>
+          <div className={styles.orderImgWrapper}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={optimizedImage(order.image, 160)}
+              alt=""
+              className={styles.orderImg}
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
+              }}
+            />
+          </div>
+          <div className={styles.orderInfo}>
+            <span className={styles.orderTitle}>{order.title}</span>
+            <span className={styles.orderId}>
+              #{order.orderNumber || order.id.slice(0, 8)} · {order.date}
+            </span>
+          </div>
+          <div className={styles.orderMeta}>
+            <span className={styles.orderPrice}>₹{order.price.toLocaleString("en-IN")}</span>
+            <StatusPill status={order.statusKey}>{order.status}</StatusPill>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+
+  const heading = TAB_TITLES[activeTab];
 
   return (
     <div className={styles.container}>
       <Breadcrumbs>
         <Breadcrumbs.Item href="/">Home</Breadcrumbs.Item>
-        <Breadcrumbs.Item active>My Account</Breadcrumbs.Item>
+        {activeTab === "dashboard" ? (
+          <Breadcrumbs.Item active>My account</Breadcrumbs.Item>
+        ) : (
+          <Breadcrumbs.Item href="/account">My account</Breadcrumbs.Item>
+        )}
+        {activeTab !== "dashboard" ? <Breadcrumbs.Item active>{heading.title}</Breadcrumbs.Item> : null}
       </Breadcrumbs>
 
       <div className={styles.layout}>
         <button
           type="button"
           className={styles.menuToggle}
-          aria-label={navOpen ? "Close account menu" : "Open account menu"}
+          aria-expanded={navOpen}
           onClick={() => setNavOpen((open) => !open)}
         >
           {navOpen ? <X size={16} /> : <Menu size={16} />}
-          Account menu
+          {TABS.find((tab) => tab.key === activeTab)?.label ?? "Account menu"}
         </button>
         {navOpen ? (
           <button
@@ -520,107 +600,38 @@ function AccountPageInner() {
           />
         ) : null}
         <Sidebar open={navOpen}>
+          <div className={styles.sidebarUser}>
+            {avatar(styles.sidebarAvatar)}
+            <div className={styles.sidebarUserText}>
+              <strong>{user.name || "Your account"}</strong>
+              <span>{user.email}</span>
+            </div>
+          </div>
           <Sidebar.Nav>
-            <Sidebar.Item
-              icon={<LayoutDashboard size={18} />}
-              active={activeTab === "dashboard"}
-              onClick={() => {
-                setActiveTab("dashboard");
-                setNavOpen(false);
-              }}
-            >
-              Dashboard
-            </Sidebar.Item>
-            <Sidebar.Item
-              icon={<ShoppingBag size={18} />}
-              active={activeTab === "orders"}
-              onClick={() => {
-                setActiveTab("orders");
-                setNavOpen(false);
-              }}
-            >
-              Orders
-            </Sidebar.Item>
-            <Sidebar.Item
-              icon={<Heart size={18} />}
-              active={activeTab === "wishlist"}
-              onClick={() => {
-                setActiveTab("wishlist");
-                setNavOpen(false);
-              }}
-            >
-              Wishlist
-            </Sidebar.Item>
-            <Sidebar.Item
-              icon={<Star size={18} />}
-              active={activeTab === "reviews"}
-              onClick={() => {
-                setActiveTab("reviews");
-                setNavOpen(false);
-              }}
-            >
-              Reviews
-            </Sidebar.Item>
-            <Sidebar.Item
-              icon={<MapPin size={18} />}
-              active={activeTab === "addresses"}
-              onClick={() => {
-                setActiveTab("addresses");
-                setNavOpen(false);
-              }}
-            >
-              Addresses
-            </Sidebar.Item>
-            <Sidebar.Item
-              icon={<CreditCard size={18} />}
-              active={activeTab === "payment-methods"}
-              onClick={() => {
-                setActiveTab("payment-methods");
-                setNavOpen(false);
-              }}
-            >
-              Payment Methods
-            </Sidebar.Item>
-            <Sidebar.Item
-              icon={<User size={18} />}
-              active={activeTab === "profile-details"}
-              onClick={() => {
-                setActiveTab("profile-details");
-                setNavOpen(false);
-              }}
-            >
-              Profile Details
-            </Sidebar.Item>
-            <Sidebar.Item
-              icon={<Bell size={18} />}
-              active={activeTab === "notifications"}
-              onClick={() => {
-                setActiveTab("notifications");
-                setNavOpen(false);
-              }}
-            >
-              Notifications
-            </Sidebar.Item>
+            {TABS.map((tab) => (
+              <Sidebar.Item
+                key={tab.key}
+                icon={<tab.Icon size={18} />}
+                active={activeTab === tab.key}
+                onClick={() => changeTab(tab.key)}
+              >
+                {tab.label}
+              </Sidebar.Item>
+            ))}
+            {sessionUser.isSeller || sessionUser.role === "admin" ? (
+              <span className={styles.navDivider} role="separator" />
+            ) : null}
             {sessionUser.isSeller ? (
               <Sidebar.Item icon={<Store size={18} />} href="/seller" onClick={() => setNavOpen(false)}>
-                Seller panel
+                Seller hub
               </Sidebar.Item>
             ) : null}
             {sessionUser.role === "admin" ? (
               <Sidebar.Item icon={<ShieldCheck size={18} />} href="/admin" onClick={() => setNavOpen(false)}>
-                Admin panel
+                Admin console
               </Sidebar.Item>
             ) : null}
-            <Sidebar.Item
-              icon={<SettingsIcon size={18} />}
-              active={activeTab === "settings"}
-              onClick={() => {
-                setActiveTab("settings");
-                setNavOpen(false);
-              }}
-            >
-              Settings
-            </Sidebar.Item>
+            <span className={styles.navDivider} role="separator" />
             <Sidebar.Item
               icon={<LogOut size={18} />}
               onClick={() => {
@@ -630,461 +641,396 @@ function AccountPageInner() {
                 });
               }}
             >
-              Logout
+              Sign out
             </Sidebar.Item>
           </Sidebar.Nav>
 
           {sessionUser.isSeller ? null : (
             <Sidebar.Callout
               title="Sell on Stuffsy"
-              description="Start your online store and grow your business with us."
-              buttonText="Start Selling"
-              onButtonClick={() => (window.location.href = "/sell")}
+              description="Open your own shop and reach buyers across India."
+              buttonText="Start selling"
+              onButtonClick={() => router.push("/sell")}
             />
           )}
         </Sidebar>
 
-        <main className={styles.mainContent}>
+        <div className={styles.mainContent}>
           <div className={styles.headerArea}>
-            <Heading level={2}>My Account</Heading>
-            <span className={styles.welcomeText}>
-              Welcome back, <strong>{user.name}</strong>! 👋
-            </span>
+            <h1 className={styles.pageTitle}>{heading.title}</h1>
+            <p className={styles.welcomeText}>
+              {activeTab === "dashboard"
+                ? `Welcome back${user.name ? `, ${user.name.split(/\s+/)[0]}` : ""}.`
+                : heading.description}
+            </p>
           </div>
 
-          {pendingNotice && (
-            <div className={styles.pendingPaymentNotice} role="status">
-              {pendingNotice}
-            </div>
-          )}
+          {pendingNotice ? <Notice tone="warning">{pendingNotice}</Notice> : null}
 
-          {activeTab !== "profile-details" ? (
-          <>
-          <div className={styles.profileCard}>
-            <div className={styles.profileLeft}>
-              {user.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.avatarUrl} alt="" className={styles.avatar} />
-              ) : (
-                <div className={styles.avatar} aria-hidden>
-                  {user.avatarInitials}
-                </div>
-              )}
-              <div className={styles.profileDetails}>
-                <div className={styles.nameRow}>
-                  <Heading level={3}>{user.name}</Heading>
-                  {user.emailVerified ? (
-                  <span className={styles.verifiedBadge}>Verified</span>
-                  ) : (
-                    <span className={styles.verifiedBadge}>Unverified</span>
-                  )}
-                </div>
-                <div className={styles.contactRow}>
-                  <div className={styles.contactItem}>
-                    <Mail size={14} />
-                    <span>{user.email}</span>
-                  </div>
-                  <div className={styles.contactItem}>
-                    <Phone size={14} />
-                    <span>{user.phone}</span>
+          {activeTab === "dashboard" ? (
+            <>
+              <section className={styles.profileCard}>
+                <div className={styles.profileLeft}>
+                  {avatar(styles.avatar)}
+                  <div className={styles.profileDetails}>
+                    <div className={styles.nameRow}>
+                      <h2 className={styles.profileName}>{user.name}</h2>
+                      {user.emailVerified ? (
+                        <StatusPill tone="success">Verified</StatusPill>
+                      ) : (
+                        <StatusPill tone="warning">Email not verified</StatusPill>
+                      )}
+                    </div>
+                    <div className={styles.contactRow}>
+                      <span className={styles.contactItem}>
+                        <Mail size={14} />
+                        {user.email}
+                      </span>
+                      <span className={styles.contactItem}>
+                        <Phone size={14} />
+                        {user.phone}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Edit3 size={14} />}
-              onClick={() => setActiveTab("profile-details")}
-            >
-              Edit Profile
-            </Button>
-          </div>
-
-          <div className={styles.statsRow}>
-            {stats.map((stat, idx) => (
-              <div key={idx} className={styles.statCard}>
-                <div
-                  className={styles.statIconWrapper}
-                  style={{ backgroundColor: stat.bg, color: stat.color }}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<Edit3 size={14} />}
+                  onClick={() => changeTab("profile-details")}
                 >
-                  {stat.icon}
-                </div>
-                <div className={styles.statValCol}>
-                  <span className={styles.statNumber}>{stat.val}</span>
-                  <span className={styles.statLabel}>{stat.label}</span>
-                  <Link href={stat.href} className={styles.statLink}>
-                    <span>{stat.linkText}</span>
-                    <ArrowRight size={10} />
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
+                  Edit profile
+                </Button>
+              </section>
 
-          <div className={styles.splitGrid}>
-            {activeTab === "notifications" ? (
-              <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
-                <div className={styles.sectionHeader}>
-                  <Heading level={4}>Notifications</Heading>
-                </div>
-                <NotificationPrefsPanel />
+              <div className={styles.statsRow}>
+                {stats.map((stat) => (
+                  <button
+                    key={stat.label}
+                    type="button"
+                    className={styles.statCard}
+                    onClick={() => changeTab(stat.tab)}
+                  >
+                    <span className={`${styles.statIconWrapper} ${stat.tone}`} aria-hidden="true">
+                      <stat.Icon size={20} />
+                    </span>
+                    <span className={styles.statValCol}>
+                      <span className={styles.statNumber}>{stat.val}</span>
+                      <span className={styles.statLabel}>{stat.label}</span>
+                      <span className={styles.statLink}>
+                        {stat.linkText}
+                        <ArrowRight size={11} />
+                      </span>
+                    </span>
+                  </button>
+                ))}
               </div>
-            ) : activeTab === "reviews" ||
-              activeTab === "payment-methods" ||
-              activeTab === "settings" ? (
-              <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
-                <div className={styles.sectionHeader}>
-                  <Heading level={4}>
-                    {activeTab === "reviews"
-                      ? "Reviews"
-                      : activeTab === "payment-methods"
-                        ? "Payment Methods"
-                        : "Settings"}
-                  </Heading>
-                </div>
-                <Text size="sm" color="muted">
-                  {activeTab === "reviews"
-                    ? "A reviews list API is not available yet. You can still write verified reviews from a delivered order’s details page."
-                    : activeTab === "payment-methods"
-                      ? "Saved cards / UPI wallets are not stored on Stuffsy — payments run through Razorpay Checkout at order time."
-                      : "Account settings beyond profile and addresses are not available yet."}
-                </Text>
-              </div>
-            ) : activeTab === "addresses" ? (
-              <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
-                <div className={styles.sectionHeader}>
-                  <Heading level={4}>Saved Addresses ({addresses.length})</Heading>
-                </div>
-                {addresses.length === 0 ? (
-                  <Text size="sm" color="muted">
-                    No saved addresses yet.
-                  </Text>
-                ) : (
-                  <div className={styles.ordersList}>
-                    {addresses.map((addr) => (
-                      <div key={addr.id} className={styles.orderRow}>
-                        <div className={styles.orderInfo}>
-                          <span className={styles.orderTitle}>
-                            {addr.label}
-                            {addr.isDefault ? " · Default" : ""}
-                          </span>
-                          <span className={styles.orderId}>
-                            {addr.recipientName} · {addr.phoneNumber}
-                          </span>
-                          <span className={styles.orderId}>
-                            {[addr.line1, addr.line2, addr.city, addr.state, addr.postalCode]
-                              .filter(Boolean)
-                              .join(", ")}
-                          </span>
-                        </div>
-                        <div className={styles.orderMeta}>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={addressBusy}
-                            onClick={() => {
-                              void (async () => {
-                                setAddressBusy(true);
-                                try {
-                                  await deleteAddress(addr.id);
-                                  const list = await fetchAddresses();
-                                  setAddresses(list);
-                                  setAddressCount(list.length);
-                                } finally {
-                                  setAddressBusy(false);
-                                }
-                              })();
-                            }}
-                          >
-                            Remove
-                          </Button>
+
+              <div className={styles.splitGrid}>
+                <section className={styles.panel}>
+                  <div className={styles.panelHead}>
+                    <h2 className={styles.panelTitle}>Recent orders</h2>
+                    {recentOrders.length > 0 ? (
+                      <button type="button" className={styles.viewAllLink} onClick={() => changeTab("orders")}>
+                        View all
+                        <ArrowRight size={12} />
+                      </button>
+                    ) : null}
+                  </div>
+                  {ordersList}
+                </section>
+
+                <section className={styles.panel}>
+                  <div className={styles.panelHead}>
+                    <h2 className={styles.panelTitle}>Account overview</h2>
+                  </div>
+                  <dl className={styles.overviewList}>
+                    {[
+                      { Icon: User, label: "Full name", value: user.name },
+                      { Icon: Mail, label: "Email", value: user.email },
+                      { Icon: Phone, label: "Phone", value: user.phone },
+                      { Icon: Calendar, label: "Member since", value: user.memberSince },
+                      { Icon: MapPin, label: "Default address", value: user.address },
+                    ].map((row) => (
+                      <div key={row.label} className={styles.overviewRow}>
+                        <span className={styles.overviewIcon} aria-hidden="true">
+                          <row.Icon size={16} />
+                        </span>
+                        <div className={styles.overviewLabelCol}>
+                          <dt className={styles.overviewLabel}>{row.label}</dt>
+                          <dd className={styles.overviewVal}>{row.value}</dd>
                         </div>
                       </div>
                     ))}
-                  </div>
-                )}
-                <div className={styles.sectionHeader} style={{ marginTop: 24 }}>
-                  <Heading level={4}>Add address</Heading>
+                    <div className={styles.overviewRow}>
+                      <span className={styles.overviewIcon} aria-hidden="true">
+                        <ShieldCheck size={16} />
+                      </span>
+                      <div className={styles.overviewLabelCol}>
+                        <dt className={styles.overviewLabel}>Account status</dt>
+                        <dd>
+                          <StatusPill status={user.status} />
+                        </dd>
+                      </div>
+                    </div>
+                  </dl>
+                </section>
+              </div>
+            </>
+          ) : null}
+
+          {activeTab === "orders" ? (
+            <section className={styles.panel}>
+              <div className={styles.panelHead}>
+                <h2 className={styles.panelTitle}>
+                  {ordersTotal > 0 ? `${ordersTotal.toLocaleString("en-IN")} orders` : "Orders"}
+                </h2>
+              </div>
+              {ordersList}
+            </section>
+          ) : null}
+
+          {activeTab === "wishlist" ? (
+            <section className={styles.panel}>
+              {wishlistItems.length === 0 ? (
+                <EmptyState
+                  bare
+                  icon={<Heart size={22} />}
+                  title="Your wishlist is empty"
+                  description="Tap the heart on any product to save it here."
+                  action={<ButtonLink href="/shop" size="sm">Discover products</ButtonLink>}
+                />
+              ) : (
+                <div className={styles.ordersList}>
+                  {wishlistItems.map((item) => (
+                    <div key={item.id} className={styles.orderRow}>
+                      <Link href={productHref({ slug: item.slug })} className={styles.wishLink}>
+                        <span className={styles.orderImgWrapper}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={optimizedImage(item.thumbnailUrl || FALLBACK_PRODUCT_IMAGE, 160)}
+                            alt=""
+                            className={styles.orderImg}
+                          />
+                        </span>
+                        <span className={styles.orderInfo}>
+                          <span className={styles.orderTitle}>{item.title}</span>
+                          <span className={styles.orderId}>{item.shopName}</span>
+                        </span>
+                      </Link>
+                      <div className={styles.orderMeta}>
+                        <span className={styles.orderPrice}>₹{item.price.toLocaleString("en-IN")}</span>
+                        <button
+                          type="button"
+                          className={styles.textDanger}
+                          onClick={() => {
+                            void toggleWishlist(item.productId, true).then(async () => {
+                              const wish = await fetchWishlist();
+                              setWishlistItems(wish.items);
+                              setWishlistCount(wish.total || wish.items.length);
+                            });
+                          }}
+                        >
+                          <Trash2 size={13} />
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className={styles.formStack}>
+              )}
+            </section>
+          ) : null}
+
+          {activeTab === "addresses" ? (
+            <>
+              {addresses.length === 0 ? (
+                <EmptyState
+                  icon={<MapPin size={22} />}
+                  title="No saved addresses"
+                  description="Add an address below to check out faster."
+                />
+              ) : (
+                <div className={styles.addressGrid}>
+                  {addresses.map((addr) => (
+                    <article key={addr.id} className={styles.addressCard}>
+                      <div className={styles.addressHead}>
+                        <strong>{addr.label}</strong>
+                        {addr.isDefault ? <StatusPill tone="brand">Default</StatusPill> : null}
+                      </div>
+                      <p className={styles.addressName}>{addr.recipientName}</p>
+                      <p className={styles.addressLines}>
+                        {[addr.line1, addr.line2, addr.city, addr.state, addr.postalCode]
+                          .filter(Boolean)
+                          .join(", ")}
+                      </p>
+                      <p className={styles.addressPhone}>
+                        <Phone size={13} /> {addr.phoneNumber}
+                      </p>
+                      <button
+                        type="button"
+                        className={styles.textDanger}
+                        disabled={addressBusy}
+                        onClick={() => {
+                          if (!window.confirm(`Remove the “${addr.label}” address?`)) return;
+                          void (async () => {
+                            setAddressBusy(true);
+                            try {
+                              await deleteAddress(addr.id);
+                              setAddresses(await fetchAddresses());
+                            } finally {
+                              setAddressBusy(false);
+                            }
+                          })();
+                        }}
+                      >
+                        <Trash2 size={13} />
+                        Remove
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              <section className={styles.panel}>
+                <div className={styles.panelHead}>
+                  <div>
+                    <h2 className={styles.panelTitle}>Add a new address</h2>
+                    <p className={styles.panelSub}>
+                      {addresses.length === 0 ? "Your first address becomes the default." : "Saved for faster checkout."}
+                    </p>
+                  </div>
+                </div>
+                <form
+                  className={styles.fieldGrid}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void (async () => {
+                      setAddressBusy(true);
+                      setAddressMsg(null);
+                      try {
+                        await createAddress({
+                          ...newAddress,
+                          line2: newAddress.line2 || null,
+                          isDefault: addresses.length === 0,
+                        });
+                        setAddresses(await fetchAddresses());
+                        setNewAddress(EMPTY_ADDRESS);
+                        setAddressMsg({ tone: "success", text: "Address saved." });
+                      } catch (error) {
+                        setAddressMsg({
+                          tone: "danger",
+                          text: error instanceof Error ? error.message : "Could not save the address.",
+                        });
+                      } finally {
+                        setAddressBusy(false);
+                      }
+                    })();
+                  }}
+                >
                   {(
                     [
-                      ["label", "Label"],
-                      ["recipientName", "Full name"],
-                      ["phoneNumber", "Phone"],
-                      ["line1", "Address line 1"],
-                      ["line2", "Address line 2"],
-                      ["city", "City"],
-                      ["state", "State"],
-                      ["postalCode", "PIN"],
+                      ["label", "Label", "Home, Work…", false, true],
+                      ["recipientName", "Full name", "", false, true],
+                      ["phoneNumber", "Phone", "10-digit mobile", false, true],
+                      ["postalCode", "PIN code", "6 digits", false, true],
+                      ["line1", "Address line 1", "House no., street", true, true],
+                      ["line2", "Address line 2 (optional)", "Area, landmark", true, false],
+                      ["city", "City", "", false, true],
+                      ["state", "State", "", false, true],
                     ] as const
-                  ).map(([key, label]) => (
-                    <label key={key} className={styles.formField}>
+                  ).map(([key, label, placeholder, wide, required]) => (
+                    <label key={key} className={`${styles.formField} ${wide ? styles.fieldWide : ""}`}>
                       {label}
                       <input
                         value={newAddress[key]}
-                        onChange={(e) =>
-                          setNewAddress((prev) => ({ ...prev, [key]: e.target.value }))
-                        }
+                        placeholder={placeholder}
+                        required={required}
+                        inputMode={key === "phoneNumber" || key === "postalCode" ? "numeric" : undefined}
+                        onChange={(e) => setNewAddress((prev) => ({ ...prev, [key]: e.target.value }))}
                       />
                     </label>
                   ))}
-                  <Button
-                    disabled={addressBusy}
-                    onClick={() => {
-                      void (async () => {
-                        setAddressBusy(true);
-                        try {
-                          await createAddress({
-                            ...newAddress,
-                            line2: newAddress.line2 || null,
-                            isDefault: addresses.length === 0,
-                          });
-                          const list = await fetchAddresses();
-                          setAddresses(list);
-                          setAddressCount(list.length);
-                          setNewAddress({
-                            label: "Home",
-                            recipientName: "",
-                            phoneNumber: "",
-                            line1: "",
-                            line2: "",
-                            city: "",
-                            state: "",
-                            postalCode: "",
-                          });
-                        } finally {
-                          setAddressBusy(false);
-                        }
-                      })();
-                    }}
-                  >
-                    {addressBusy ? "Saving…" : "Save address"}
+                  {addressMsg ? (
+                    <div className={styles.fieldWide}>
+                      <Notice tone={addressMsg.tone}>{addressMsg.text}</Notice>
+                    </div>
+                  ) : null}
+                  <div className={`${styles.fieldWide} ${styles.panelActions}`}>
+                    <Button type="submit" disabled={addressBusy}>
+                      {addressBusy ? "Saving…" : "Save address"}
+                    </Button>
+                  </div>
+                </form>
+              </section>
+            </>
+          ) : null}
+
+          {activeTab === "notifications" ? <NotificationPrefsPanel /> : null}
+
+          {activeTab === "reviews" ? (
+            <section className={styles.panel}>
+              <MyReviews
+                emptyAction={
+                  <Button size="sm" variant="outline" onClick={() => changeTab("orders")}>
+                    Go to my orders
                   </Button>
-                </div>
-              </div>
-            ) : activeTab === "wishlist" ? (
-              <div className={styles.splitSection} style={{ gridColumn: "1 / -1" }}>
-                <div className={styles.sectionHeader}>
-                  <Heading level={4}>Wishlist ({wishlistItems.length})</Heading>
-                </div>
-                {wishlistItems.length === 0 ? (
-                  <Text size="sm" color="muted">
-                    No saved items yet. Tap the heart on a product to add it here.
-                  </Text>
-                ) : (
-                  <div className={styles.ordersList}>
-                    {wishlistItems.map((item) => (
-                      <div key={item.id} className={styles.orderRow}>
-                        <Link
-                          href={productHref({ slug: item.slug })}
-                          style={{
-                            display: "contents",
-                            textDecoration: "none",
-                            color: "inherit",
-                          }}
-                        >
-                          <div className={styles.orderImgWrapper}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={item.thumbnailUrl || FALLBACK_PRODUCT_IMAGE}
-                              alt={item.title}
-                              className={styles.orderImg}
-                            />
-                          </div>
-                          <div className={styles.orderInfo}>
-                            <span className={styles.orderTitle}>{item.title}</span>
-                            <span className={styles.orderId}>{item.shopName}</span>
-                          </div>
-                        </Link>
-                        <div className={styles.orderMeta}>
-                          <span className={styles.orderPrice}>
-                            ₹{item.price.toLocaleString("en-IN")}
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              void removeFromWishlist(item.productId).then(async () => {
-                                const wish = await fetchWishlist();
-                                setWishlistItems(wish.items);
-                                setWishlistCount(wish.total || wish.items.length);
-                              });
-                            }}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-            <div className={styles.splitSection}>
-              <div className={styles.sectionHeader}>
-                <Heading level={4}>
-                  {activeTab === "orders" ? "Your Orders" : "Recent Orders"}
-                </Heading>
-                {activeTab !== "orders" && (
-                <Link href="/account?tab=orders" className={styles.viewAllLink}>
-                  <span>View all orders</span>
-                  <ArrowRight size={12} />
-                </Link>
-                )}
-              </div>
-              <div className={styles.ordersList}>
-                {recentOrders.length === 0 && (
-                  <Text size="sm" color="muted">
-                    No orders yet.
-                  </Text>
-                )}
-                {recentOrders.map((order) => (
-                  <Link
-                    key={order.id}
-                    href={`/orders/${order.id}/details`}
-                    className={styles.orderRow}
-                    style={{ textDecoration: "none", color: "inherit" }}
-                  >
-                    <div className={styles.orderImgWrapper}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={order.image}
-                        alt={order.title}
-                        className={styles.orderImg}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
-                        }}
-                      />
-                    </div>
-                    <div className={styles.orderInfo}>
-                      <span className={styles.orderTitle}>{order.title}</span>
-                      <span className={styles.orderId}>
-                        Order ID: {order.orderNumber || order.id.slice(0, 8)}
-                      </span>
-                      <span className={styles.orderId}>{order.date}</span>
-                    </div>
-                    <div className={styles.orderMeta}>
-                      <span className={styles.orderPrice}>
-                        ₹{order.price.toLocaleString("en-IN")}
-                      </span>
-                      <span className={styles.orderQty}>{order.qty} Item</span>
-                      <span
-                        className={`${styles.statusBadge} ${
-                          styles[orderStatusBadgeClass(order.statusKey)]
-                        }`}
-                      >
-                        {order.status}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
+                }
+              />
+            </section>
+          ) : null}
 
-            <div className={styles.splitSection}>
-              <div className={styles.sectionHeader}>
-                <Heading level={4}>Account Overview</Heading>
-              </div>
-              <div className={styles.overviewList}>
-                <div className={styles.overviewRow}>
-                  <div className={styles.overviewIcon}>
-                    <User size={16} />
-                  </div>
-                  <div className={styles.overviewLabelCol}>
-                    <span className={styles.overviewLabel}>Full Name</span>
-                    <span className={styles.overviewVal}>{user.name}</span>
-                  </div>
-                </div>
+          {activeTab === "payment-methods" ? (
+            <section className={styles.panel}>
+              <EmptyState
+                bare
+                icon={<CreditCard size={22} />}
+                title="No saved payment methods"
+                description="Stuffsy doesn’t store your cards or UPI details. You pay securely through Razorpay each time you check out."
+              />
+            </section>
+          ) : null}
 
-                <div className={styles.overviewRow}>
-                  <div className={styles.overviewIcon}>
-                    <Mail size={16} />
-                  </div>
-                  <div className={styles.overviewLabelCol}>
-                    <span className={styles.overviewLabel}>Email Address</span>
-                    <span className={styles.overviewVal}>{user.email}</span>
-                  </div>
-                </div>
+          {activeTab === "settings" ? (
+            <section className={styles.panel}>
+              <EmptyState
+                bare
+                icon={<SettingsIcon size={22} />}
+                title="Nothing else to configure yet"
+                description="Manage your profile, addresses and notifications from the menu."
+                action={
+                  <Button size="sm" variant="outline" onClick={() => changeTab("profile-details")}>
+                    Edit profile
+                  </Button>
+                }
+              />
+            </section>
+          ) : null}
 
-                <div className={styles.overviewRow}>
-                  <div className={styles.overviewIcon}>
-                    <Phone size={16} />
-                  </div>
-                  <div className={styles.overviewLabelCol}>
-                    <span className={styles.overviewLabel}>Phone Number</span>
-                    <span className={styles.overviewVal}>{user.phone}</span>
-                  </div>
-                </div>
-
-                <div className={styles.overviewRow}>
-                  <div className={styles.overviewIcon}>
-                    <Calendar size={16} />
-                  </div>
-                  <div className={styles.overviewLabelCol}>
-                    <span className={styles.overviewLabel}>Member Since</span>
-                    <span className={styles.overviewVal}>{user.memberSince}</span>
-                  </div>
-                </div>
-
-                <div className={styles.overviewRow}>
-                  <div className={styles.overviewIcon}>
-                    <ShieldCheck size={16} />
-                  </div>
-                  <div className={styles.overviewLabelCol}>
-                    <span className={styles.overviewLabel}>Account Status</span>
-                    <span className={styles.activeBadge}>{user.status}</span>
-                  </div>
-                </div>
-
-                <div className={styles.overviewRow}>
-                  <div className={styles.overviewIcon}>
-                    <MapPin size={16} />
-                  </div>
-                  <div className={styles.overviewLabelCol}>
-                    <span className={styles.overviewLabel}>Default Address</span>
-                    <span className={styles.overviewVal}>{user.address}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-              </>
-            )}
-          </div>
-          </>
-          ) : (
+          {activeTab === "profile-details" ? (
             <div className={styles.profileEditor}>
-              <section className={styles.editorCard}>
+              <section className={styles.panel}>
                 <div className={styles.editorIdentity}>
-                  {user.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={user.avatarUrl} alt="" className={styles.avatar} />
-                  ) : (
-                    <div className={styles.avatar} aria-hidden>
-                      {user.avatarInitials}
-                    </div>
-                  )}
+                  {avatar(styles.avatar)}
                   <div className={styles.avatarCopy}>
-                    <Heading level={3}>{user.name || "Your profile"}</Heading>
-                    <Text size="sm" color="muted">
-                      These details belong to your account. Past orders keep the name and address used at checkout.
-                    </Text>
+                    <h2 className={styles.panelTitle}>{user.name || "Your profile"}</h2>
+                    <p className={styles.panelSub}>
+                      Past orders keep the name and address used at checkout.
+                    </p>
                     <div className={styles.avatarActions}>
                       <label className={styles.avatarUpload}>
-                        {avatarBusy ? "Uploading…" : "Change photo"}
+                        {avatarBusy ? "Uploading…" : user.avatarUrl ? "Change photo" : "Add photo"}
                         <input
                           type="file"
                           accept="image/jpeg,image/png,image/webp"
-                          hidden
+                          className="sr-only"
                           disabled={avatarBusy}
                           onChange={(event) => {
                             const file = event.target.files?.[0];
                             event.target.value = "";
                             if (!file) return;
                             if (file.size > 4_500_000) {
-                              setProfileMsg("Choose a photo under 4.5 MB.");
+                              setProfileMsg({ tone: "danger", text: "Choose a photo under 4.5 MB." });
                               return;
                             }
                             void (async () => {
@@ -1102,14 +1048,14 @@ function AccountPageInner() {
                                   fileName: file.name,
                                 });
                                 if (result.error || !result.data?.user) {
-                                  setProfileMsg(result.error ?? "Could not upload photo");
+                                  setProfileMsg({ tone: "danger", text: result.error ?? "Could not upload photo" });
                                   return;
                                 }
                                 setUser(result.data.user);
-                                setProfileMsg("Profile photo updated.");
+                                setProfileMsg({ tone: "success", text: "Profile photo updated." });
                                 void refreshSession();
                               } catch {
-                                setProfileMsg("Could not upload photo");
+                                setProfileMsg({ tone: "danger", text: "Could not upload photo" });
                               } finally {
                                 setAvatarBusy(false);
                               }
@@ -1129,11 +1075,11 @@ function AccountPageInner() {
                               const result = await updateMyProfile({ avatarUrl: null });
                               setAvatarBusy(false);
                               if (result.error || !result.data?.user) {
-                                setProfileMsg(result.error ?? "Could not remove photo");
+                                setProfileMsg({ tone: "danger", text: result.error ?? "Could not remove photo" });
                                 return;
                               }
                               setUser(result.data.user);
-                              setProfileMsg("Profile photo removed.");
+                              setProfileMsg({ tone: "success", text: "Profile photo removed." });
                               void refreshSession();
                             })();
                           }}
@@ -1174,10 +1120,7 @@ function AccountPageInner() {
                   </label>
                   <label className={styles.formField}>
                     Gender
-                    <select
-                      value={profileGender}
-                      onChange={(e) => setProfileGender(e.target.value)}
-                    >
+                    <select value={profileGender} onChange={(e) => setProfileGender(e.target.value)}>
                       <option value="">Not set</option>
                       <option value="female">Female</option>
                       <option value="male">Male</option>
@@ -1185,68 +1128,71 @@ function AccountPageInner() {
                       <option value="prefer_not_to_say">Prefer not to say</option>
                     </select>
                   </label>
-                  <label className={styles.formField}>
-                    Email
+                  <label className={`${styles.formField} ${styles.fieldWide}`}>
+                    <span className={styles.labelWithPill}>
+                      Email
+                      {user.emailVerified ? (
+                        <StatusPill tone="success">Verified</StatusPill>
+                      ) : (
+                        <StatusPill tone="warning">Not verified</StatusPill>
+                      )}
+                    </span>
                     <input value={sessionUser.email} readOnly />
                   </label>
-                  <div className={styles.formField}>
-                    Email status
-                    <span className={user.emailVerified ? styles.activeBadge : styles.verifiedBadge}>
-                      {user.emailVerified ? "Verified" : "Not verified yet"}
-                    </span>
-                  </div>
                 </div>
-                {profileMsg ? (
-                  <Text size="sm" color={profileMsg === "Profile updated." ? "muted" : undefined}>
-                    {profileMsg}
-                  </Text>
-                ) : null}
-                <Button
-                  disabled={profileBusy}
-                  onClick={() => {
-                    void (async () => {
-                      const name = profileName.trim();
-                      const phone = profilePhone.trim();
-                      if (name.length < 2) {
-                        setProfileMsg("Enter your full name.");
-                        return;
-                      }
-                      if (phone && phone.replace(/\D/g, "").length < 8) {
-                        setProfileMsg("Enter a valid phone number, or leave it blank.");
-                        return;
-                      }
-                      setProfileBusy(true);
-                      setProfileMsg(null);
-                      const result = await updateMyProfile({
-                        fullName: name,
-                        phoneNumber: phone || null,
-                        dateOfBirth: profileDob || null,
-                        gender: profileGender ? profileGender : null,
-                      });
-                      setProfileBusy(false);
-                      if (result.error || !result.data?.user) {
-                        setProfileMsg(result.error ?? "Could not update profile");
-                        return;
-                      }
-                      setUser(result.data.user);
-                      setProfileName(result.data.user.fullName ?? "");
-                      setProfilePhone(result.data.user.phoneNumber ?? "");
-                      setProfileDob(result.data.user.dateOfBirth ?? "");
-                      setProfileGender(result.data.user.gender ?? "");
-                      setProfileMsg("Profile updated.");
-                      void refreshSession();
-                    })();
-                  }}
-                >
-                  {profileBusy ? "Saving…" : "Save profile"}
-                </Button>
+                {profileMsg ? <Notice tone={profileMsg.tone}>{profileMsg.text}</Notice> : null}
+                <div className={styles.panelActions}>
+                  <Button
+                    disabled={profileBusy}
+                    onClick={() => {
+                      void (async () => {
+                        const name = profileName.trim();
+                        const phone = profilePhone.trim();
+                        if (name.length < 2) {
+                          setProfileMsg({ tone: "danger", text: "Enter your full name." });
+                          return;
+                        }
+                        if (phone && phone.replace(/\D/g, "").length < 8) {
+                          setProfileMsg({ tone: "danger", text: "Enter a valid phone number, or leave it blank." });
+                          return;
+                        }
+                        setProfileBusy(true);
+                        setProfileMsg(null);
+                        const result = await updateMyProfile({
+                          fullName: name,
+                          phoneNumber: phone || null,
+                          dateOfBirth: profileDob || null,
+                          gender: profileGender ? profileGender : null,
+                        });
+                        setProfileBusy(false);
+                        if (result.error || !result.data?.user) {
+                          setProfileMsg({ tone: "danger", text: result.error ?? "Could not update profile" });
+                          return;
+                        }
+                        setUser(result.data.user);
+                        setProfileName(result.data.user.fullName ?? "");
+                        setProfilePhone(result.data.user.phoneNumber ?? "");
+                        setProfileDob(result.data.user.dateOfBirth ?? "");
+                        setProfileGender(result.data.user.gender ?? "");
+                        setProfileMsg({ tone: "success", text: "Profile updated." });
+                        void refreshSession();
+                      })();
+                    }}
+                  >
+                    {profileBusy ? "Saving…" : "Save profile"}
+                  </Button>
+                </div>
               </section>
 
-              <section className={styles.editorCard}>
-                <Heading level={4}>Password</Heading>
-                <Text size="sm" color="muted">
-                  You stay signed in on this browser. Other sessions are signed out.
-                </Text>
+              <section className={styles.panel}>
+                <div className={styles.panelHead}>
+                  <div>
+                    <h2 className={styles.panelTitle}>Password</h2>
+                    <p className={styles.panelSub}>
+                      You stay signed in here. Other devices are signed out.
+                    </p>
+                  </div>
+                </div>
                 <div className={styles.formStack}>
                   <label className={styles.formField}>
                     Current password
@@ -1276,48 +1222,50 @@ function AccountPageInner() {
                     />
                   </label>
                 </div>
-                {passwordMsg ? <Text size="sm">{passwordMsg}</Text> : null}
-                <Button
-                  variant="outline"
-                  disabled={passwordBusy}
-                  onClick={() => {
-                    void (async () => {
-                      if (!currentPassword) {
-                        setPasswordMsg("Enter your current password.");
-                        return;
-                      }
-                      if (nextPassword.length < 8) {
-                        setPasswordMsg("New password must be at least 8 characters.");
-                        return;
-                      }
-                      if (nextPassword !== confirmPassword) {
-                        setPasswordMsg("New password and confirmation do not match.");
-                        return;
-                      }
-                      setPasswordBusy(true);
-                      setPasswordMsg(null);
-                      const result = await changeMyPassword({
-                        currentPassword,
-                        newPassword: nextPassword,
-                      });
-                      setPasswordBusy(false);
-                      if (result.error) {
-                        setPasswordMsg(result.error);
-                        return;
-                      }
-                      setCurrentPassword("");
-                      setNextPassword("");
-                      setConfirmPassword("");
-                      setPasswordMsg("Password updated.");
-                    })();
-                  }}
-                >
-                  {passwordBusy ? "Updating…" : "Update password"}
-                </Button>
+                {passwordMsg ? <Notice tone={passwordMsg.tone}>{passwordMsg.text}</Notice> : null}
+                <div className={styles.panelActions}>
+                  <Button
+                    variant="outline"
+                    disabled={passwordBusy}
+                    onClick={() => {
+                      void (async () => {
+                        if (!currentPassword) {
+                          setPasswordMsg({ tone: "danger", text: "Enter your current password." });
+                          return;
+                        }
+                        if (nextPassword.length < 8) {
+                          setPasswordMsg({ tone: "danger", text: "New password must be at least 8 characters." });
+                          return;
+                        }
+                        if (nextPassword !== confirmPassword) {
+                          setPasswordMsg({ tone: "danger", text: "New password and confirmation do not match." });
+                          return;
+                        }
+                        setPasswordBusy(true);
+                        setPasswordMsg(null);
+                        const result = await changeMyPassword({
+                          currentPassword,
+                          newPassword: nextPassword,
+                        });
+                        setPasswordBusy(false);
+                        if (result.error) {
+                          setPasswordMsg({ tone: "danger", text: result.error });
+                          return;
+                        }
+                        setCurrentPassword("");
+                        setNextPassword("");
+                        setConfirmPassword("");
+                        setPasswordMsg({ tone: "success", text: "Password updated." });
+                      })();
+                    }}
+                  >
+                    {passwordBusy ? "Updating…" : "Update password"}
+                  </Button>
+                </div>
               </section>
             </div>
-          )}
-        </main>
+          ) : null}
+        </div>
       </div>
     </div>
   );

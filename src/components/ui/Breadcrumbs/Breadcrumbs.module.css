@@ -33,9 +33,18 @@
 }
 
 .active {
+  min-width: 0;
   color: var(--color-text-main);
-  font-weight: 500;
+  font-weight: 600;
   pointer-events: none;
+}
+
+.active span {
+  display: block;
+  max-width: min(48ch, 70vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .separator {

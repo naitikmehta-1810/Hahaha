@@ -67,7 +67,7 @@
     inset: 0;
     z-index: 55;
     border: 0;
-    background: rgba(20, 10, 40, 0.42);
+    background: rgba(31, 20, 48, 0.42);
   }
 
   .sidebar {
@@ -79,11 +79,11 @@
     width: min(320px, 88vw);
     margin: 0;
     padding: 18px 14px 24px;
-    background: #f8f7fb;
+    background: var(--color-surface-muted);
     overflow-y: auto;
     transform: translateX(-105%);
     transition: transform 0.2s ease;
-    box-shadow: 18px 0 40px rgba(31, 22, 53, 0.18);
+    box-shadow: 18px 0 40px rgba(31, 20, 48, 0.18);
   }
 
   .sidebarOpen {
@@ -262,7 +262,7 @@
   position: relative;
   border-radius: var(--radius-xl);
   overflow: hidden;
-  background: linear-gradient(135deg, #ede9fe 0%, #f5f3ff 50%, #fae8ff 100%);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary-light) 50%, var(--color-primary-light) 100%);
   min-height: 200px;
   display: flex;
   align-items: stretch;
@@ -448,9 +448,9 @@
 .vacationBanner {
   padding: 16px 20px;
   background: var(--color-warning-bg);
-  border: 1px solid #fde68a;
+  border: 1px solid var(--color-warning-border);
   border-radius: var(--radius-md);
-  color: #92400e;
+  color: var(--color-warning-ink);
   font-size: 0.875rem;
 }
 
@@ -522,4 +522,13 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
+}
+
+.policyList {
+  display: grid;
+  gap: 16px;
+}
+
+.policyText {
+  white-space: pre-wrap;
 }

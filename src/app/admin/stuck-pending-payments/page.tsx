@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
+import PageHeader from "@/components/ui/PageHeader/PageHeader";
+import Notice from "@/components/ui/Notice/Notice";
+import StatusPill from "@/components/ui/StatusPill/StatusPill";
 import { apiRequest } from "@/utils/api-client";
-import styles from "../admin.module.css";
+import { formatDateTime, rupees } from "@/utils/format";
+import ui from "@/components/console/console.module.css";
 
 type StuckOrder = {
   id: string;
@@ -36,52 +38,58 @@ export default function AdminStuckPaymentsPage() {
 
   return (
     <>
-      <div className={styles.headerRow}>
-        <div>
-          <Heading level={2}>Stuck pending payments</Heading>
-          <Text size="sm" color="muted">
-            Orders still in pending_payment after the reservation timeout (~20 min)
-          </Text>
-        </div>
-      </div>
-      {error ? <p className={styles.error}>{error}</p> : null}
-      {loading ? (
-        <Text color="muted">Loading…</Text>
-      ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
+      <PageHeader
+        title="Stuck payments"
+        description="Orders still awaiting payment after the ~20 minute reservation timeout."
+      />
+
+      <Notice tone="info">
+        The release-expired-reservations job cancels these automatically. This list is for
+        visibility only.
+      </Notice>
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className={`${ui.card} ${ui.cardFlush}`}>
+        <div className={ui.tableWrap}>
+          <table className={ui.table}>
             <thead>
               <tr>
-                <th>Order #</th>
+                <th>Order</th>
                 <th>Status</th>
-                <th>Total</th>
-                <th>Created</th>
+                <th>Placed</th>
+                <th className={ui.num}>Total</th>
               </tr>
             </thead>
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
-                  <td>{o.orderNumber}</td>
-                  <td>{o.status}</td>
-                  <td>₹{o.totalAmount.toLocaleString("en-IN")}</td>
-                  <td>{new Date(o.createdAt).toLocaleString()}</td>
+                  <td className={`${ui.cellPrimary} ${ui.mono}`}>{o.orderNumber}</td>
+                  <td>
+                    <StatusPill status={o.status} />
+                  </td>
+                  <td className={ui.nowrap}>{formatDateTime(o.createdAt)}</td>
+                  <td className={`${ui.num} ${ui.cellPrimary}`}>{rupees(o.totalAmount)}</td>
                 </tr>
               ))}
-              {orders.length === 0 ? (
+              {!loading && orders.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className={styles.muted}>
-                    None stuck right now.
+                  <td colSpan={4} className={ui.emptyCell}>
+                    Nothing is stuck right now.
+                  </td>
+                </tr>
+              ) : null}
+              {loading ? (
+                <tr>
+                  <td colSpan={4} className={ui.emptyCell}>
+                    Loading…
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
-      )}
-      <p className={styles.note}>
-        The release-expired-reservations job cancels these automatically; this view is for
-        ops visibility.
-      </p>
+      </section>
     </>
   );
 }

@@ -88,8 +88,8 @@
 }
 
 .stepCircle.active {
-  background: #7c3aed;
-  border-color: #7c3aed;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
   color: #fff;
 }
 
@@ -108,7 +108,7 @@
 }
 
 .stepLabel.active {
-  color: #7c3aed;
+  color: var(--color-primary);
 }
 
 .stepConnector {
@@ -120,7 +120,7 @@
 }
 
 .stepConnector.done {
-  background: #7c3aed;
+  background: var(--color-primary);
 }
 
 /* ── Main body (sidebar + content) ───────────────────── */
@@ -151,7 +151,7 @@
   display: inline-flex;
   align-items: center;
   padding: 4px 12px;
-  background: rgba(124,58,237,0.12);
+  background: rgba(var(--color-primary-rgb),0.12);
   border-radius: var(--radius-full);
   font-size: 0.7rem;
   font-weight: 700;
@@ -164,7 +164,7 @@
 .sidebarHeading {
   font-size: 2.15rem;
   font-weight: 800;
-  color: #111827;
+  color: var(--color-text-main);
   line-height: 1.15;
   letter-spacing: -0.03em;
   margin-top: 18px;
@@ -179,7 +179,7 @@
   margin-top: 14px;
   max-width: 260px;
   font-size: 0.92rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   line-height: 1.6;
   white-space: pre-line;
 }
@@ -201,7 +201,7 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: rgba(124,58,237,0.1);
+  background: rgba(var(--color-primary-rgb),0.1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -247,14 +247,14 @@
 .contentTitle {
   font-size: 1.55rem;
   font-weight: 800;
-  color: #111827;
+  color: var(--color-text-main);
   line-height: 1.25;
   letter-spacing: -0.02em;
 }
 
 .contentSubtitle {
   font-size: 0.9rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin-bottom: 8px;
   line-height: 1.5;
 }
@@ -263,8 +263,8 @@
   margin-bottom: 14px;
   padding: 8px 12px;
   border-radius: 8px;
-  background: #fffbeb;
-  color: #92400e;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-ink);
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -273,7 +273,7 @@
   background: none;
   border: none;
   padding: 0;
-  color: #7c3aed;
+  color: var(--color-primary);
   font-weight: 700;
   cursor: pointer;
 }
@@ -290,7 +290,7 @@
 .categoryCard {
   min-width: 0;
   min-height: 118px;
-  border: 1.5px solid #ece7f4;
+  border: 1.5px solid var(--color-border);
   border-radius: 14px;
   padding: 22px 12px 16px;
   display: flex;
@@ -305,14 +305,14 @@
 }
 
 .categoryCard:hover {
-  border-color: #c4b5fd;
-  background: #faf7ff;
+  border-color: var(--color-primary-border);
+  background: var(--color-surface-muted);
 }
 
 .categoryCard.selected {
-  border-color: #7c3aed;
-  background: #f6f1ff;
-  box-shadow: 0 0 0 1px #7c3aed;
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 .categoryCheckmark {
@@ -322,7 +322,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #7c3aed;
+  background: var(--color-primary);
   color: #fff;
   display: flex;
   align-items: center;
@@ -330,7 +330,7 @@
 }
 
 .categoryIcon {
-  color: #7c3aed;
+  color: var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -352,7 +352,7 @@
 
 .changeHint {
   font-size: 0.8rem;
-  color: #9ca3af;
+  color: var(--color-text-light);
   margin: 0;
 }
 
@@ -398,7 +398,7 @@
 
 .inputWrapper:focus-within {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb),0.1);
 }
 
 .inputIcon {
@@ -421,8 +421,8 @@
 
 select.formInput {
   appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, #64748b 50%),
-    linear-gradient(135deg, #64748b 50%, transparent 50%);
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%),
+    linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
   background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
   background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
@@ -455,7 +455,7 @@ select.formInput {
 
 .formError {
   font-size: 0.75rem;
-  color: #b42318;
+  color: var(--color-danger-ink);
   font-weight: 600;
 }
 
@@ -518,7 +518,7 @@ select.formInput {
   padding: 24px;
   overflow-y: auto;
   margin-top: 8px;
-  background: #fafafa;
+  background: var(--color-surface-muted);
 }
 
 .termSection {
@@ -624,7 +624,7 @@ select.formInput {
 .btnNext:hover:not(:disabled) {
   background: var(--color-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(124,58,237,0.30);
+  box-shadow: 0 6px 20px rgba(var(--color-primary-rgb),0.30);
 }
 
 .btnNext:disabled {
@@ -659,7 +659,7 @@ select.formInput {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 0 16px rgba(124,58,237,0.12);
+  box-shadow: 0 0 0 16px rgba(var(--color-primary-rgb),0.12);
   animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -715,13 +715,13 @@ select.formInput {
   min-height: 92px;
   width: 100%;
   text-align: left;
-  border: 1.5px solid #ece7f4;
+  border: 1.5px solid var(--color-border);
   background: #fff;
   border-radius: 12px;
   padding: 14px 16px;
   cursor: pointer;
   font: inherit;
-  color: #111827;
+  color: var(--color-text-main);
 }
 
 .choice strong {
@@ -733,23 +733,23 @@ select.formInput {
   font-size: 0.8rem;
   font-weight: 500;
   line-height: 1.4;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .choiceActive {
-  border-color: #7c3aed;
-  background: #f6f1ff;
-  box-shadow: 0 0 0 1px #7c3aed;
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 .choiceActive span {
-  color: #5b21b6;
+  color: var(--color-primary-active);
 }
 
 .successBtn:hover {
   background: var(--color-primary-hover);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(124,58,237,0.3);
+  box-shadow: 0 8px 24px rgba(var(--color-primary-rgb),0.3);
 }
 
 .successBtnLocked {

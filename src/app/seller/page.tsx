@@ -2,38 +2,31 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import Heading from "@/components/ui/Heading/Heading";
-import Text from "@/components/ui/Text/Text";
-import Button from "@/components/ui/Button/Button";
+import { IndianRupee, Package, Percent, Plus, Store, Users } from "lucide-react";
+import { ButtonLink } from "@/components/ui/Button/Button";
+import PageHeader from "@/components/ui/PageHeader/PageHeader";
+import Notice from "@/components/ui/Notice/Notice";
+import EmptyState from "@/components/ui/EmptyState/EmptyState";
+import StatusPill from "@/components/ui/StatusPill/StatusPill";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
 import { formatOrderStatusLabel } from "@/utils/cart";
+import { formatDateTime, rupees } from "@/utils/format";
 import {
   fetchMySeller,
   fetchSellerDashboard,
   type SellerDashboard,
   type SellerProfile,
 } from "@/utils/seller";
-import {
-  IndianRupee,
-  Package,
-  Users,
-  Percent,
-  Plus,
-} from "lucide-react";
+import ui from "@/components/console/console.module.css";
 import styles from "./seller.module.css";
 
 const CHANNELS = [
   { key: "website", label: "Website", color: "#7c3aed" },
   { key: "marketplace", label: "Marketplace", color: "#ec4899" },
-  { key: "social", label: "Social", color: "#22c55e" },
+  { key: "social", label: "Social", color: "#10b981" },
   { key: "other", label: "Other", color: "#f59e0b" },
 ] as const;
-
-function rupees(value: number) {
-  return `₹${value.toLocaleString("en-IN")}`;
-}
 
 function shortDay(day: string) {
   const [year, month, date] = day.split("-").map(Number);
@@ -44,26 +37,11 @@ function shortDay(day: string) {
   });
 }
 
-function formatWhen(iso: string) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-IN", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function statusClass(status: string) {
-  if (status === "paid" || status === "delivered") return styles.statusPaid;
-  if (status === "shipped" || status === "out_for_delivery" || status === "accepted") {
-    return styles.statusAccepted;
-  }
-  if (status === "processing" || status === "pending_payment") return styles.statusProcessing;
-  if (status === "cancelled") return styles.statusCancelled;
-  return "";
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
 }
 
 function SalesChart({ points }: { points: Array<{ day: string; total: number }> }) {
@@ -94,8 +72,8 @@ function SalesChart({ points }: { points: Array<{ day: string; total: number }> 
     >
       <defs>
         <linearGradient id="sellerSalesFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.28" />
-          <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.24" />
+          <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {[0, 0.5, 1].map((tick) => {
@@ -103,22 +81,22 @@ function SalesChart({ points }: { points: Array<{ day: string; total: number }> 
         const value = Math.round(max * (1 - tick));
         return (
           <g key={tick}>
-            <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="#eee8f6" />
-            <text x={padL - 8} y={y + 4} textAnchor="end" fill="#8b849c" fontSize="11">
+            <line x1={padL} x2={width - padR} y1={y} y2={y} className={styles.chartGrid} />
+            <text x={padL - 8} y={y + 4} textAnchor="end" className={styles.axisLabel}>
               {value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value}
             </text>
           </g>
         );
       })}
       <path d={area} fill="url(#sellerSalesFill)" />
-      <path d={line} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      <path d={line} fill="none" className={styles.chartLine} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
       {points.map((point, index) => (
         <g key={point.day}>
-          <circle cx={xAt(index)} cy={yAt(point.total)} r="4" fill="#fff" stroke="#7c3aed" strokeWidth="2">
+          <circle cx={xAt(index)} cy={yAt(point.total)} r="4" className={styles.chartDot} strokeWidth="2">
             <title>{`${shortDay(point.day)}: ${rupees(point.total)}`}</title>
           </circle>
           {index % labelStep === 0 ? (
-            <text x={xAt(index)} y={height - 8} textAnchor="middle" fill="#8b849c" fontSize="11">
+            <text x={xAt(index)} y={height - 8} textAnchor="middle" className={styles.axisLabel}>
               {shortDay(point.day)}
             </text>
           ) : null}
@@ -129,7 +107,6 @@ function SalesChart({ points }: { points: Array<{ day: string; total: number }> 
 }
 
 export default function SellerDashboardPage() {
-  const router = useRouter();
   const { isAuthenticated, status: authStatus, user } = useAuth();
   const [seller, setSeller] = useState<SellerProfile | null>(null);
   const [dash, setDash] = useState<SellerDashboard | null>(null);
@@ -145,7 +122,6 @@ export default function SellerDashboardPage() {
     void (async () => {
       const profile = await fetchMySeller();
       if (!profile) {
-        setError("No seller account yet.");
         setLoading(false);
         return;
       }
@@ -165,28 +141,21 @@ export default function SellerDashboardPage() {
   }, [authStatus, isAuthenticated]);
 
   if (loading) {
-    return (
-      <div className={styles.main}>
-        <Text color="muted">Loading seller dashboard…</Text>
-      </div>
-    );
+    return <p className={ui.muted}>Loading your dashboard…</p>;
   }
 
   if (!seller) {
     return (
-      <div className={styles.container}>
-        <Heading level={2}>Become a seller</Heading>
-        <Text color="muted">You don’t have a shop yet.</Text>
-        <div style={{ marginTop: 16 }}>
-          <Button variant="primary" onClick={() => router.push("/sell")}>
-            Start Selling
-          </Button>
-        </div>
-      </div>
+      <EmptyState
+        icon={<Store size={24} />}
+        title="You don’t have a shop yet"
+        description="Open a shop to list products, take orders and get paid on Stuffsy."
+        action={<ButtonLink href="/sell">Start selling</ButtonLink>}
+      />
     );
   }
 
-  const greetingName = user?.fullName?.trim() || seller.shopName;
+  const firstName = user?.fullName?.trim().split(/\s+/)[0];
   const channels = CHANNELS.map((channel) => ({
     ...channel,
     amount: dash?.metrics.salesByChannel?.[channel.key] ?? 0,
@@ -205,142 +174,158 @@ export default function SellerDashboardPage() {
           .join(", ")
       : "";
 
+  const metrics = [
+    {
+      label: "Sales",
+      value: rupees(dash?.metrics.totalSales ?? 0),
+      Icon: IndianRupee,
+      tone: ui.toneViolet,
+    },
+    {
+      label: "Orders",
+      value: (dash?.metrics.ordersCount ?? 0).toLocaleString("en-IN"),
+      Icon: Package,
+      tone: ui.toneGreen,
+    },
+    {
+      label: "Visitors",
+      value: (dash?.metrics.visitors ?? 0).toLocaleString("en-IN"),
+      Icon: Users,
+      tone: ui.toneAmber,
+    },
+    {
+      label: "Conversion",
+      value: `${(dash?.metrics.conversionRate ?? 0).toFixed(1)}%`,
+      Icon: Percent,
+      tone: ui.tonePink,
+    },
+  ];
+
   return (
-    <div className={styles.main}>
-      <div className={styles.dashTop}>
-        <div>
-          <h1 className={styles.greeting}>{greetingName}</h1>
-          <p className={styles.greetingSub}>Last 14 days of paid performance.</p>
-        </div>
-        <Link href="/seller/products/new" className={styles.primaryCta}>
-          <Plus size={16} aria-hidden="true" />
-          New product
-        </Link>
-      </div>
+    <>
+      <PageHeader
+        eyebrow={seller.shopName}
+        title={firstName ? `${greeting()}, ${firstName}` : greeting()}
+        description="Your paid performance over the last 14 days."
+        actions={
+          <ButtonLink href="/seller/products/new" leftIcon={<Plus size={16} />}>
+            New product
+          </ButtonLink>
+        }
+      />
 
       {seller.status === "pending" ? (
-        <div className={styles.pendingBanner}>
-          Your shop is pending approval. Shop setup stays editable until activation.
-        </div>
+        <Notice tone="warning" title="Your shop is waiting for approval">
+          You can finish shop setup and prepare products now. Sales open once an admin activates
+          your shop.
+        </Notice>
       ) : null}
+      {seller.status === "suspended" ? (
+        <Notice tone="danger" title="Your shop is suspended">
+          Buyers can’t see your products right now. Contact Stuffsy support to restore it.
+        </Notice>
+      ) : null}
+      {error ? <Notice tone="danger">{error}</Notice> : null}
 
-      {error ? <Text color="muted">{error}</Text> : null}
-
-      <div className={styles.metrics}>
-        <div className={styles.metricCard}>
-          <div className={styles.metricTop}>
-            <span className={styles.metricIcon} aria-hidden="true">
-              <IndianRupee size={18} />
-            </span>
-            <div className={styles.metricLabel}>Sales</div>
+      <div className={ui.metrics}>
+        {metrics.map((metric) => (
+          <div key={metric.label} className={ui.metric}>
+            <div className={ui.metricTop}>
+              <span className={ui.metricLabel}>{metric.label}</span>
+              <span className={`${ui.metricIcon} ${metric.tone}`} aria-hidden="true">
+                <metric.Icon size={18} />
+              </span>
+            </div>
+            <span className={ui.metricValue}>{metric.value}</span>
           </div>
-          <div className={styles.metricValue}>{rupees(dash?.metrics.totalSales ?? 0)}</div>
-        </div>
-        <div className={styles.metricCard}>
-          <div className={styles.metricTop}>
-            <span className={styles.metricIcon} style={{ background: "#ecfdf5", color: "#059669" }} aria-hidden="true">
-              <Package size={18} />
-            </span>
-            <div className={styles.metricLabel}>Orders</div>
-          </div>
-          <div className={styles.metricValue}>{(dash?.metrics.ordersCount ?? 0).toLocaleString("en-IN")}</div>
-        </div>
-        <div className={styles.metricCard}>
-          <div className={styles.metricTop}>
-            <span className={styles.metricIcon} style={{ background: "#fff7ed", color: "#ea580c" }} aria-hidden="true">
-              <Users size={18} />
-            </span>
-            <div className={styles.metricLabel}>Visitors</div>
-          </div>
-          <div className={styles.metricValue}>{(dash?.metrics.visitors ?? 0).toLocaleString("en-IN")}</div>
-        </div>
-        <div className={styles.metricCard}>
-          <div className={styles.metricTop}>
-            <span className={styles.metricIcon} style={{ background: "#fdf2f8", color: "#db2777" }} aria-hidden="true">
-              <Percent size={18} />
-            </span>
-            <div className={styles.metricLabel}>Conversion</div>
-          </div>
-          <div className={styles.metricValue}>{(dash?.metrics.conversionRate ?? 0).toFixed(1)}%</div>
-        </div>
+        ))}
       </div>
 
-      <div className={styles.dashSplit}>
-        <section className={styles.card} aria-labelledby="sales-overview-title">
-          <div className={styles.cardHead}>
+      <div className={ui.split}>
+        <section className={ui.card} aria-labelledby="sales-overview-title">
+          <div className={ui.cardHead}>
             <div>
-              <h3 id="sales-overview-title">Sales Overview</h3>
-              <p className={styles.muted}>Paid sales for the last 14 days.</p>
+              <h2 id="sales-overview-title" className={ui.cardTitle}>
+                Sales overview
+              </h2>
+              <p className={ui.cardSub}>Paid sales for the last 14 days.</p>
             </div>
           </div>
           {dash?.salesOverview.length ? (
             <SalesChart points={dash.salesOverview} />
           ) : (
-            <p className={styles.emptyState}>No paid sales in the last 14 days.</p>
+            <EmptyState bare title="No paid sales yet" description="Sales will chart here as orders come in." />
           )}
         </section>
 
-        <section className={styles.card} aria-labelledby="recent-orders-title">
-          <div className={styles.cardHead}>
-            <h3 id="recent-orders-title">Recent Orders</h3>
-            <Link href="/seller/orders" className={styles.cardLink}>
-              View All
+        <section className={ui.card} aria-labelledby="recent-orders-title">
+          <div className={ui.cardHead}>
+            <h2 id="recent-orders-title" className={ui.cardTitle}>
+              Recent orders
+            </h2>
+            <Link href="/seller/orders" className={ui.cardLink}>
+              View all
             </Link>
           </div>
           {(dash?.recentOrders.length ?? 0) === 0 ? (
-            <p className={styles.emptyState}>No orders yet.</p>
+            <EmptyState bare title="No orders yet" description="New orders will show up here." />
           ) : (
-            <div className={styles.orderList}>
+            <div className={ui.list}>
               {dash!.recentOrders.map((order) => (
-                <div key={order.id} className={styles.orderItem}>
-                  <div className={styles.orderCopy}>
-                    <div className={styles.orderTitle}>{order.title || `Order #${order.orderNumber}`}</div>
-                    <div className={styles.orderMeta}>
+                <Link key={order.id} href={`/seller/orders/${order.id}`} className={ui.listRow}>
+                  <span className={ui.listMain}>
+                    <span className={ui.listTitle}>{order.title || `Order #${order.orderNumber}`}</span>
+                    <span className={ui.listMeta}>
                       #{order.orderNumber}
-                      {order.createdAt ? ` · ${formatWhen(order.createdAt)}` : ""}
-                    </div>
-                    <span className={`${styles.statusBadge} ${statusClass(order.status)}`}>
-                      {formatOrderStatusLabel(order.status)}
+                      {order.createdAt ? ` · ${formatDateTime(order.createdAt)}` : ""}
                     </span>
-                  </div>
-                  <div className={styles.orderAmount}>{rupees(order.total)}</div>
-                </div>
+                  </span>
+                  <span className={ui.listAside}>
+                    <span className={ui.amount}>{rupees(order.total)}</span>
+                    <StatusPill status={order.status}>{formatOrderStatusLabel(order.status)}</StatusPill>
+                  </span>
+                </Link>
               ))}
             </div>
           )}
         </section>
       </div>
 
-      <div className={styles.dashSplitEven}>
-        <section className={styles.card} aria-labelledby="top-products-title">
-          <div className={styles.cardHead}>
-            <h3 id="top-products-title">Top Selling Products</h3>
+      <div className={ui.splitEven}>
+        <section className={ui.card} aria-labelledby="top-products-title">
+          <div className={ui.cardHead}>
+            <h2 id="top-products-title" className={ui.cardTitle}>
+              Top selling products
+            </h2>
+            <Link href="/seller/products" className={ui.cardLink}>
+              All products
+            </Link>
           </div>
           {(dash?.topProducts.length ?? 0) === 0 ? (
-            <p className={styles.emptyState}>No paid product sales yet.</p>
+            <EmptyState bare title="No product sales yet" />
           ) : (
-            <div className={styles.productList}>
+            <div className={ui.list}>
               {dash!.topProducts.map((product, index) => (
-                <div key={`${product.productId}-${product.title}`} className={styles.productItem}>
+                <div key={`${product.productId}-${product.title}`} className={ui.listRow}>
                   <span className={styles.rank}>{index + 1}</span>
-                  <div className={styles.productCopy}>
-                    <div className={styles.productName}>{product.title}</div>
-                    <div className={styles.orderMeta}>
-                      {product.units.toLocaleString("en-IN")} sold
-                    </div>
-                  </div>
-                  <div className={styles.productAmount}>{rupees(product.revenue)}</div>
+                  <span className={ui.listMain}>
+                    <span className={ui.listTitle}>{product.title}</span>
+                    <span className={ui.listMeta}>{product.units.toLocaleString("en-IN")} sold</span>
+                  </span>
+                  <span className={ui.amount}>{rupees(product.revenue)}</span>
                 </div>
               ))}
             </div>
           )}
         </section>
 
-        <section className={styles.card} aria-labelledby="channel-title">
-          <div className={styles.cardHead}>
+        <section className={ui.card} aria-labelledby="channel-title">
+          <div className={ui.cardHead}>
             <div>
-              <h3 id="channel-title">Sales by Channel</h3>
-              <p className={styles.muted}>Paid sales split by where the buyer came from.</p>
+              <h2 id="channel-title" className={ui.cardTitle}>
+                Sales by channel
+              </h2>
+              <p className={ui.cardSub}>Where paying buyers came from.</p>
             </div>
           </div>
           {channelTotal > 0 ? (
@@ -368,10 +353,10 @@ export default function SellerDashboardPage() {
               </ul>
             </div>
           ) : (
-            <p className={styles.emptyState}>No channel data yet.</p>
+            <EmptyState bare title="No channel data yet" />
           )}
         </section>
       </div>
-    </div>
+    </>
   );
 }

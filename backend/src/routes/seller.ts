@@ -55,13 +55,23 @@ function slugify(name: string) {
   return base || "shop";
 }
 
-async function uniqueShopSlug(base: string) {
+/**
+ * First free slug for `base`. A slug is taken if another live shop uses it now,
+ * or used it before a rename (old links must keep pointing at that shop).
+ * `ownSellerId` lets a shop keep or reclaim its own slugs.
+ */
+async function uniqueShopSlug(base: string, ownSellerId?: string) {
   let candidate = base;
   let n = 0;
   for (;;) {
     const existing = await pool.query<{ id: string }>(
-      `select id from public.sellers where shop_slug = $1 and deleted_at is null limit 1`,
-      [candidate]
+      `select id from public.sellers
+        where shop_slug = $1 and deleted_at is null and ($2::uuid is null or id <> $2::uuid)
+       union all
+       select seller_id from public.seller_slug_history
+        where old_slug = $1 and ($2::uuid is null or seller_id <> $2::uuid)
+       limit 1`,
+      [candidate, ownSellerId ?? null]
     );
     if (existing.rows.length === 0) return candidate;
     n += 1;
@@ -441,6 +451,28 @@ sellerRouter.patch(
       }
     }
 
+    // Renaming the shop moves it to a slug that matches the new name. The old
+    // slug is kept in seller_slug_history so shared links still resolve.
+    let nextSlug: string | null = null;
+    let previousSlug: string | null = null;
+    if (data.shopName) {
+      const existing = await pool.query<{ shop_name: string; shop_slug: string }>(
+        `select shop_name, shop_slug from public.sellers where id = $1`,
+        [sellerId]
+      );
+      const row = existing.rows[0];
+      if (row && row.shop_name.trim() !== data.shopName.trim()) {
+        const base = slugify(data.shopName);
+        const suffix = row.shop_slug.slice(base.length);
+        const alreadyMatches =
+          row.shop_slug.startsWith(base) && (suffix === "" || /^-\d+$/.test(suffix));
+        if (!alreadyMatches) {
+          nextSlug = await uniqueShopSlug(base, sellerId);
+          previousSlug = row.shop_slug;
+        }
+      }
+    }
+
     const encryptedPayout =
       data.payoutDetails === undefined
         ? null
@@ -492,6 +524,35 @@ sellerRouter.patch(
           : JSON.stringify(pickupToStore),
       ]
     );
+
+    if (nextSlug && previousSlug && nextSlug !== previousSlug) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query(
+          `insert into public.seller_slug_history (old_slug, seller_id, created_at)
+           values ($1, $2, now())
+           on conflict (old_slug) do update set seller_id = excluded.seller_id`,
+          [previousSlug, sellerId]
+        );
+        // Reclaiming one of our own earlier slugs: it is current again, not history.
+        await client.query(
+          `delete from public.seller_slug_history where old_slug = $1 and seller_id = $2`,
+          [nextSlug, sellerId]
+        );
+        await client.query(
+          `update public.sellers set shop_slug = $2, updated_at = now() where id = $1`,
+          [sellerId, nextSlug]
+        );
+        await client.query("commit");
+        void invalidateCatalogCaches();
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
 
     if (verifiedGst) {
       await pool.query(
@@ -708,6 +769,17 @@ sellerRouter.get(
   })
 );
 
+/** Rejects a "ships in" range whose upper bound is below the lower bound. */
+function assertShippingRange(min: number | undefined, max: number | null | undefined) {
+  if (min != null && max != null && max < min) {
+    throw new AppError(
+      400,
+      "INVALID_SHIPPING_ESTIMATE",
+      "The latest shipping day can't be earlier than the earliest."
+    );
+  }
+}
+
 function slugifyProduct(title: string) {
   return (
     title
@@ -729,8 +801,16 @@ const optionalDimensionCm = z.preprocess(
 
 const productCreateSchema = z.object({
   title: z.string().trim().min(1).max(150),
-  shortDescription: z.string().trim().min(1).max(250),
-  description: z.string().trim().min(1).max(10000),
+  shortDescription: z
+    .string({ required_error: "Add a short description" })
+    .trim()
+    .min(1, "Add a short description")
+    .max(250),
+  // Optional: falls back to the short description when left blank.
+  description: z.string().trim().max(10000).optional().nullable(),
+  /** "Ships in X–Y days" shown to buyers; display only. */
+  processingDays: z.number().int().min(0).max(60).optional(),
+  processingDaysMax: z.number().int().min(0).max(90).optional().nullable(),
   categoryId: z.string().uuid(),
   subcategoryId: z.string().uuid().optional().nullable(),
   productType: z.enum(["physical", "digital"]).default("physical"),
@@ -849,12 +929,14 @@ sellerRouter.get(
       continue_selling_when_out_of_stock: boolean;
       is_customizable: boolean;
       customization_label: string | null;
+      processing_days: number | null;
+      processing_days_max: number | null;
     }>(
       `select id, title, slug, short_description, description, category_id, subcategory_id,
               product_type, base_price::text, compare_at_price::text, cost_price::text,
               status, tags, weight::text, weight_unit, length_cm::text, width_cm::text,
               height_cm::text, continue_selling_when_out_of_stock,
-              is_customizable, customization_label
+              is_customizable, customization_label, processing_days, processing_days_max
        from public.products
        where id = $1`,
       [productId]
@@ -913,6 +995,8 @@ sellerRouter.get(
         status: row.status,
         isCustomizable: row.is_customizable,
         customizationLabel: row.customization_label,
+        processingDays: row.processing_days ?? 2,
+        processingDaysMax: row.processing_days_max,
         tags: row.tags ?? [],
         imageUrls: images.rows.map((img) => img.url),
         collectionIds: collections.rows.map((c) => c.collection_id),
@@ -941,6 +1025,8 @@ sellerRouter.post(
       }
     }
 
+    assertShippingRange(data.processingDays, data.processingDaysMax);
+
     const sellerId = req.seller!.id;
     const sellerRow = await pool.query<{ shop_name: string }>(
       `select shop_name from public.sellers where id = $1`,
@@ -963,11 +1049,12 @@ sellerRouter.post(
             maker_name, base_price, compare_at_price, cost_price, status, product_type, tags,
             weight, weight_unit, length_cm, width_cm, height_cm,
             continue_selling_when_out_of_stock, is_customizable, customization_label,
+            processing_days, processing_days_max,
             created_at, updated_at)
          values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7,
                  $8, $9, $10, $11, $12, $13, $14,
                  $15, $16, $17, $18, $19,
-                 $20, $21, $22, now(), now())
+                 $20, $21, $22, coalesce($23, 2), $24, now(), now())
          returning id, slug`,
         [
           sellerId,
@@ -975,7 +1062,7 @@ sellerRouter.post(
           data.subcategoryId ?? null,
           data.title,
           slug,
-          data.description,
+          data.description || data.shortDescription,
           data.shortDescription,
           makerName,
           data.price,
@@ -992,6 +1079,8 @@ sellerRouter.post(
           data.continueSellingWhenOutOfStock,
           data.isCustomizable ?? false,
           data.isCustomizable ? data.customizationLabel?.trim() || null : null,
+          data.processingDays ?? null,
+          data.processingDaysMax ?? null,
         ]
       );
 
@@ -1145,6 +1234,7 @@ sellerRouter.patch(
     await assertSellerOwnsProduct(sellerId, productId);
 
     const data = parsed.data;
+    assertShippingRange(data.processingDays, data.processingDaysMax);
     if (data.productType === "physical") {
       const dimsMissing =
         data.weight === null ||
@@ -1194,13 +1284,18 @@ sellerRouter.patch(
            continue_selling_when_out_of_stock = coalesce($18, continue_selling_when_out_of_stock),
            is_customizable = coalesce($19, is_customizable),
            customization_label = case when $20::boolean then $21 else customization_label end,
+           processing_days = coalesce($22, processing_days),
+           processing_days_max = case when $23::boolean then $24 else processing_days_max end,
            updated_at = now()
          where id = $1`,
         [
           productId,
           data.title ?? null,
           data.shortDescription ?? null,
-          data.description ?? null,
+          // A cleared full description falls back to the short one instead of erroring.
+          data.description === undefined
+            ? null
+            : data.description || data.shortDescription || null,
           data.categoryId ?? null,
           data.subcategoryId === undefined ? null : data.subcategoryId,
           data.productType ?? null,
@@ -1222,6 +1317,9 @@ sellerRouter.patch(
             : data.customizationLabel === undefined
               ? null
               : data.customizationLabel?.trim() || null,
+          data.processingDays ?? null,
+          data.processingDaysMax !== undefined,
+          data.processingDaysMax ?? null,
         ]
       );
 

@@ -42,8 +42,8 @@ function VerifyEmailForm() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.card} style={{ gridTemplateColumns: "1fr", minHeight: "auto" }}>
-        <section className={styles.panel} style={{ minHeight: "auto", padding: 40 }}>
+      <div className={`${styles.card} ${styles.cardSingle}`}>
+        <section className={`${styles.panel} ${styles.panelSingle}`}>
           <div className={styles.formHeader}>
             <h1>Verify email</h1>
             <p>Confirming your Stuffsy account email.</p>

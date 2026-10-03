@@ -1,0 +1,95 @@
+.screen {
+  min-height: 70vh;
+  display: grid;
+  place-items: center;
+  padding: 40px var(--page-gutter, 16px);
+}
+
+.fullScreen {
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 36px 32px;
+  text-align: center;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+
+.icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-text-main);
+}
+
+.text {
+  font-size: 0.925rem;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+
+.digest {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--color-text-light);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 28px 20px;
+  }
+
+  .actions > * {
+    flex: 1 1 auto;
+  }
+}
+
+/* global-error renders outside the app's component tree, so its buttons are plain elements. */
+.actions :global(.stuffsy-error-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-dark);
+  background: var(--color-card);
+  color: var(--color-text-main);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.actions :global(.stuffsy-error-btn-primary) {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #ffffff;
+}

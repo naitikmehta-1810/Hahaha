@@ -8,7 +8,7 @@ import {
   Heart,
   ShoppingCart,
   Store,
-  ChevronDown,
+  ShieldCheck,
   UserRound,
   Menu,
   X,
@@ -19,6 +19,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest } from "@/utils/api-client";
 import BrandLogo from "@/components/brand/BrandLogo";
 import OrderNotifications from "@/components/notifications/OrderNotifications";
+import { optimizedImage } from "@/utils/media";
 
 type SuggestProduct = { id: string; slug: string; title: string };
 type SuggestCategory = { id: string; slug: string; name: string };
@@ -89,6 +90,16 @@ export const Header = () => {
   }, []);
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setSuggestOpen(false);
+      setMobileOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
     if (!mobileOpen) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -127,6 +138,8 @@ export const Header = () => {
           }
         }}
         autoComplete="off"
+        role="combobox"
+        aria-label="Search Stuffsy"
         aria-autocomplete="list"
         aria-expanded={suggestOpen}
       />
@@ -196,11 +209,13 @@ export const Header = () => {
           >
             {mobileOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
-          <Link href="/" className={styles.logoArea} onClick={() => setMobileOpen(false)}>
-            <span className={styles.logoIcon}>
-              <BrandLogo size={36} decorative priority />
-            </span>
-            <span className={styles.logoText}>Stuffsy</span>
+          <Link
+            href="/"
+            className={styles.logoArea}
+            aria-label="Stuffsy home"
+            onClick={() => setMobileOpen(false)}
+          >
+            <BrandLogo variant="lockup" size={34} decorative priority />
           </Link>
         </div>
 
@@ -219,7 +234,8 @@ export const Header = () => {
             </Link>
           )}
           {isAuthenticated && user?.role === "admin" ? (
-            <Link href="/admin" className={styles.sellLink}>
+            <Link href="/admin" className={styles.sellLink} aria-label="Admin console">
+              <ShieldCheck size={18} />
               <span className={styles.sellText}>Admin</span>
             </Link>
           ) : null}
@@ -245,7 +261,7 @@ export const Header = () => {
               {user.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={user.avatarUrl}
+                  src={optimizedImage(user.avatarUrl, 96)}
                   alt=""
                   className={styles.avatarImage}
                   title={user.fullName}
@@ -255,7 +271,6 @@ export const Header = () => {
                   <UserRound size={18} />
                 </span>
               )}
-              <ChevronDown size={14} className={styles.chevron} />
             </Link>
           ) : (
             <div className={styles.authLinks}>

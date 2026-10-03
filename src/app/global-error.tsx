@@ -1,7 +1,11 @@
 "use client";
 
+import "./globals.css";
+import styles from "./error.module.css";
+
 /**
- * Root global error boundary (must include html + body).
+ * Root global error boundary (must include html + body). It replaces the root
+ * layout, so it imports the global tokens itself.
  * If you see "global-error.js … React Client Manifest" in dev, delete `.next` and restart `npm run dev`.
  */
 export default function GlobalError({
@@ -13,71 +17,28 @@ export default function GlobalError({
 }) {
   return (
     <html lang="en">
-      <body
-        style={{
-          margin: 0,
-          minHeight: "100vh",
-          display: "grid",
-          placeItems: "center",
-          fontFamily: "Georgia, 'Times New Roman', serif",
-          background: "linear-gradient(160deg, #f7f3ee 0%, #ebe4da 100%)",
-          color: "#1c1917",
-        }}
-      >
-        <main style={{ maxWidth: 420, width: "100%", padding: 24, textAlign: "center", boxSizing: "border-box" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/brand/stuffsy-logo.png"
-            alt="Stuffsy"
-            width={48}
-            height={48}
-            style={{ borderRadius: 12, margin: "0 auto 8px" }}
-          />
-          <p style={{ letterSpacing: "0.12em", textTransform: "uppercase", fontSize: 12, opacity: 0.7 }}>
-            Stuffsy
-          </p>
-          <h1 style={{ fontSize: 28, margin: "8px 0 12px" }}>Something went wrong</h1>
-          <p style={{ fontSize: 15, lineHeight: 1.5, opacity: 0.8 }}>
-            An unexpected error occurred. Try again, or return home.
-          </p>
-          {error?.digest ? (
-            <p style={{ fontSize: 12, fontFamily: "monospace", opacity: 0.55 }}>
-              Error ID: {error.digest}
-            </p>
-          ) : null}
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 20, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => reset()}
-              style={{
-                border: "none",
-                borderRadius: 8,
-                padding: "10px 18px",
-                background: "#1c1917",
-                color: "#fafaf9",
-                cursor: "pointer",
-                fontSize: 14,
-              }}
-            >
-              Try again
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                window.location.href = "/";
-              }}
-              style={{
-                border: "1px solid #a8a29e",
-                borderRadius: 8,
-                padding: "10px 18px",
-                background: "transparent",
-                color: "#1c1917",
-                cursor: "pointer",
-                fontSize: 14,
-              }}
-            >
-              Go home
-            </button>
+      <body>
+        <main className={`${styles.screen} ${styles.fullScreen}`}>
+          <div className={styles.card} role="alert">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/stuffsy-mark.png" alt="Stuffsy" width={52} height={52} />
+            <h1 className={styles.title}>Something went wrong</h1>
+            <p className={styles.text}>An unexpected error occurred. Try again, or return home.</p>
+            {error?.digest ? <p className={styles.digest}>Error ID: {error.digest}</p> : null}
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className="stuffsy-error-btn stuffsy-error-btn-primary"
+                onClick={() => reset()}
+              >
+                Try again
+              </button>
+              {/* A plain anchor: the router may be unavailable when the root layout has crashed. */}
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+              <a href="/" className="stuffsy-error-btn">
+                Go home
+              </a>
+            </div>
           </div>
         </main>
       </body>

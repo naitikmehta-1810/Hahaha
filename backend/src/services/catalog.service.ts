@@ -390,6 +390,7 @@ export type ProductDetail = ProductCard & {
   productType: string;
   specs: unknown;
   processingDays: number;
+  processingDaysMax: number;
   tags: string[];
   categoryId: string;
   subcategoryId: string | null;
@@ -463,6 +464,7 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
       product_type: string;
       specs: unknown;
       processing_days: number;
+      processing_days_max: number | null;
       tags: string[];
       category_id: string;
       subcategory_id: string | null;
@@ -481,7 +483,7 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
        p.id, p.slug, p.title, p.base_price, p.compare_at_price, p.avg_rating,
        p.review_count, p.is_bestseller, p.maker_name, p.seller_id,
        p.short_description, p.description, p.product_type, p.specs,
-       p.processing_days, p.tags, p.category_id, p.subcategory_id,
+       p.processing_days, p.processing_days_max, p.tags, p.category_id, p.subcategory_id,
        p.is_customizable, p.customization_label,
        s.shop_name, s.shop_slug, s.logo_url, s.badge,
        s.selling_scope, s.selling_state,
@@ -557,6 +559,11 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
     productType: row.product_type,
     specs: row.specs ?? [],
     processingDays: Number(row.processing_days),
+    // Upper bound of the "ships in" estimate; older listings fall back to min + 1.
+    processingDaysMax:
+      row.processing_days_max != null
+        ? Math.max(Number(row.processing_days_max), Number(row.processing_days))
+        : Number(row.processing_days) + 1,
     tags: row.tags ?? [],
     categoryId: row.category_id,
     subcategoryId: row.subcategory_id,
