@@ -127,10 +127,7 @@ adminRouter.post(
         for (let n = 1; n < 50; n += 1) {
           const candidate = n === 1 ? base : `${base}-${n}`;
           const taken = await client.query(
-            `select 1 from public.sellers where shop_slug = $1 and deleted_at is null
-             union all
-             select 1 from public.seller_slug_history where old_slug = $1
-             limit 1`,
+            `select 1 from public.sellers where shop_slug = $1 and deleted_at is null limit 1`,
             [candidate]
           );
           if (taken.rows.length === 0) {

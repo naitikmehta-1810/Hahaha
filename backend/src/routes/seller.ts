@@ -56,9 +56,8 @@ function slugify(name: string) {
 }
 
 /**
- * First free slug for `base`. A slug is taken if another live shop uses it now,
- * or used it before a rename (old links must keep pointing at that shop).
- * `ownSellerId` lets a shop keep or reclaim its own slugs.
+ * First free slug for `base`: one no other live shop uses. `ownSellerId` lets
+ * a shop keep its own slug.
  */
 async function uniqueShopSlug(base: string, ownSellerId?: string) {
   let candidate = base;
@@ -67,9 +66,6 @@ async function uniqueShopSlug(base: string, ownSellerId?: string) {
     const existing = await pool.query<{ id: string }>(
       `select id from public.sellers
         where shop_slug = $1 and deleted_at is null and ($2::uuid is null or id <> $2::uuid)
-       union all
-       select seller_id from public.seller_slug_history
-        where old_slug = $1 and ($2::uuid is null or seller_id <> $2::uuid)
        limit 1`,
       [candidate, ownSellerId ?? null]
     );
@@ -452,10 +448,9 @@ sellerRouter.patch(
     }
 
     // Saving the shop name moves the shop to a slug that matches it, also when
-    // the name is unchanged but the slug is stale. The old slug is kept in
-    // seller_slug_history so shared links still resolve.
+    // the name is unchanged but the slug is stale. The old slug is freed for
+    // other shops; links to it stop working.
     let nextSlug: string | null = null;
-    let previousSlug: string | null = null;
     if (data.shopName) {
       const existing = await pool.query<{ shop_slug: string }>(
         `select shop_slug from public.sellers where id = $1`,
@@ -469,7 +464,6 @@ sellerRouter.patch(
           row.shop_slug.startsWith(base) && (suffix === "" || /^-\d+$/.test(suffix));
         if (!alreadyMatches) {
           nextSlug = await uniqueShopSlug(base, sellerId);
-          previousSlug = row.shop_slug;
         }
       }
     }
@@ -526,33 +520,12 @@ sellerRouter.patch(
       ]
     );
 
-    if (nextSlug && previousSlug && nextSlug !== previousSlug) {
-      const client = await pool.connect();
-      try {
-        await client.query("begin");
-        await client.query(
-          `insert into public.seller_slug_history (old_slug, seller_id, created_at)
-           values ($1, $2, now())
-           on conflict (old_slug) do update set seller_id = excluded.seller_id`,
-          [previousSlug, sellerId]
-        );
-        // Reclaiming one of our own earlier slugs: it is current again, not history.
-        await client.query(
-          `delete from public.seller_slug_history where old_slug = $1 and seller_id = $2`,
-          [nextSlug, sellerId]
-        );
-        await client.query(
-          `update public.sellers set shop_slug = $2, updated_at = now() where id = $1`,
-          [sellerId, nextSlug]
-        );
-        await client.query("commit");
-        void invalidateCatalogCaches();
-      } catch (error) {
-        await client.query("rollback");
-        throw error;
-      } finally {
-        client.release();
-      }
+    if (nextSlug) {
+      await pool.query(
+        `update public.sellers set shop_slug = $2, updated_at = now() where id = $1`,
+        [sellerId, nextSlug]
+      );
+      void invalidateCatalogCaches();
     }
 
     if (verifiedGst) {

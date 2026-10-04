@@ -112,12 +112,6 @@ function ShopStorefrontInner() {
         setShop(null);
         return;
       }
-      // The shop was renamed: this old slug still resolves, so move to the current URL.
-      if (result.shop.shopSlug && result.shop.shopSlug !== slug) {
-        const query = typeof window !== "undefined" ? window.location.search : "";
-        router.replace(`/shops/${result.shop.shopSlug}${query}`);
-        return;
-      }
       setShop(result.shop);
       setCategories(result.categories);
       setLoadError(null);
@@ -125,7 +119,7 @@ function ShopStorefrontInner() {
     return () => {
       cancelled = true;
     };
-  }, [slug, router]);
+  }, [slug]);
 
   useEffect(() => {
     if (!slug || !shop || tab !== "shop") return;
