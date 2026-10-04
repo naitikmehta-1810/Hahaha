@@ -18,7 +18,6 @@ import styles from "./cart.module.css";
 import Button, { ButtonLink } from "@/components/ui/Button/Button";
 import EmptyState from "@/components/ui/EmptyState/EmptyState";
 import Notice from "@/components/ui/Notice/Notice";
-import PaymentMarks from "@/components/ui/PaymentMarks/PaymentMarks";
 import PaymentIcon, { type PaymentBrand } from "@/components/ui/PaymentMarks/PaymentIcon";
 import ValueProps from "@/components/ui/ValueProps/ValueProps";
 import ProductCard from "@/components/ui/ProductCard/ProductCard";
@@ -432,8 +431,6 @@ export default function CartPage() {
               <p className={styles.termsText}>
                 You&apos;ll confirm your address and place the order on the next step.
               </p>
-
-              <PaymentMarks className={styles.acceptRow} />
 
               <div className={styles.secureCheckout}>
                 <Lock size={12} />

@@ -4,7 +4,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import {
   Flag,
+  Home,
+  ImageIcon,
   LayoutDashboard,
+  LogIn,
+  PanelsTopLeft,
   RotateCcw,
   ShoppingBag,
   Store,
@@ -36,6 +40,21 @@ const NAV: ConsoleNavGroup[] = [
     items: [
       { href: "/admin/categories", label: "Categories", Icon: Tags },
       { href: "/admin/coupons", label: "Coupons", Icon: Ticket },
+    ],
+  },
+  {
+    label: "Storefront",
+    items: [
+      {
+        href: "/admin/storefront",
+        label: "Site images",
+        Icon: PanelsTopLeft,
+        children: [
+          { href: "/admin/storefront?section=homepage", label: "Homepage", Icon: Home, isDefault: true },
+          { href: "/admin/storefront?section=pages", label: "Sign-in & selling", Icon: LogIn },
+          { href: "/admin/storefront?section=shops", label: "Shop pages", Icon: ImageIcon },
+        ],
+      },
     ],
   },
   {

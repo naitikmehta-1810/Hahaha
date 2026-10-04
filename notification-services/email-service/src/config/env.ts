@@ -16,7 +16,9 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1).optional(),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   /** Shown in every email footer. */
-  SUPPORT_EMAIL: z.string().email().default("support@stuffsy.in"),
+  SUPPORT_EMAIL: z.string().email().default("stuffsyworkplace@gmail.com"),
+  /** Linked from every email footer. */
+  INSTAGRAM_URL: z.string().url().default("https://www.instagram.com/stuffsy.app"),
   /** Absolute logo URL; defaults to the mark served by the storefront. */
   EMAIL_LOGO_URL: z.string().url().optional(),
   SENTRY_DSN: z.string().url().optional(),

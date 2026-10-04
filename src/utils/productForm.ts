@@ -44,24 +44,41 @@ export function parseDimensionCm(raw: string): number | null {
   return value;
 }
 
+export type PhysicalShipping = {
+  weight: number;
+  /** Present only when volumetric shipping is on. */
+  lengthCm: number | null;
+  widthCm: number | null;
+  heightCm: number | null;
+};
+
+/**
+ * Weight is always required for physical products. Length, width and height
+ * only matter when the seller opts in to volumetric (size-based) billing.
+ */
 export function validatePhysicalShippingFields(input: {
   weight: string;
   lengthCm: string;
   widthCm: string;
   heightCm: string;
-}): { ok: true; weight: number; lengthCm: number; widthCm: number; heightCm: number } | { ok: false; message: string } {
+  useVolumetric: boolean;
+}): ({ ok: true } & PhysicalShipping) | { ok: false; message: string } {
   const weight = parseWeightKg(input.weight);
+  if (weight == null || weight <= 0) {
+    return { ok: false, message: "Enter the product weight in kg (e.g. 0.2 or 200g)." };
+  }
+  if (!input.useVolumetric) {
+    return { ok: true, weight, lengthCm: null, widthCm: null, heightCm: null };
+  }
+
   const lengthCm = parseDimensionCm(input.lengthCm);
   const widthCm = parseDimensionCm(input.widthCm);
   const heightCm = parseDimensionCm(input.heightCm);
-
-  if (weight == null || lengthCm == null || widthCm == null || heightCm == null) {
+  if (!lengthCm || !widthCm || !heightCm) {
     return {
       ok: false,
-      message:
-        "Enter valid weight in kg (e.g. 0.2 or 200g) and length/width/height in cm for physical products.",
+      message: "Enter length, width and height in cm to use volumetric shipping, or turn it off.",
     };
   }
-
   return { ok: true, weight, lengthCm, widthCm, heightCm };
 }

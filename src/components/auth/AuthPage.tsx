@@ -21,6 +21,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import BrandLogo from "@/components/brand/BrandLogo";
 import { apiBaseUrl, apiRequest, type AuthUser } from "@/utils/api-client";
 import { refreshCart } from "@/utils/cart";
+import { fetchSiteMedia } from "@/utils/siteMedia";
+import { optimizedImage } from "@/utils/media";
 import styles from "./AuthPage.module.css";
 
 type AuthMode = "signin" | "signup";
@@ -67,6 +69,13 @@ function AuthPageInner({ mode }: AuthPageProps) {
   const { setUser } = useAuth();
   const [status, setStatus] = useState<{ type: "error" | "success"; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Admin-uploaded artwork replaces the bundled illustration when set.
+  const [customArt, setCustomArt] = useState<string | null>(null);
+  useEffect(() => {
+    void fetchSiteMedia().then((media) =>
+      setCustomArt(media[isSignIn ? "auth.signin" : "auth.signup"] ?? null)
+    );
+  }, [isSignIn]);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [providers, setProviders] = useState<{ google: boolean; facebook: boolean }>({
@@ -181,7 +190,7 @@ function AuthPageInner({ mode }: AuthPageProps) {
           </div>
 
           <div className={styles.leftCopy}>
-            <h2 className={styles.leftTitle}>{isSignIn ? "Welcome Back! 👋" : "Create Account ✨"}</h2>
+            <h2 className={styles.leftTitle}>{isSignIn ? "Welcome back" : "Create your account"}</h2>
             <p className={styles.leftText}>
               {isSignIn
                 ? "Sign in to continue shopping your favorite handmade products."
@@ -190,14 +199,19 @@ function AuthPageInner({ mode }: AuthPageProps) {
           </div>
 
           <div className={styles.art}>
-            <Image
-              src={isSignIn ? "/auth/login-decor.png" : "/auth/signup-decor.png"}
-              alt=""
-              width={isSignIn ? 761 : 474}
-              height={isSignIn ? 886 : 554}
-              className={styles.artImage}
-              priority
-            />
+            {customArt ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={optimizedImage(customArt, 760)} alt="" className={styles.artImage} />
+            ) : (
+              <Image
+                src={isSignIn ? "/auth/login-decor.png" : "/auth/signup-decor.png"}
+                alt=""
+                width={isSignIn ? 761 : 474}
+                height={isSignIn ? 886 : 554}
+                className={styles.artImage}
+                priority
+              />
+            )}
           </div>
 
           <ul className={styles.featureList}>

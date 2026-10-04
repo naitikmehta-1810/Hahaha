@@ -636,7 +636,7 @@ select.formInput {
 .successOverlay {
   position: fixed;
   inset: 0;
-  background: linear-gradient(135deg, #f0eaff 0%, #e8dffe 100%);
+  background: #f0eaff;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -666,6 +666,15 @@ select.formInput {
 @keyframes popIn {
   from { transform: scale(0); opacity: 0; }
   to   { transform: scale(1); opacity: 1; }
+}
+
+.successTagline {
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-primary);
 }
 
 .successTitle {

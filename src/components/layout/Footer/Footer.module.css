@@ -56,11 +56,6 @@
   color: #ffffff;
 }
 
-.paymentsRow {
-  max-width: var(--page-max);
-  margin: 0 auto 24px;
-}
-
 .linksCol {
   display: flex;
   flex-direction: column;

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Package, Plus, Search } from "lucide-react";
+import { ExternalLink, Import, Package, Plus, Search } from "lucide-react";
 import Button, { ButtonLink } from "@/components/ui/Button/Button";
 import PageHeader from "@/components/ui/PageHeader/PageHeader";
 import Notice from "@/components/ui/Notice/Notice";
@@ -128,9 +128,14 @@ export default function SellerProductsPage() {
         title="Products"
         description="Manage listings, prices and stock."
         actions={
-          <ButtonLink href="/seller/products/new" leftIcon={<Plus size={16} />}>
-            Add product
-          </ButtonLink>
+          <>
+            <ButtonLink href="/seller/products/import" variant="outline" leftIcon={<Import size={16} />}>
+              Import from Shopify
+            </ButtonLink>
+            <ButtonLink href="/seller/products/new" leftIcon={<Plus size={16} />}>
+              Add product
+            </ButtonLink>
+          </>
         }
       />
 

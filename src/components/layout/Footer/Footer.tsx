@@ -1,10 +1,10 @@
 import React from "react";
 import Link from "next/link";
-import { Share2, Globe, PlayCircle } from "lucide-react";
+import { Mail } from "lucide-react";
 import styles from "./Footer.module.css";
 import BrandLogo from "@/components/brand/BrandLogo";
-import PaymentMarks from "@/components/ui/PaymentMarks/PaymentMarks";
-import { supportMailto } from "@/utils/support";
+import InstagramIcon from "@/components/brand/InstagramIcon";
+import { INSTAGRAM_HANDLE, INSTAGRAM_URL, SUPPORT_EMAIL, supportMailto } from "@/utils/support";
 
 export const Footer = () => {
   return (
@@ -18,33 +18,24 @@ export const Footer = () => {
             Discover unique handmade treasures and crafts created by passionate artisans
             around the world. Supporting creators everywhere.
           </p>
-          <div className={styles.socialRow} aria-label="Social links">
+          <div className={styles.socialRow} aria-label="Stuffsy elsewhere">
             <a
-              href="https://instagram.com"
+              href={INSTAGRAM_URL}
               className={styles.socialBtn}
               target="_blank"
-              rel="noreferrer"
-              aria-label="Instagram"
+              rel="noopener noreferrer"
+              aria-label={`Stuffsy on Instagram (${INSTAGRAM_HANDLE})`}
+              title={INSTAGRAM_HANDLE}
             >
-              <Share2 size={16} />
+              <InstagramIcon size={16} />
             </a>
             <a
-              href="https://facebook.com"
+              href={supportMailto()}
               className={styles.socialBtn}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Facebook"
+              aria-label={`Email Stuffsy at ${SUPPORT_EMAIL}`}
+              title={SUPPORT_EMAIL}
             >
-              <Globe size={16} />
-            </a>
-            <a
-              href="https://youtube.com"
-              className={styles.socialBtn}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="YouTube"
-            >
-              <PlayCircle size={16} />
+              <Mail size={16} />
             </a>
           </div>
         </div>
@@ -58,12 +49,12 @@ export const Footer = () => {
               </Link>
             </li>
             <li>
-              <Link href="/shop?category=jewelry" className={styles.link}>
+              <Link href="/shop?category=jewelry-accessories" className={styles.link}>
                 Jewelry & Accessories
               </Link>
             </li>
             <li>
-              <Link href="/shop?category=clothing" className={styles.link}>
+              <Link href="/shop?category=clothing-shoes" className={styles.link}>
                 Clothing & Shoes
               </Link>
             </li>
@@ -79,7 +70,7 @@ export const Footer = () => {
           <h4 className={styles.linksTitle}>Sell</h4>
           <ul className={styles.linksList}>
             <li>
-              <Link href="/sell" className={styles.link}>
+              <Link href="/sell-on-stuffsy" className={styles.link}>
                 Start Selling
               </Link>
             </li>
@@ -127,8 +118,6 @@ export const Footer = () => {
           </ul>
         </div>
       </div>
-
-      <PaymentMarks className={styles.paymentsRow} />
 
       <div className={styles.bottomBar}>
         <p className={styles.copyright}>

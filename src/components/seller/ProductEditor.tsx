@@ -38,6 +38,7 @@ type SellerProductDetail = {
   lengthCm: number | null;
   widthCm: number | null;
   heightCm: number | null;
+  useVolumetric?: boolean;
   status: "active" | "draft" | string;
   tags: string[];
   imageUrls: string[];
@@ -85,6 +86,7 @@ const EMPTY_FORM = {
   lengthCm: "",
   widthCm: "",
   heightCm: "",
+  useVolumetric: false,
   processingDays: "2",
   processingDaysMax: "3",
   isCustomizable: false,
@@ -200,6 +202,7 @@ export default function ProductEditor({ productId }: { productId?: string }) {
         lengthCm: p.lengthCm != null ? String(p.lengthCm) : "",
         widthCm: p.widthCm != null ? String(p.widthCm) : "",
         heightCm: p.heightCm != null ? String(p.heightCm) : "",
+        useVolumetric: Boolean(p.useVolumetric),
         processingDays: String(p.processingDays ?? 2),
         processingDaysMax: String(p.processingDaysMax ?? (p.processingDays ?? 2) + 1),
         isCustomizable: Boolean(p.isCustomizable),
@@ -316,9 +319,11 @@ export default function ProductEditor({ productId }: { productId?: string }) {
     setBusy(true);
 
     let weight: number | null = null;
-    let lengthCm: number | null = null;
-    let widthCm: number | null = null;
-    let heightCm: number | null = null;
+    // Left undefined (omitted from the request) unless volumetric shipping is on.
+    let lengthCm: number | undefined;
+    let widthCm: number | undefined;
+    let heightCm: number | undefined;
+    const useVolumetric = form.productType === "physical" && form.useVolumetric;
     if (form.productType === "physical") {
       const dims = validatePhysicalShippingFields(form);
       if (!dims.ok) {
@@ -327,9 +332,9 @@ export default function ProductEditor({ productId }: { productId?: string }) {
         return;
       }
       weight = dims.weight;
-      lengthCm = dims.lengthCm;
-      widthCm = dims.widthCm;
-      heightCm = dims.heightCm;
+      lengthCm = dims.lengthCm ?? undefined;
+      widthCm = dims.widthCm ?? undefined;
+      heightCm = dims.heightCm ?? undefined;
     }
 
     const urls = [...form.imageUrls];
@@ -355,6 +360,7 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       lengthCm,
       widthCm,
       heightCm,
+      useVolumetric,
       status,
       isCustomizable: form.isCustomizable,
       customizationLabel: form.isCustomizable ? form.customizationLabel.trim() || null : null,
@@ -603,30 +609,63 @@ export default function ProductEditor({ productId }: { productId?: string }) {
           {form.productType === "physical" ? (
             <section className={ui.card}>
               <h2 className={styles.sectionTitle}>Shipping details</h2>
-              <p className={styles.sectionHint}>Used to calculate courier rates. Measure the packed parcel.</p>
-              <div className={styles.dimsGrid}>
-                {(
-                  [
-                    ["weight", "Weight (kg)", "0.2 or 200g"],
-                    ["lengthCm", "Length (cm)", "15"],
-                    ["widthCm", "Width (cm)", "20"],
-                    ["heightCm", "Height (cm)", "20"],
-                  ] as const
-                ).map(([key, label, placeholder]) => (
-                  <div key={key} className={ui.field}>
-                    <label htmlFor={`product-${key}`}>
-                      {label} <span className={styles.req}>*</span>
-                    </label>
-                    <input
-                      id={`product-${key}`}
-                      value={form[key]}
-                      placeholder={placeholder}
-                      inputMode="decimal"
-                      onChange={(e) => update(key, e.target.value)}
-                    />
-                  </div>
-                ))}
+              <p className={styles.sectionHint}>
+                Couriers bill by the packed parcel&apos;s weight. Weigh the product with its packaging.
+              </p>
+              <div className={styles.weightRow}>
+                <div className={ui.field}>
+                  <label htmlFor="product-weight">
+                    Weight (kg) <span className={styles.req}>*</span>
+                  </label>
+                  <input
+                    id="product-weight"
+                    value={form.weight}
+                    placeholder="0.2 or 200g"
+                    inputMode="decimal"
+                    onChange={(e) => update("weight", e.target.value)}
+                  />
+                </div>
               </div>
+
+              <label className={`${styles.checkLabel} ${styles.volumetricToggle}`}>
+                <input
+                  type="checkbox"
+                  checked={form.useVolumetric}
+                  onChange={(e) => update("useVolumetric", e.target.checked)}
+                />
+                <span>
+                  <strong>Bill this product by parcel size (volumetric)</strong>
+                  <small>
+                    Leave this off for most products. Turn it on only for bulky, light items such as
+                    cushions or large frames, then enter the packed box size below.
+                  </small>
+                </span>
+              </label>
+
+              {form.useVolumetric ? (
+                <div className={styles.dimsGrid}>
+                  {(
+                    [
+                      ["lengthCm", "Length (cm)", "15"],
+                      ["widthCm", "Width (cm)", "20"],
+                      ["heightCm", "Height (cm)", "20"],
+                    ] as const
+                  ).map(([key, label, placeholder]) => (
+                    <div key={key} className={ui.field}>
+                      <label htmlFor={`product-${key}`}>
+                        {label} <span className={styles.req}>*</span>
+                      </label>
+                      <input
+                        id={`product-${key}`}
+                        value={form[key]}
+                        placeholder={placeholder}
+                        inputMode="decimal"
+                        onChange={(e) => update(key, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </section>
           ) : null}
 
@@ -777,7 +816,7 @@ export default function ProductEditor({ productId }: { productId?: string }) {
                 />
               </div>
             ) : (
-              <p className={styles.sectionHint}>Leave this off for products that ship exactly as listed.</p>
+              <p className={styles.hintBelow}>Leave this off for products that ship exactly as listed.</p>
             )}
           </section>
 

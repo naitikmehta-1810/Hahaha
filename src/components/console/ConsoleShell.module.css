@@ -299,6 +299,111 @@
   color: var(--color-primary);
 }
 
+/* Dropdown items (e.g. Shop setup → its steps). */
+
+.navBranch {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navParent {
+  padding: 0;
+  gap: 0;
+}
+
+.navParentLink {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0 10px 12px;
+  color: inherit;
+}
+
+.navParentActive {
+  color: var(--color-text-main);
+}
+
+.navParentActive .navParentLink svg {
+  color: var(--color-primary);
+}
+
+.navToggle {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  margin-right: 4px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-light);
+}
+
+.navToggle:hover {
+  background: var(--color-card);
+  color: var(--color-text-main);
+}
+
+.navToggle svg {
+  transition: transform var(--transition-fast);
+}
+
+.navToggleOpen {
+  transform: rotate(180deg);
+}
+
+.navSub {
+  list-style: none;
+  margin: 2px 0 6px 21px;
+  padding-left: 12px;
+  border-left: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.navSubItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.navSubItem:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text-main);
+}
+
+.navSubItemActive,
+.navSubItemActive:hover {
+  background: var(--color-primary-light);
+  color: var(--color-primary-ink);
+  font-weight: 700;
+}
+
+.navSubItemActive::before {
+  content: "";
+  position: absolute;
+  left: -13px;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--color-primary);
+}
+
+.navSubItemActive svg {
+  color: var(--color-primary);
+}
+
 .sidebarFooter {
   margin-top: auto;
   padding-top: 14px;

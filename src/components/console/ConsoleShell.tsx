@@ -1,22 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { ChevronDown, LogOut, Menu, X } from "lucide-react";
 import BrandLogo from "@/components/brand/BrandLogo";
 import { useAuth } from "@/components/auth/AuthProvider";
 import styles from "./ConsoleShell.module.css";
 import { optimizedImage } from "@/utils/media";
 
+type NavIcon = ComponentType<{ size?: number; "aria-hidden"?: boolean | "true" }>;
+
+/** A sub-page shown in a dropdown under its parent item, e.g. a settings step. */
+export type ConsoleNavChild = {
+  /** Path plus query, e.g. "/seller/shop-setup?tab=branding". */
+  href: string;
+  label: string;
+  Icon?: NavIcon;
+  /** Lit when the parent page is open without a matching query (first step). */
+  isDefault?: boolean;
+};
+
 export type ConsoleNavItem = {
   href: string;
   label: string;
-  Icon: ComponentType<{ size?: number; "aria-hidden"?: boolean | "true" }>;
+  Icon: NavIcon;
   /** Only highlight on an exact path match (dashboards). */
   exact?: boolean;
   /** Custom active check, e.g. to keep "Products" lit on its edit pages. */
   isActive?: (pathname: string) => boolean;
+  /** Renders the item as a dropdown of sub-pages. */
+  children?: ConsoleNavChild[];
 };
 
 export type ConsoleNavGroup = { label?: string; items: ConsoleNavItem[] };
@@ -41,6 +55,127 @@ function itemActive(item: ConsoleNavItem, pathname: string) {
   if (item.isActive) return item.isActive(pathname);
   if (item.exact) return pathname === item.href;
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
+}
+
+/** A child is lit when its path matches and every query param in its href is in the URL. */
+function childActive(child: ConsoleNavChild, siblings: ConsoleNavChild[], pathname: string, search: URLSearchParams) {
+  const url = new URL(child.href, "http://local");
+  if (url.pathname !== pathname) return false;
+  const wanted = [...url.searchParams.entries()];
+  if (wanted.every(([key, value]) => search.get(key) === value)) return true;
+  // No sibling matches the current query: fall back to the default child.
+  return Boolean(
+    child.isDefault &&
+      !siblings.some((other) => {
+        const o = new URL(other.href, "http://local");
+        return [...o.searchParams.entries()].every(([key, value]) => search.get(key) === value);
+      })
+  );
+}
+
+function NavTree({
+  nav,
+  area,
+  pathname,
+  search,
+  onNavigate,
+}: {
+  nav: ConsoleNavGroup[];
+  area: string;
+  pathname: string;
+  search: URLSearchParams;
+  /** Closes the phone drawer; query-only changes don't change the pathname. */
+  onNavigate?: () => void;
+}) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  return (
+    <nav className={styles.nav} aria-label={`${area} navigation`}>
+      {nav.map((group, index) => (
+        <div key={group.label ?? index} className={styles.navGroup}>
+          {group.label ? <p className={styles.navLabel}>{group.label}</p> : null}
+          {group.items.map((item) => {
+            const active = itemActive(item, pathname);
+            if (!item.children?.length) {
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`${styles.navItem} ${active ? styles.navItemActive : ""}`}
+                  aria-current={active ? "page" : undefined}
+                  onClick={onNavigate}
+                >
+                  <item.Icon size={18} aria-hidden="true" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            }
+            // Open while on the section unless the user collapsed it; closed elsewhere.
+            const open = collapsed[item.href] === undefined ? active : !collapsed[item.href];
+            const listId = `nav-${item.href.replace(/[^a-z0-9]+/gi, "-")}`;
+            return (
+              <div key={item.href} className={styles.navBranch}>
+                <div className={`${styles.navItem} ${styles.navParent} ${active ? styles.navParentActive : ""}`}>
+                  <Link
+                    href={item.href}
+                    className={styles.navParentLink}
+                    onClick={() => {
+                      setCollapsed((state) => ({ ...state, [item.href]: false }));
+                      onNavigate?.();
+                    }}
+                  >
+                    <item.Icon size={18} aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </Link>
+                  <button
+                    type="button"
+                    className={styles.navToggle}
+                    aria-expanded={open}
+                    aria-controls={listId}
+                    aria-label={`${open ? "Hide" : "Show"} ${item.label} steps`}
+                    onClick={() => setCollapsed((state) => ({ ...state, [item.href]: open }))}
+                  >
+                    <ChevronDown size={16} aria-hidden="true" className={open ? styles.navToggleOpen : undefined} />
+                  </button>
+                </div>
+                {open ? (
+                  <ul id={listId} className={styles.navSub}>
+                    {item.children.map((child) => {
+                      const childOn = childActive(child, item.children!, pathname, search);
+                      return (
+                        <li key={child.href}>
+                          <Link
+                            href={child.href}
+                            className={`${styles.navSubItem} ${childOn ? styles.navSubItemActive : ""}`}
+                            aria-current={childOn ? "page" : undefined}
+                            onClick={onNavigate}
+                          >
+                            {child.Icon ? <child.Icon size={15} aria-hidden="true" /> : null}
+                            <span>{child.label}</span>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+/** useSearchParams needs a Suspense boundary; the fallback renders without query state. */
+function NavWithSearch(props: {
+  nav: ConsoleNavGroup[];
+  area: string;
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  const search = useSearchParams();
+  return <NavTree {...props} search={new URLSearchParams(search?.toString() ?? "")} />;
 }
 
 function initials(name: string) {
@@ -190,27 +325,13 @@ export default function ConsoleShell({
           className={`${styles.sidebar} ${navOpen ? styles.sidebarOpen : ""}`}
         >
           {sidebarHeader ? <div className={styles.sidebarHeader}>{sidebarHeader}</div> : null}
-          <nav className={styles.nav} aria-label={`${area} navigation`}>
-            {nav.map((group, index) => (
-              <div key={group.label ?? index} className={styles.navGroup}>
-                {group.label ? <p className={styles.navLabel}>{group.label}</p> : null}
-                {group.items.map((item) => {
-                  const active = itemActive(item, pathname);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`${styles.navItem} ${active ? styles.navItemActive : ""}`}
-                      aria-current={active ? "page" : undefined}
-                    >
-                      <item.Icon size={18} aria-hidden="true" />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
+          <Suspense
+            fallback={
+              <NavTree nav={nav} area={area} pathname={pathname} search={new URLSearchParams()} />
+            }
+          >
+            <NavWithSearch nav={nav} area={area} pathname={pathname} onNavigate={() => setNavOpen(false)} />
+          </Suspense>
           {sidebarFooter ? <div className={styles.sidebarFooter}>{sidebarFooter}</div> : null}
         </aside>
 

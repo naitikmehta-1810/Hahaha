@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   ClipboardList,
   ExternalLink,
+  Import,
   LayoutDashboard,
   Package,
   Plus,
@@ -20,6 +21,8 @@ import { redirectToLogin } from "@/utils/api-client";
 import { fetchMySeller, type SellerProfile } from "@/utils/seller";
 import { isPickupAddressComplete } from "@/utils/pickup";
 import { FALLBACK_SHOP_LOGO, optimizedImage } from "@/utils/media";
+import { SELLER_TAGLINE } from "@/components/brand/tagline";
+import { SHOP_SETUP_STEPS, shopSetupHref } from "@/components/seller/shopSetupSteps";
 import styles from "./seller.module.css";
 
 const NAV: ConsoleNavGroup[] = [
@@ -41,11 +44,24 @@ const NAV: ConsoleNavGroup[] = [
           pathname === "/seller/products" || /^\/seller\/products\/[^/]+\/edit/.test(pathname),
       },
       { href: "/seller/products/new", label: "Add product", exact: true, Icon: Plus },
+      { href: "/seller/products/import", label: "Import from Shopify", exact: true, Icon: Import },
     ],
   },
   {
     label: "Shop",
-    items: [{ href: "/seller/shop-setup", label: "Shop setup", Icon: Store }],
+    items: [
+      {
+        href: "/seller/shop-setup",
+        label: "Shop setup",
+        Icon: Store,
+        children: SHOP_SETUP_STEPS.map((step, index) => ({
+          href: shopSetupHref(step.key),
+          label: step.label,
+          Icon: step.Icon,
+          isDefault: index === 0,
+        })),
+      },
+    ],
   },
 ];
 
@@ -72,6 +88,7 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
   }
 
   const shopCard = seller ? (
+    <>
     <div className={styles.shopRail}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={optimizedImage(seller.logoUrl || FALLBACK_SHOP_LOGO, 96)} alt="" className={styles.shopRailAvatar} />
@@ -83,7 +100,11 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
         </span>
       </div>
     </div>
-  ) : null;
+    <p className={styles.railTagline}>{SELLER_TAGLINE}</p>
+    </>
+  ) : (
+    <p className={styles.railTagline}>{SELLER_TAGLINE}</p>
+  );
 
   const sidebarFooter = seller?.shopSlug ? (
     <Link href={`/shops/${seller.shopSlug}`} className={styles.railLink}>

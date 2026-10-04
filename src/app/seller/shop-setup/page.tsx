@@ -1,19 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  CreditCard,
-  ExternalLink,
-  FileText,
-  Image as ImageIcon,
-  Palmtree,
-  Search,
-  Store,
-  Truck,
-  Upload,
-} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ExternalLink, Upload } from "lucide-react";
 import Button from "@/components/ui/Button/Button";
 import PageHeader from "@/components/ui/PageHeader/PageHeader";
 import Notice, { type NoticeTone } from "@/components/ui/Notice/Notice";
@@ -26,25 +16,12 @@ import { fetchMySeller, updateMyShop, type SellerProfile } from "@/utils/seller"
 import { shopHref } from "@/utils/catalog";
 import ui from "@/components/console/console.module.css";
 import styles from "../seller.module.css";
-
-type TabKey =
-  | "information"
-  | "branding"
-  | "policies"
-  | "shipping"
-  | "payment"
-  | "seo"
-  | "vacation";
-
-const TABS: Array<{ key: TabKey; label: string; Icon: typeof Store }> = [
-  { key: "information", label: "Shop information", Icon: Store },
-  { key: "branding", label: "Branding", Icon: ImageIcon },
-  { key: "policies", label: "Shop policies", Icon: FileText },
-  { key: "shipping", label: "Shipping & pickup", Icon: Truck },
-  { key: "payment", label: "Payment & billing", Icon: CreditCard },
-  { key: "seo", label: "SEO", Icon: Search },
-  { key: "vacation", label: "Vacation mode", Icon: Palmtree },
-];
+import {
+  SHOP_SETUP_STEPS,
+  isShopSetupStep,
+  shopSetupHref,
+  type ShopSetupStep,
+} from "@/components/seller/shopSetupSteps";
 
 function Counter({ value, max }: { value: string; max: number }) {
   return (
@@ -54,11 +31,23 @@ function Counter({ value, max }: { value: string; max: number }) {
   );
 }
 
+/** The step lives in the URL (?tab=…) so the sidebar dropdown can link to it. */
 export default function ShopSetupPage() {
+  return (
+    <Suspense fallback={<p className={ui.muted}>Loading shop setup…</p>}>
+      <ShopSetupContent />
+    </Suspense>
+  );
+}
+
+function ShopSetupContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requested = searchParams?.get("tab");
+  const tab: ShopSetupStep = isShopSetupStep(requested) ? requested : "information";
+  const setTab = (next: ShopSetupStep) => router.replace(shopSetupHref(next), { scroll: false });
   const { isAuthenticated, status: authStatus } = useAuth();
   const [seller, setSeller] = useState<SellerProfile | null>(null);
-  const [tab, setTab] = useState<TabKey>("information");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ tone: NoticeTone; text: string } | null>(null);
   const [gstNote, setGstNote] = useState<string | null>(null);
@@ -342,6 +331,7 @@ export default function ShopSetupPage() {
     return <p className={ui.muted}>Loading shop setup…</p>;
   }
 
+  const stepIndex = Math.max(0, SHOP_SETUP_STEPS.findIndex((step) => step.key === tab));
   const previewPlace = [seller.sellingCity, seller.sellingState].filter(Boolean).join(", ");
 
   const uploadTile = (kind: "logo" | "banner") => (
@@ -364,8 +354,9 @@ export default function ShopSetupPage() {
   return (
     <div className={styles.setupPage}>
       <PageHeader
-        title="Shop setup"
-        description="Your shop profile, branding, policies and pickup details."
+        eyebrow={`Shop setup · Step ${stepIndex + 1} of ${SHOP_SETUP_STEPS.length}`}
+        title={SHOP_SETUP_STEPS[stepIndex].label}
+        description="Pick a step from the Shop setup menu. Changes apply when you save."
         actions={
           <Button variant="primary" disabled={saving || uploading !== null} onClick={() => void save()}>
             {saving ? "Saving…" : "Save changes"}
@@ -375,21 +366,18 @@ export default function ShopSetupPage() {
 
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
-      <div className={styles.setupBoard}>
-        <nav className={styles.settingsNav} aria-label="Shop settings">
-          {TABS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className={`${styles.settingsItem} ${tab === item.key ? styles.settingsItemActive : ""}`}
-              aria-current={tab === item.key ? "true" : undefined}
-              onClick={() => setTab(item.key)}
-            >
-              <item.Icon size={16} aria-hidden="true" />
-              {item.label}
-            </button>
+      <label className={styles.stepPicker}>
+        <span className={ui.fieldLabel}>Step</span>
+        <select value={tab} onChange={(e) => setTab(e.target.value as ShopSetupStep)}>
+          {SHOP_SETUP_STEPS.map((step, index) => (
+            <option key={step.key} value={step.key}>
+              {index + 1}. {step.label}
+            </option>
           ))}
-        </nav>
+        </select>
+      </label>
+
+      <div className={styles.setupBoard}>
 
         <div className={ui.stack}>
           {tab === "information" ? (

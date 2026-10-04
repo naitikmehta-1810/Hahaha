@@ -163,7 +163,7 @@ const INVOICE_COLORS = {
   amberTint: "#FFF7E6",
 };
 
-const SUPPORT_EMAIL = "support@stuffsy.in";
+const SUPPORT_EMAIL = "stuffsyworkplace@gmail.com";
 
 export function buildInvoicePdf(data: InvoiceData): Promise<Buffer> {
   return new Promise((resolve, reject) => {

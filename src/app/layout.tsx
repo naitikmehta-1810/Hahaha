@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Caveat, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/layout/AppShell";
 import { AuthProvider } from "@/components/auth/AuthProvider";
@@ -17,6 +17,15 @@ export const metadata: Metadata = {
 };
 
 // Self-hosted variable font: no render-blocking request to Google, and weights like 650 work.
+/** Hand-lettered accents (homepage, selling page). Not preloaded: only a few words use it. */
+const hand = Caveat({
+  subsets: ["latin"],
+  weight: ["600", "700"],
+  display: "swap",
+  preload: false,
+  variable: "--font-hand",
+});
+
 const sans = Plus_Jakarta_Sans({
   subsets: ["latin"],
   display: "swap",
@@ -33,7 +42,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={sans.variable} suppressHydrationWarning>
+    <html lang="en" className={`${sans.variable} ${hand.variable}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
         <AuthProvider>
           <AppShell>{children}</AppShell>

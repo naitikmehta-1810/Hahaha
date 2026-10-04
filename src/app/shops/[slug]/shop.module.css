@@ -157,9 +157,16 @@
 }
 
 .statValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 0.9375rem;
   font-weight: 700;
   color: var(--color-text-main);
+}
+
+.statValue svg {
+  color: var(--color-star);
 }
 
 .statLabel {
@@ -262,7 +269,7 @@
   position: relative;
   border-radius: var(--radius-xl);
   overflow: hidden;
-  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary-light) 50%, var(--color-primary-light) 100%);
+  background: var(--color-primary-light);
   min-height: 200px;
   display: flex;
   align-items: stretch;
@@ -330,6 +337,17 @@
   .bannerTitle {
     font-size: 1.5rem;
   }
+}
+
+.bannerBlank {
+  position: absolute;
+  inset: 16px 16px 16px 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  color: var(--color-primary);
 }
 
 .bannerImg {

@@ -15,6 +15,14 @@
   border: 1px solid var(--color-border);
 }
 
+.railTagline {
+  margin: 10px 4px 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-primary);
+}
+
 .shopRailAvatar {
   width: 44px;
   height: 44px;
@@ -114,6 +122,12 @@
 
 .sectionHint {
   margin: -8px 0 14px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.hintBelow {
+  margin: 8px 0 0;
   font-size: 0.8rem;
   color: var(--color-text-muted);
 }
@@ -359,8 +373,38 @@
 
 .dimsGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px 16px;
+}
+
+.weightRow {
+  max-width: 280px;
+}
+
+.volumetricToggle {
+  align-items: flex-start;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.volumetricToggle span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.volumetricToggle small {
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.volumetricToggle + .dimsGrid {
+  margin-top: 16px;
 }
 
 .segmented {
@@ -574,46 +618,28 @@
 
 .setupBoard {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 16px;
   align-items: start;
 }
 
-.settingsNav {
-  position: sticky;
-  top: 84px;
-  display: flex;
+/* Phones and tablets: the sidebar is a drawer, so offer the steps inline too. */
+.stepPicker {
+  display: none;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  gap: 6px;
 }
 
-.settingsItem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.stepPicker select {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  text-align: left;
-  font-size: 0.86rem;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-dark);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  font-size: 0.92rem;
   font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.settingsItem:hover {
-  background: var(--color-surface-muted);
   color: var(--color-text-main);
-}
-
-.settingsItemActive,
-.settingsItemActive:hover {
-  background: var(--color-primary-light);
-  color: var(--color-primary-ink);
 }
 
 .setupSide {
@@ -805,14 +831,19 @@
   }
 
   .setupBoard {
-    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .setupSide {
-    grid-column: 1 / -1;
     display: grid;
     grid-template-columns: 1fr 1fr;
     align-items: start;
+  }
+}
+
+@media (max-width: 968px) {
+  .stepPicker {
+    display: flex;
   }
 }
 
@@ -824,22 +855,6 @@
   .setupBoard,
   .setupSide {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .settingsNav {
-    top: 64px;
-    z-index: 15;
-    flex-direction: row;
-    overflow-x: auto;
-    gap: 4px;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .settingsItem {
-    flex: 0 0 auto;
-    width: auto;
-    white-space: nowrap;
   }
 
   .channelBody {

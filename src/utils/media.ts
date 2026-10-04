@@ -1,12 +1,7 @@
 /**
- * Shared Cloudinary CDN helpers. Cloud name is public (not a secret).
- * Assets are uploaded with stable public_ids by `npm run seed:category-images`.
+ * Image helpers. Storefront artwork is uploaded by admins (see utils/siteMedia);
+ * nothing here points at hosted images.
  */
-export const CLOUDINARY_CLOUD_NAME = "dfoznqeww";
-
-export function cdnImage(publicId: string, transforms = "f_auto,q_auto") {
-  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/${transforms}/${publicId}`;
-}
 
 const CLOUDINARY_UPLOAD = /^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(.*)$/;
 /** A leading transformation segment such as `f_auto,q_auto` (not a `v123` version). */
@@ -32,9 +27,17 @@ export function imageSrcSet(url: string | null | undefined, widths: number[]) {
   return widths.map((w) => `${optimizedImage(url, w)} ${w}w`).join(", ");
 }
 
-/** Default product / cart / order thumbnail when none is set. */
-export const FALLBACK_PRODUCT_IMAGE = cdnImage("stuffsy/ui/product-fallback");
+/** Default product / cart / order thumbnail when none is set (local, no network). */
+export const FALLBACK_PRODUCT_IMAGE = "/brand/product-placeholder.svg";
 
+/** Cloudinary cloud for the storefront's default artwork (public, not a secret). */
+const CLOUDINARY_CLOUD_NAME = "dfoznqeww";
+
+function cdnImage(publicId: string, transforms = "f_auto,q_auto") {
+  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/${transforms}/${publicId}`;
+}
+
+/** Default homepage carousel photos; admins can replace them under Storefront. */
 export const HERO_CAROUSEL_IMAGES = [
   cdnImage("stuffsy/ui/hero-carousel-1"),
   cdnImage("stuffsy/ui/hero-carousel-2"),
@@ -46,7 +49,5 @@ export const SELL_STEP_IMAGES = [
   cdnImage("stuffsy/ui/seller-step-3"),
 ] as const;
 
-export const FALLBACK_AVATAR_IMAGE = cdnImage("stuffsy/ui/avatar-fallback");
 /** Shops without an uploaded logo use the Stuffsy mark. */
 export const FALLBACK_SHOP_LOGO = "/brand/stuffsy-mark.png";
-export const FALLBACK_SHOP_BANNER = cdnImage("stuffsy/ui/shop-banner-fallback");

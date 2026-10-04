@@ -691,7 +691,7 @@ adminRouter.get(
   "/categories",
   asyncHandler(async (_req, res) => {
     const result = await pool.query(
-      `select id, name, slug, parent_id, gst_rate, is_active from public.categories
+      `select id, name, slug, parent_id, gst_rate, is_active, image_url from public.categories
        where deleted_at is null
        order by name asc`
     );
@@ -822,6 +822,58 @@ adminRouter.delete(
     }
     await invalidateCatalogCaches();
     res.json({ deleted: true, id: updated.rows[0].id });
+  })
+);
+
+const categoryImageSchema = z
+  .object({
+    fileName: z.string().trim().min(1).max(120).default("category.jpg"),
+    dataBase64: z.string().min(1),
+  });
+
+/** Photo shown on the homepage "Shop by category" circle. */
+adminRouter.put(
+  "/categories/:id/image",
+  asyncHandler(async (req, res) => {
+    const parsed = categoryImageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Choose an image to upload" });
+      return;
+    }
+    const { uploadImage } = await import("../services/media.service.js");
+    const uploaded = await uploadImage({
+      dataBase64: parsed.data.dataBase64,
+      fileName: parsed.data.fileName,
+      folder: "categories",
+    });
+    const updated = await pool.query(
+      `update public.categories set image_url = $2, updated_at = now()
+       where id = $1 and deleted_at is null returning id, image_url`,
+      [String(req.params.id), uploaded.url]
+    );
+    if (!updated.rows[0]) {
+      res.status(404).json({ message: "Category not found" });
+      return;
+    }
+    await invalidateCatalogCaches();
+    res.json({ id: updated.rows[0].id, imageUrl: updated.rows[0].image_url });
+  })
+);
+
+adminRouter.delete(
+  "/categories/:id/image",
+  asyncHandler(async (req, res) => {
+    const updated = await pool.query(
+      `update public.categories set image_url = null, updated_at = now()
+       where id = $1 and deleted_at is null returning id`,
+      [String(req.params.id)]
+    );
+    if (!updated.rows[0]) {
+      res.status(404).json({ message: "Category not found" });
+      return;
+    }
+    await invalidateCatalogCaches();
+    res.json({ id: updated.rows[0].id, imageUrl: null });
   })
 );
 
@@ -977,6 +1029,64 @@ adminRouter.patch(
       quantityOnHand: Number(updated.rows[0].quantity_on_hand),
       quantityReserved: Number(updated.rows[0].quantity_reserved),
     });
+  })
+);
+
+
+/* ── Storefront images ─────────────────────────────────────────────────── */
+
+adminRouter.get(
+  "/site-media",
+  asyncHandler(async (_req, res) => {
+    const { listSiteMediaForAdmin } = await import("../services/site-media.service.js");
+    res.json({ slots: await listSiteMediaForAdmin() });
+  })
+);
+
+const siteMediaUploadSchema = z
+  .object({
+    fileName: z.string().trim().min(1).max(120).default("upload.jpg"),
+    dataBase64: z.string().min(1).optional(),
+    url: z.string().url().max(500).optional(),
+  })
+  .refine((value) => Boolean(value.dataBase64 || value.url), {
+    message: "Choose an image to upload",
+  });
+
+adminRouter.put(
+  "/site-media/:key",
+  asyncHandler(async (req, res) => {
+    const key = String(req.params.key);
+    const { isSiteMediaKey, setSiteMedia, listSiteMediaForAdmin } = await import(
+      "../services/site-media.service.js"
+    );
+    if (!isSiteMediaKey(key)) throw new AppError(404, "NOT_FOUND", "Unknown image slot");
+    const parsed = siteMediaUploadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid image" });
+      return;
+    }
+    const { uploadImage } = await import("../services/media.service.js");
+    const uploaded = await uploadImage({
+      dataBase64: parsed.data.dataBase64,
+      url: parsed.data.url,
+      fileName: parsed.data.fileName,
+      folder: "ui",
+    });
+    await setSiteMedia(key, { url: uploaded.url, publicId: uploaded.publicId }, req.user!.id);
+    const slots = await listSiteMediaForAdmin();
+    res.json({ slot: slots.find((slot) => slot.key === key) });
+  })
+);
+
+adminRouter.delete(
+  "/site-media/:key",
+  asyncHandler(async (req, res) => {
+    const key = String(req.params.key);
+    const { isSiteMediaKey, clearSiteMedia } = await import("../services/site-media.service.js");
+    if (!isSiteMediaKey(key)) throw new AppError(404, "NOT_FOUND", "Unknown image slot");
+    await clearSiteMedia(key);
+    res.json({ ok: true });
   })
 );
 

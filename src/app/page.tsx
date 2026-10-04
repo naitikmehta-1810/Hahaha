@@ -16,7 +16,6 @@ import ValueProps from "@/components/ui/ValueProps/ValueProps";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
   HOME_POPULAR_SORT,
-  categoryImageUrl,
   fetchCategories,
   fetchProducts,
   pickShopByCategoryNodes,
@@ -33,6 +32,11 @@ import {
   optimizedImage,
 } from "@/utils/media";
 import { apiRequest } from "@/utils/api-client";
+import { fetchSiteMedia, type SiteMedia } from "@/utils/siteMedia";
+import CategoryIcon from "@/components/brand/CategoryIcon";
+
+/** Sidebar length that keeps the hero a sensible height; the rest live under "See all categories". */
+const SIDEBAR_LIMIT = 9;
 
 const SLIDE_INTERVAL_MS = 6500;
 
@@ -177,7 +181,7 @@ function HeroCarousel({ slides }: { slides: Slide[] }) {
     >
       {slides.map((slide, index) => {
         const active = index === current;
-        const onDark = slide.theme !== "lilac";
+        const onDark = false;
         return (
           <div
             key={slide.title}
@@ -295,16 +299,19 @@ export default function Home() {
   const [loadingRecommended, setLoadingRecommended] = useState(true);
   const [showingFallback, setShowingFallback] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [media, setMedia] = useState<SiteMedia>({});
 
   useEffect(() => {
     void fetchCategories().then((tree) => {
-      setSidebarCategories(pickSidebarCategories(tree));
+      setSidebarCategories(pickSidebarCategories(tree).slice(0, SIDEBAR_LIMIT));
       setCircleCategories(pickShopByCategoryNodes(tree, 8));
     });
     // Real new listings give the "new arrivals" slide its own imagery.
-    void fetchProducts({ sort: "new_arrivals", pageSize: 2 }).then((result) =>
+    void fetchProducts({ sort: "new_arrivals", pageSize: 8 }).then((result) =>
       setNewArrivals(result.products)
     );
+    // Admin-uploaded storefront images replace the default artwork.
+    void fetchSiteMedia().then(setMedia);
   }, []);
 
   useEffect(() => {
@@ -366,7 +373,11 @@ export default function Home() {
     };
   }, [activeRecommendTab]);
 
-  const arrivalImages = newArrivals.map((p) => productImageUrl(p));
+  // Only listings with a real photo; the placeholder would look broken at banner size.
+  const arrivalImages = newArrivals
+    .map((p) => p.thumbnailUrl)
+    .filter((url): url is string => Boolean(url));
+  const sellHref = user?.isSeller ? "/seller" : "/sell-on-stuffsy";
   const slides: Slide[] = [
     {
       label: "Handmade in India",
@@ -375,7 +386,7 @@ export default function Home() {
       cta: "Shop now",
       href: "/shop",
       secondary: { label: "See what's popular", href: "/shop?sort=popular" },
-      images: [HERO_CAROUSEL_IMAGES[0]],
+      images: [media["home.hero.shop"] ?? HERO_CAROUSEL_IMAGES[0]],
       theme: "plum",
     },
     {
@@ -384,8 +395,9 @@ export default function Home() {
       text: "The latest listings from makers across the country. Be the first to find them.",
       cta: "See new arrivals",
       href: "/shop?sort=newest",
-      images:
-        arrivalImages.length >= 2
+      images: media["home.hero.new"]
+        ? [media["home.hero.new"]]
+        : arrivalImages.length >= 2
           ? arrivalImages.slice(0, 2)
           : [HERO_CAROUSEL_IMAGES[1], HERO_CAROUSEL_IMAGES[0]],
       theme: "lilac",
@@ -394,9 +406,9 @@ export default function Home() {
       label: "Sell on Stuffsy",
       title: "Turn your craft into a business",
       text: "Open a shop in minutes and reach buyers across India. Payments and shipping handled for you.",
-      cta: user?.isSeller ? "Open your seller hub" : "Start selling",
-      href: user?.isSeller ? "/seller" : "/sell",
-      images: [SELL_STEP_IMAGES[1]],
+      cta: user?.isSeller ? "Open your seller hub" : "Sell on Stuffsy",
+      href: sellHref,
+      images: [media["home.hero.sell"] ?? SELL_STEP_IMAGES[1]],
       theme: "violet",
     },
   ];
@@ -439,20 +451,23 @@ export default function Home() {
                 onClick={() => setCategoriesOpen(false)}
               >
                 <span className={styles.categoryLabel}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={optimizedImage(categoryImageUrl(cat), 64)}
-                    alt=""
-                    className={styles.categoryThumb}
-                    loading="lazy"
-                  />
+                  {/* Admin-set category photo; the icon shows until one is uploaded. */}
+                  {cat.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={optimizedImage(cat.imageUrl, 64)}
+                      alt=""
+                      className={styles.categoryThumb}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className={styles.categoryIcon}>
+                      <CategoryIcon category={cat} size={17} />
+                    </span>
+                  )}
                   {cat.name}
                 </span>
-                {cat.productCount > 0 ? (
-                  <span className={styles.categoryCount}>{cat.productCount}</span>
-                ) : (
-                  <ChevronRight size={14} className={styles.categoryChevron} />
-                )}
+                <ChevronRight size={14} className={styles.categoryChevron} />
               </Link>
             ))}
             <Link
@@ -508,14 +523,20 @@ export default function Home() {
               >
                 <span className={styles.circleRing}>
                   <span className={styles.circleImgWrapper}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={optimizedImage(categoryImageUrl(cat), 200)}
-                      alt=""
-                      className={styles.circleImg}
-                      loading="lazy"
-                      decoding="async"
-                    />
+                    {cat.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={optimizedImage(cat.imageUrl, 200)}
+                        alt=""
+                        className={styles.circleImg}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : (
+                      <span className={styles.circleFallback}>
+                        <CategoryIcon category={cat} size={34} />
+                      </span>
+                    )}
                   </span>
                 </span>
                 <span className={styles.circleTitle}>{cat.name}</span>
@@ -539,13 +560,13 @@ export default function Home() {
           </p>
         </div>
         <ButtonLink
-          href={user?.isSeller ? "/seller" : "/sell"}
+          href={sellHref}
           size="lg"
           variant="secondary"
           className={styles.sellCta}
           rightIcon={<ArrowRight size={18} />}
         >
-          {user?.isSeller ? "Go to seller hub" : "Start selling"}
+          {user?.isSeller ? "Go to seller hub" : "Sell on Stuffsy"}
         </ButtonLink>
       </section>
 

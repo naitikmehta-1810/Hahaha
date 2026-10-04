@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Button from "@/components/ui/Button/Button";
 import PageHeader from "@/components/ui/PageHeader/PageHeader";
 import Notice from "@/components/ui/Notice/Notice";
+import { ImageIcon, Upload } from "lucide-react";
 import { apiRequest } from "@/utils/api-client";
+import { optimizedImage } from "@/utils/media";
 import ui from "@/components/console/console.module.css";
 import styles from "../admin.module.css";
 
@@ -14,7 +16,19 @@ type CategoryRow = {
   slug: string;
   parent_id: string | null;
   gst_rate: string | number | null;
+  image_url: string | null;
 };
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+function readAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Could not read the file."));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<CategoryRow[]>([]);
@@ -27,6 +41,7 @@ export default function AdminCategoriesPage() {
   const [parentId, setParentId] = useState("");
   const [gstRate, setGstRate] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [imageBusyId, setImageBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const result = await apiRequest<{ categories: CategoryRow[] }>(
@@ -101,6 +116,53 @@ export default function AdminCategoriesPage() {
     await load();
   }
 
+  async function uploadImage(category: CategoryRow, file: File) {
+    setNotice(null);
+    if (!file.type.startsWith("image/")) {
+      setError("Choose an image file (JPG, PNG or WebP).");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError("That image is over 8 MB. Export a smaller version and try again.");
+      return;
+    }
+    setImageBusyId(category.id);
+    try {
+      const dataBase64 = await readAsDataUrl(file);
+      const result = await apiRequest<{ imageUrl: string }>(
+        "PUT",
+        `/api/admin/categories/${category.id}/image`,
+        { body: { fileName: file.name, dataBase64 } }
+      );
+      if (result.error || !result.data) {
+        setError(result.error ?? "Upload failed.");
+        return;
+      }
+      const imageUrl = result.data.imageUrl;
+      setCategories((rows) => rows.map((row) => (row.id === category.id ? { ...row, image_url: imageUrl } : row)));
+      setError(null);
+      setNotice(`Photo for “${category.name}” updated.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setImageBusyId(null);
+    }
+  }
+
+  async function removeImage(category: CategoryRow) {
+    setNotice(null);
+    setImageBusyId(category.id);
+    const result = await apiRequest("DELETE", `/api/admin/categories/${category.id}/image`);
+    setImageBusyId(null);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setCategories((rows) => rows.map((row) => (row.id === category.id ? { ...row, image_url: null } : row)));
+    setError(null);
+    setNotice(`Photo for “${category.name}” removed.`);
+  }
+
   function startEdit(category: CategoryRow) {
     setEditingId(category.id);
     setName(category.name);
@@ -116,7 +178,7 @@ export default function AdminCategoriesPage() {
     <>
       <PageHeader
         title="Categories"
-        description="Organise the catalog. Leave GST blank to charge the default 18% at checkout."
+        description="Organise the catalog and set the photos shown in the homepage “Shop by category” row. Leave GST blank to charge the default 18% at checkout."
       />
 
       <form className={ui.card} onSubmit={(e) => void onSubmit(e)}>
@@ -189,6 +251,7 @@ export default function AdminCategoriesPage() {
           <table className={ui.table}>
             <thead>
               <tr>
+                <th>Photo</th>
                 <th>Name</th>
                 <th>Parent</th>
                 <th>GST</th>
@@ -198,6 +261,42 @@ export default function AdminCategoriesPage() {
             <tbody>
               {categories.map((c) => (
                 <tr key={c.id}>
+                  <td>
+                    <div className={styles.catPhotoCell}>
+                      <span className={styles.catPhoto}>
+                        {c.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={optimizedImage(c.image_url, 120)} alt="" />
+                        ) : (
+                          <ImageIcon size={18} aria-hidden="true" />
+                        )}
+                      </span>
+                      <label className={styles.catUpload}>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          disabled={imageBusyId !== null}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.target.value = "";
+                            if (file) void uploadImage(c, file);
+                          }}
+                        />
+                        <Upload size={14} aria-hidden="true" />
+                        {imageBusyId === c.id ? "Uploading…" : c.image_url ? "Replace" : "Upload"}
+                      </label>
+                      {c.image_url ? (
+                        <button
+                          type="button"
+                          className={styles.catRemove}
+                          disabled={imageBusyId !== null}
+                          onClick={() => void removeImage(c)}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  </td>
                   <td>
                     <span className={ui.cellPrimary}>{c.name}</span>
                     <span className={ui.cellSub}>/{c.slug}</span>
@@ -224,7 +323,7 @@ export default function AdminCategoriesPage() {
               ))}
               {!loading && categories.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className={ui.emptyCell}>
+                  <td colSpan={5} className={ui.emptyCell}>
                     No categories yet.
                   </td>
                 </tr>

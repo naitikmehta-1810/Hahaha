@@ -483,7 +483,7 @@ function layout(opts: LayoutOptions) {
           <tr>
             <td class="pad" style="padding:28px 8px 0;font-family:${FONT};font-size:13px;line-height:1.6;color:${C.muted};" align="center">
               <p style="margin:0 0 12px;">
-                ${footerLink(siteUrl("/shop"), "Shop")}&nbsp;&nbsp;·&nbsp;&nbsp;${footerLink(siteUrl("/account?tab=orders"), "Your orders")}&nbsp;&nbsp;·&nbsp;&nbsp;${footerLink(`mailto:${env.SUPPORT_EMAIL}`, "Help")}
+                ${footerLink(siteUrl("/shop"), "Shop")}&nbsp;&nbsp;·&nbsp;&nbsp;${footerLink(siteUrl("/account?tab=orders"), "Your orders")}&nbsp;&nbsp;·&nbsp;&nbsp;${footerLink(env.INSTAGRAM_URL, "Instagram")}&nbsp;&nbsp;·&nbsp;&nbsp;${footerLink(`mailto:${env.SUPPORT_EMAIL}`, "Help")}
               </p>
               <p style="margin:0 0 12px;">Questions? Write to us at <a href="mailto:${escapeHtml(env.SUPPORT_EMAIL)}" style="color:${C.primary};text-decoration:none;font-weight:600;">${escapeHtml(env.SUPPORT_EMAIL)}</a></p>
               <p style="margin:0 0 6px;font-size:12px;color:${C.subtle};">${reason}</p>

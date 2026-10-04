@@ -32,6 +32,7 @@ import * as Sentry from "@sentry/node";
 import analyticsRouter from "./routes/analytics.js";
 import searchRouter from "./routes/search.js";
 import accountRouter from "./routes/account.js";
+import siteMediaRouter from "./routes/site-media.js";
 
 if (env.SENTRY_DSN) {
   Sentry.init({
@@ -150,6 +151,7 @@ app.use("/api/admin", adminRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/account", accountRouter);
+app.use("/api/site-media", siteMediaRouter);
 app.use(notFound);
 app.use(errorHandler);
 

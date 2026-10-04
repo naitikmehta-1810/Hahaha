@@ -29,12 +29,12 @@
   padding: 28px 36px 32px;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, var(--color-surface-muted) 0%, var(--color-primary-light) 100%);
+  background: var(--color-surface-muted);
 }
 
 .signInTone,
 .signUpTone {
-  background: linear-gradient(180deg, var(--color-surface-muted) 0%, var(--color-primary-light) 100%);
+  background: var(--color-surface-muted);
 }
 
 .dividerLine {

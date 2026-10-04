@@ -281,7 +281,10 @@ export default function ProductReviews({ productId, productSlug, onReviewPosted 
               const pct = total > 0 ? Math.round((count / total) * 100) : 0;
               return (
                 <li key={stars} className={styles.barRow}>
-                  <span>{stars}★</span>
+                  <span className={styles.barLabel}>
+                    {stars}
+                    <Star size={12} fill="currentColor" strokeWidth={0} aria-label="stars" />
+                  </span>
                   <span className={styles.barTrack} aria-hidden="true">
                     <span className={styles.barFill} style={{ width: `${pct}%` }} />
                   </span>

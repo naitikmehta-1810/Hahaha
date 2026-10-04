@@ -228,7 +228,7 @@ export const Header = () => {
               <span className={styles.sellText}>Seller panel</span>
             </Link>
           ) : (
-            <Link href="/sell" className={styles.sellLink}>
+            <Link href="/sell-on-stuffsy" className={styles.sellLink}>
               <Store size={18} />
               <span className={styles.sellText}>Sell on Stuffsy</span>
             </Link>
@@ -296,7 +296,7 @@ export const Header = () => {
                 Seller panel
               </Link>
             ) : (
-              <Link href="/sell" onClick={() => setMobileOpen(false)}>
+              <Link href="/sell-on-stuffsy" onClick={() => setMobileOpen(false)}>
                 Sell on Stuffsy
               </Link>
             )}

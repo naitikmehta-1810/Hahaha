@@ -394,13 +394,6 @@
   text-align: center;
 }
 
-.acceptRow {
-  justify-content: center;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
-}
-
 .secureCheckout {
   display: flex;
   align-items: center;

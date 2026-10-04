@@ -8,12 +8,15 @@
   --color-primary: #7c3aed;
   --color-primary-rgb: 124, 58, 237;
   --color-primary-hover: #6d28d9;
-  --color-primary-active: #5b21b6;
-  --color-primary-ink: #4c1d95;
+  --color-primary-active: #6d28d9;
+  /* Text on lilac surfaces uses the brand purple itself; no dark purple tones. */
+  --color-primary-ink: var(--color-primary);
   --color-primary-light: #f3eefe;
   --color-primary-border: #ddd2fb;
-  --color-plum: #381840;
-  --gradient-brand: linear-gradient(135deg, #5b21b6 0%, #7c3aed 55%, #9b6cf5 100%);
+  /* Legacy token: dark plum is retired, so it now resolves to the brand purple. */
+  --color-plum: var(--color-primary);
+  /* Kept as a token name for older styles; the brand uses solid colour only. */
+  --gradient-brand: var(--color-primary);
 
   /* Primary actions use the brand violet; "ink" is an alias kept for readability. */
   --color-ink: var(--color-primary);
@@ -21,6 +24,8 @@
 
   /* Neutrals, lightly tinted towards the brand violet */
   --color-bg: #f8f7fb;
+  /* Very light lilac, the homepage feature background. */
+  --color-lilac: #ede6fb;
   --color-canvas: #f6f4fa;
   --color-card: #ffffff;
   --color-surface-muted: #f8f6fc;

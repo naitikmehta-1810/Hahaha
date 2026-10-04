@@ -37,6 +37,9 @@ import BrandLogo from "@/components/brand/BrandLogo";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
 import { INDIA_STATES } from "@/utils/india-states";
 import PickupAddressDialog from "@/components/seller/PickupAddressDialog";
+import { SELLER_TAGLINE } from "@/components/brand/tagline";
+import { fetchSiteMedia, type SiteMedia } from "@/utils/siteMedia";
+import { optimizedImage } from "@/utils/media";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3;
@@ -125,7 +128,7 @@ const Stepper = ({ step }: { step: Step }) => (
 const SIDEBAR_DATA = [
   {
     badge:   "STEP 1 OF 3",
-    heading: <>Let&apos;s get started <span style={{ display: "inline" }}>👋</span></>,
+    heading: <>Let&apos;s get started</>,
     desc:    "Tell us what you're interested in.\nYou can select one or more categories that best describe what you want to sell.",
     features: [
       {
@@ -173,7 +176,7 @@ const SIDEBAR_DATA = [
   },
   {
     badge:   "STEP 3 OF 3",
-    heading: <>Almost there! 🎉</>,
+    heading: <>Almost there</>,
     desc:    "Please read and agree to our terms before creating your shop.",
     features: [
       {
@@ -198,6 +201,10 @@ const SIDEBAR_DATA = [
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SellPage() {
   const { isAuthenticated, status: authStatus, user } = useAuth();
+  const [media, setMedia] = useState<SiteMedia>({});
+  useEffect(() => {
+    void fetchSiteMedia().then(setMedia);
+  }, []);
   const [step,            setStep]            = useState<Step>(1);
   const [selectedCats,    setSelectedCats]    = useState<string[]>([]);
   const [shopName,        setShopName]        = useState("");
@@ -409,6 +416,7 @@ export default function SellPage() {
 
   // ── Sidebar data for current step ─────────────────────────────────────────
   const sidebar = SIDEBAR_DATA[step - 1];
+  const sceneImage = media["sell.background"] ?? null;
 
   // ═══════════════════════════════════════════════════════════════
   // SUCCESS OVERLAY
@@ -420,8 +428,9 @@ export default function SellPage() {
         <div className={styles.successIcon}>
           <CheckCircle2 size={44} color="#fff" />
         </div>
+        <p className={styles.successTagline}>{SELLER_TAGLINE}</p>
         <h1 className={styles.successTitle}>
-          {isPending ? "Shop application submitted!" : "Your shop is live! 🎉"}
+          {isPending ? "Shop application submitted" : "Your shop is live"}
         </h1>
         <p className={styles.successSubtitle}>
           {isPending ? (
@@ -469,14 +478,19 @@ export default function SellPage() {
   return (
     <div className={`${styles.page} ${step === 3 ? styles.termsPage : ""}`}>
       <div className={styles.scene} aria-hidden="true">
-        <Image
-          src="/sell/onboarding-room.png"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className={styles.sceneImage}
-        />
+        {sceneImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={optimizedImage(sceneImage, 1920)} alt="" className={styles.sceneImage} />
+        ) : (
+          <Image
+            src="/sell/onboarding-room.png"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className={styles.sceneImage}
+          />
+        )}
       </div>
       {/* ── Top Nav ──────────────────────────────────────────── */}
       <nav className={styles.topNav}>
@@ -484,9 +498,7 @@ export default function SellPage() {
           <LogoMark />
           <div>
             <div className={styles.logoText}>Stuffsy</div>
-            {step === 2 && (
-              <div className={styles.logoTagline}>Sell Your Stuff, Your Way</div>
-            )}
+            <div className={styles.logoTagline}>{SELLER_TAGLINE}</div>
           </div>
         </Link>
         <Stepper step={step} />

@@ -128,3 +128,27 @@ export const gstinLookupLimiter = rateLimit({
   ...failOpen,
   ...withStore("gstin"),
 });
+
+/** Reading a Shopify store or CSV makes an outbound request, so keep previews modest. */
+export const shopifyPreviewLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: env.NODE_ENV === "production" ? 12 : 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many import previews. Wait a few minutes and try again." },
+  ...perVisitor,
+  ...failOpen,
+  ...withStore("shopify-preview"),
+});
+
+/** The import runs in small batches (3 products each), so allow plenty per window. */
+export const shopifyImportLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: env.NODE_ENV === "production" ? 200 : 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many import requests. Wait a few minutes and try again." },
+  ...perVisitor,
+  ...failOpen,
+  ...withStore("shopify-import"),
+});

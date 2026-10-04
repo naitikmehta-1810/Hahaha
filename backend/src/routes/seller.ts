@@ -2,7 +2,17 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { requireAuth } from "../middleware/requireAuth.js";
-import { gstinLookupLimiter } from "../middleware/auth-rate-limit.js";
+import {
+  gstinLookupLimiter,
+  shopifyImportLimiter,
+  shopifyPreviewLimiter,
+} from "../middleware/auth-rate-limit.js";
+import {
+  IMPORT_LIMITS,
+  fetchShopifyStoreProducts,
+  productsFromCsv,
+  type ImportProduct,
+} from "../services/shopify-import.service.js";
 import { requireSeller, requireSellerAnyStatus } from "../middleware/requireSeller.js";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
@@ -762,6 +772,7 @@ const PRODUCT_FIELD_LABELS: Record<string, string> = {
   lengthCm: "Length",
   widthCm: "Width",
   heightCm: "Height",
+  useVolumetric: "Volumetric shipping",
   tags: "Tags",
   imageUrls: "Images",
   collectionIds: "Collections",
@@ -832,6 +843,11 @@ const productCreateSchema = z.object({
   lengthCm: optionalDimensionCm,
   widthCm: optionalDimensionCm,
   heightCm: optionalDimensionCm,
+  /**
+   * Opt in to size-based (volumetric) courier billing. Off by default: parcels
+   * are booked on dead weight alone, so L/W/H are only needed when this is on.
+   */
+  useVolumetric: z.boolean().optional(),
   status: z.enum(["draft", "active"]).default("draft"),
   tags: z
     .array(
@@ -942,12 +958,14 @@ sellerRouter.get(
       customization_label: string | null;
       processing_days: number | null;
       processing_days_max: number | null;
+      use_volumetric: boolean;
     }>(
       `select id, title, slug, short_description, description, category_id, subcategory_id,
               product_type, base_price::text, compare_at_price::text, cost_price::text,
               status, tags, weight::text, weight_unit, length_cm::text, width_cm::text,
               height_cm::text, continue_selling_when_out_of_stock,
-              is_customizable, customization_label, processing_days, processing_days_max
+              is_customizable, customization_label, processing_days, processing_days_max,
+              use_volumetric
        from public.products
        where id = $1`,
       [productId]
@@ -1003,6 +1021,7 @@ sellerRouter.get(
         lengthCm: row.length_cm != null ? Number(row.length_cm) : null,
         widthCm: row.width_cm != null ? Number(row.width_cm) : null,
         heightCm: row.height_cm != null ? Number(row.height_cm) : null,
+        useVolumetric: row.use_volumetric,
         status: row.status,
         isCustomizable: row.is_customizable,
         customizationLabel: row.customization_label,
@@ -1016,6 +1035,149 @@ sellerRouter.get(
   })
 );
 
+type ProductCreateInput = z.infer<typeof productCreateSchema>;
+
+const PHYSICAL_SHIPPING_MESSAGE =
+  "Enter the product weight in kg (e.g. 0.2 or 200g) for physical products.";
+const VOLUMETRIC_MESSAGE =
+  "Enter length, width and height in cm to use volumetric shipping, or turn it off.";
+
+/** Rules shared by the product form and the Shopify import. */
+function assertProductShipping(data: ProductCreateInput) {
+  if (data.productType === "physical") {
+    if (data.weight == null) {
+      throw new AppError(400, "WEIGHT_REQUIRED", PHYSICAL_SHIPPING_MESSAGE);
+    }
+    if (
+      data.useVolumetric &&
+      (data.lengthCm == null || data.widthCm == null || data.heightCm == null)
+    ) {
+      throw new AppError(400, "DIMENSIONS_REQUIRED", VOLUMETRIC_MESSAGE);
+    }
+  }
+  assertShippingRange(data.processingDays, data.processingDaysMax);
+}
+
+/** Where an imported product came from; null for products created in the form. */
+type ProductExternalRef = { source: string; id: string };
+
+/**
+ * Inserts a product with its default variant, stock, images and collections in
+ * one transaction. Used by the product form and by imports.
+ */
+async function createProductRecord(
+  sellerId: string,
+  data: ProductCreateInput,
+  external: ProductExternalRef | null = null
+) {
+  const sellerRow = await pool.query<{ shop_name: string }>(
+    `select shop_name from public.sellers where id = $1`,
+    [sellerId]
+  );
+  const makerName = sellerRow.rows[0]?.shop_name || "Maker";
+
+  let slug = slugifyProduct(data.title);
+  const clash = await pool.query(`select 1 from public.products where slug = $1 limit 1`, [slug]);
+  if (clash.rows.length) {
+    slug = `${slug}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  }
+
+  await assertSellerOwnsAllCollections(sellerId, data.collectionIds);
+
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const product = await client.query<{ id: string; slug: string }>(
+      `insert into public.products
+         (id, seller_id, category_id, subcategory_id, title, slug, description, short_description,
+          maker_name, base_price, compare_at_price, cost_price, status, product_type, tags,
+          weight, weight_unit, length_cm, width_cm, height_cm,
+          continue_selling_when_out_of_stock, is_customizable, customization_label,
+          processing_days, processing_days_max, use_volumetric, external_source, external_id,
+          created_at, updated_at)
+       values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7,
+               $8, $9, $10, $11, $12, $13, $14,
+               $15, $16, $17, $18, $19,
+               $20, $21, $22, coalesce($23, 2), $24, $25, $26, $27, now(), now())
+       returning id, slug`,
+      [
+        sellerId,
+        data.categoryId,
+        data.subcategoryId ?? null,
+        data.title,
+        slug,
+        data.description || data.shortDescription,
+        data.shortDescription,
+        makerName,
+        data.price,
+        data.compareAtPrice ?? null,
+        data.costPrice ?? null,
+        data.status,
+        data.productType,
+        data.tags,
+        data.weight ?? null,
+        data.weightUnit,
+        data.lengthCm ?? null,
+        data.widthCm ?? null,
+        data.heightCm ?? null,
+        data.continueSellingWhenOutOfStock,
+        data.isCustomizable ?? false,
+        data.isCustomizable ? data.customizationLabel?.trim() || null : null,
+        data.processingDays ?? null,
+        data.processingDaysMax ?? null,
+        data.useVolumetric ?? false,
+        external?.source ?? null,
+        external?.id ?? null,
+      ]
+    );
+
+    const productId = product.rows[0].id;
+    const sku = data.sku || `SKU-${productId.slice(0, 8).toUpperCase()}`;
+
+    const variant = await client.query<{ id: string }>(
+      `insert into public.product_variants
+         (id, product_id, sku, price, option_values, is_active, created_at, updated_at)
+       values (gen_random_uuid(), $1, $2, $3, '{}'::jsonb, true, now(), now())
+       returning id`,
+      [productId, sku, data.price]
+    );
+
+    await client.query(
+      `insert into public.inventory
+         (id, variant_id, quantity_on_hand, quantity_reserved, low_stock_threshold, created_at, updated_at)
+       values (gen_random_uuid(), $1, $2, 0, $3, now(), now())`,
+      [variant.rows[0].id, data.stockQuantity, data.lowStockAlert]
+    );
+
+    for (let i = 0; i < data.imageUrls.length; i += 1) {
+      await client.query(
+        `insert into public.product_images
+           (id, product_id, url, alt_text, display_order, is_thumbnail, created_at, updated_at)
+         values (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now())`,
+        [productId, data.imageUrls[i], data.title, i, i === 0]
+      );
+    }
+
+    for (const collectionId of data.collectionIds) {
+      await client.query(
+        `insert into public.product_collections
+           (id, product_id, collection_id, created_at, updated_at)
+         values (gen_random_uuid(), $1, $2, now(), now())
+         on conflict (product_id, collection_id) do nothing`,
+        [productId, collectionId]
+      );
+    }
+
+    await client.query("commit");
+    return { id: productId, slug: product.rows[0].slug, status: data.status };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 sellerRouter.post(
   "/products",
   requireSeller,
@@ -1025,125 +1187,239 @@ sellerRouter.post(
       res.status(400).json({ message: productValidationMessage(parsed.error) });
       return;
     }
-    const data = parsed.data;
-    if (data.productType === "physical") {
-      if (data.weight == null || data.lengthCm == null || data.widthCm == null || data.heightCm == null) {
-        res.status(400).json({
-          message:
-            "Enter valid weight in kg (e.g. 0.2 or 200g) and length/width/height in cm for physical products.",
-        });
-        return;
-      }
+    assertProductShipping(parsed.data);
+
+    const created = await createProductRecord(req.seller!.id, parsed.data);
+    void invalidateCatalogCaches();
+    res.status(201).json({ product: created });
+  })
+);
+
+/* ── Shopify import ────────────────────────────────────────────────────── */
+
+const SHOPIFY_SOURCE = "shopify";
+
+const shopifyPreviewSchema = z.discriminatedUnion("source", [
+  z.object({ source: z.literal("url"), url: z.string().trim().min(1).max(300) }),
+  z.object({ source: z.literal("csv"), csv: z.string().min(1).max(IMPORT_LIMITS.csvBytes) }),
+]);
+
+/** Reads a Shopify store or CSV and returns what would be imported. Writes nothing. */
+sellerRouter.post(
+  "/import/shopify/preview",
+  shopifyPreviewLimiter,
+  requireSeller,
+  asyncHandler(async (req, res) => {
+    const parsed = shopifyPreviewSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Enter a store address or choose a CSV file." });
+      return;
     }
+    const products: ImportProduct[] =
+      parsed.data.source === "url"
+        ? await fetchShopifyStoreProducts(parsed.data.url)
+        : productsFromCsv(parsed.data.csv);
 
-    assertShippingRange(data.processingDays, data.processingDaysMax);
-
-    const sellerId = req.seller!.id;
-    const sellerRow = await pool.query<{ shop_name: string }>(
-      `select shop_name from public.sellers where id = $1`,
-      [sellerId]
+    const existing = await pool.query<{ external_id: string }>(
+      `select external_id from public.products
+       where seller_id = $1 and external_source = $2 and external_id = any($3::text[])
+         and deleted_at is null`,
+      [req.seller!.id, SHOPIFY_SOURCE, products.map((p) => p.externalId)]
     );
-    const makerName = sellerRow.rows[0]?.shop_name || "Maker";
+    res.json({
+      products,
+      alreadyImported: existing.rows.map((row) => row.external_id),
+      truncated: products.length >= IMPORT_LIMITS.maxProducts,
+    });
+  })
+);
 
-    let slug = slugifyProduct(data.title);
-    const clash = await pool.query(`select 1 from public.products where slug = $1 limit 1`, [slug]);
-    if (clash.rows.length) {
-      slug = `${slug}-${Date.now().toString(36)}`;
+const shopifyImportItemSchema = z.object({
+  externalId: z.string().trim().min(1).max(255),
+  title: z.string().trim().min(1).max(IMPORT_LIMITS.title),
+  description: z.string().max(IMPORT_LIMITS.description).default(""),
+  shortDescription: z.string().trim().max(IMPORT_LIMITS.shortDescription).default(""),
+  price: z.number().positive().max(10_000_000),
+  compareAtPrice: z.number().positive().max(10_000_000).nullable().optional(),
+  sku: z.string().trim().max(64).nullable().optional(),
+  stockQuantity: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  weightKg: z.number().positive().max(100).nullable().optional(),
+  tags: z.array(z.string().max(100)).max(60).default([]),
+  imageUrls: z.array(z.string().url().max(500)).max(30).default([]),
+  sourceStatus: z.enum(["active", "draft", "archived"]).default("active"),
+});
+
+const shopifyImportSchema = z.object({
+  categoryId: z.string().uuid(),
+  /** Go live straight away when a product has stock, a price and a photo. */
+  publish: z.boolean().default(false),
+  /** Small batches keep each request short; the page sends several in turn. */
+  products: z.array(shopifyImportItemSchema).min(1).max(5),
+});
+
+type ImportOutcome = {
+  externalId: string;
+  title: string;
+  result: "imported" | "skipped" | "failed";
+  productId?: string;
+  slug?: string;
+  productStatus?: string;
+  message?: string;
+  warnings: string[];
+};
+
+/** Runs `worker` over `items` with at most `limit` in flight, keeping order. */
+async function mapWithLimit<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>) {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await worker(items[index]);
+    }
+  });
+  await Promise.all(lanes);
+  return results;
+}
+
+sellerRouter.post(
+  "/import/shopify",
+  shopifyImportLimiter,
+  requireSeller,
+  asyncHandler(async (req, res) => {
+    const parsed = shopifyImportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Choose a category and at least one product to import." });
+      return;
+    }
+    const sellerId = req.seller!.id;
+    const { categoryId, publish, products } = parsed.data;
+
+    const category = await pool.query(
+      `select 1 from public.categories where id = $1 and deleted_at is null limit 1`,
+      [categoryId]
+    );
+    if (!category.rows[0]) {
+      res.status(400).json({ message: "That category no longer exists. Pick another one." });
+      return;
     }
 
-    const client = await pool.connect();
-    try {
-      await client.query("begin");
-      const product = await client.query<{ id: string; slug: string }>(
-        `insert into public.products
-           (id, seller_id, category_id, subcategory_id, title, slug, description, short_description,
-            maker_name, base_price, compare_at_price, cost_price, status, product_type, tags,
-            weight, weight_unit, length_cm, width_cm, height_cm,
-            continue_selling_when_out_of_stock, is_customizable, customization_label,
-            processing_days, processing_days_max,
-            created_at, updated_at)
-         values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7,
-                 $8, $9, $10, $11, $12, $13, $14,
-                 $15, $16, $17, $18, $19,
-                 $20, $21, $22, coalesce($23, 2), $24, now(), now())
-         returning id, slug`,
-        [
-          sellerId,
-          data.categoryId,
-          data.subcategoryId ?? null,
-          data.title,
-          slug,
-          data.description || data.shortDescription,
-          data.shortDescription,
-          makerName,
-          data.price,
-          data.compareAtPrice ?? null,
-          data.costPrice ?? null,
-          data.status,
-          data.productType,
-          data.tags,
-          data.weight ?? null,
-          data.weightUnit,
-          data.lengthCm ?? null,
-          data.widthCm ?? null,
-          data.heightCm ?? null,
-          data.continueSellingWhenOutOfStock,
-          data.isCustomizable ?? false,
-          data.isCustomizable ? data.customizationLabel?.trim() || null : null,
-          data.processingDays ?? null,
-          data.processingDaysMax ?? null,
-        ]
-      );
+    const { uploadImage } = await import("../services/media.service.js");
+    const outcomes: ImportOutcome[] = [];
 
-      const productId = product.rows[0].id;
-      const sku = data.sku || `SKU-${productId.slice(0, 8).toUpperCase()}`;
-
-      const variant = await client.query<{ id: string }>(
-        `insert into public.product_variants
-           (id, product_id, sku, price, option_values, is_active, created_at, updated_at)
-         values (gen_random_uuid(), $1, $2, $3, '{}'::jsonb, true, now(), now())
-         returning id`,
-        [productId, sku, data.price]
-      );
-
-      await client.query(
-        `insert into public.inventory
-           (id, variant_id, quantity_on_hand, quantity_reserved, low_stock_threshold, created_at, updated_at)
-         values (gen_random_uuid(), $1, $2, 0, $3, now(), now())`,
-        [variant.rows[0].id, data.stockQuantity, data.lowStockAlert]
-      );
-
-      for (let i = 0; i < data.imageUrls.length; i += 1) {
-        await client.query(
-          `insert into public.product_images
-             (id, product_id, url, alt_text, display_order, is_thumbnail, created_at, updated_at)
-           values (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now())`,
-          [productId, data.imageUrls[i], data.title, i, i === 0]
+    for (const item of products) {
+      const warnings: string[] = [];
+      const outcome: ImportOutcome = {
+        externalId: item.externalId,
+        title: item.title,
+        result: "failed",
+        warnings,
+      };
+      try {
+        const existing = await pool.query<{ id: string; slug: string }>(
+          `select id, slug from public.products
+           where seller_id = $1 and external_source = $2 and external_id = $3 and deleted_at is null
+           limit 1`,
+          [sellerId, SHOPIFY_SOURCE, item.externalId]
         );
-      }
+        if (existing.rows[0]) {
+          outcome.result = "skipped";
+          outcome.productId = existing.rows[0].id;
+          outcome.slug = existing.rows[0].slug;
+          outcome.message = "Already imported.";
+          outcomes.push(outcome);
+          continue;
+        }
 
-      await assertSellerOwnsAllCollections(sellerId, data.collectionIds);
-      for (const collectionId of data.collectionIds) {
-        await client.query(
-          `insert into public.product_collections
-             (id, product_id, collection_id, created_at, updated_at)
-           values (gen_random_uuid(), $1, $2, now(), now())
-           on conflict (product_id, collection_id) do nothing`,
-          [productId, collectionId]
-        );
-      }
+        // Copy photos to Stuffsy's own storage so listings don't depend on the old store.
+        const sources = item.imageUrls.filter((url) => url.startsWith("https://")).slice(0, IMPORT_LIMITS.maxImages);
+        const uploaded = await mapWithLimit(sources, 6, async (url) => {
+          try {
+            const image = await uploadImage({ url, folder: "products" });
+            return image.url;
+          } catch {
+            return null;
+          }
+        });
+        const imageUrls = uploaded.filter((url): url is string => Boolean(url));
+        if (imageUrls.length < sources.length) {
+          warnings.push(`${sources.length - imageUrls.length} photo(s) couldn't be copied.`);
+        }
 
-      await client.query("commit");
-      void invalidateCatalogCaches();
-      res.status(201).json({
-        product: { id: productId, slug: product.rows[0].slug, status: data.status },
-      });
-    } catch (error) {
-      await client.query("rollback");
-      throw error;
-    } finally {
-      client.release();
+        // SKUs are unique across the marketplace; fall back to a generated one on a clash.
+        let sku = item.sku?.trim() || null;
+        if (sku) {
+          const taken = await pool.query(`select 1 from public.product_variants where sku = $1 limit 1`, [sku]);
+          if (taken.rows[0]) {
+            warnings.push(`SKU "${sku}" is already used, so a new one was generated.`);
+            sku = null;
+          }
+        }
+
+        const stock = item.stockQuantity ?? 0;
+        const compareAt =
+          item.compareAtPrice != null && item.compareAtPrice > item.price ? item.compareAtPrice : null;
+        const goLive =
+          publish && item.sourceStatus === "active" && stock > 0 && imageUrls.length > 0;
+
+        const candidate = productCreateSchema.safeParse({
+          title: item.title,
+          shortDescription: item.shortDescription || item.title,
+          description: item.description || null,
+          categoryId,
+          productType: "physical",
+          price: item.price,
+          compareAtPrice: compareAt,
+          sku,
+          stockQuantity: stock,
+          weight: item.weightKg ?? 0.5,
+          status: goLive ? "active" : "draft",
+          tags: item.tags
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0 && tag.length <= IMPORT_LIMITS.tagLength)
+            .slice(0, IMPORT_LIMITS.tags),
+          imageUrls,
+          collectionIds: [],
+        });
+        if (!candidate.success) {
+          outcome.message = productValidationMessage(candidate.error);
+          outcomes.push(outcome);
+          continue;
+        }
+        assertProductShipping(candidate.data);
+
+        const created = await createProductRecord(sellerId, candidate.data, {
+          source: SHOPIFY_SOURCE,
+          id: item.externalId,
+        });
+        outcome.result = "imported";
+        outcome.productId = created.id;
+        outcome.slug = created.slug;
+        outcome.productStatus = created.status;
+        if (created.status === "draft") {
+          warnings.push(
+            publish
+              ? "Saved as a draft: it needs stock and at least one photo before it can go live."
+              : "Saved as a draft for you to review."
+          );
+        }
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === "23505") {
+          outcome.result = "skipped";
+          outcome.message = "Already imported.";
+        } else {
+          outcome.message =
+            error instanceof AppError ? error.message : "Something went wrong importing this product.";
+          if (!(error instanceof AppError)) console.error("[import] shopify item failed", error);
+        }
+      }
+      outcomes.push(outcome);
     }
+
+    if (outcomes.some((o) => o.result === "imported")) void invalidateCatalogCaches();
+    res.json({ results: outcomes });
   })
 );
 
@@ -1246,25 +1522,26 @@ sellerRouter.patch(
 
     const data = parsed.data;
     assertShippingRange(data.processingDays, data.processingDaysMax);
-    if (data.productType === "physical") {
-      const dimsMissing =
-        data.weight === null ||
-        data.lengthCm === null ||
-        data.widthCm === null ||
-        data.heightCm === null;
-      // Only enforce when caller is explicitly switching/confirming physical with null dims.
-      if (
-        data.productType === "physical" &&
-        (data.weight !== undefined ||
-          data.lengthCm !== undefined ||
-          data.widthCm !== undefined ||
-          data.heightCm !== undefined) &&
-        dimsMissing
-      ) {
-        res.status(400).json({
-          message:
-            "Enter valid weight in kg (e.g. 0.2 or 200g) and length/width/height in cm for physical products.",
-        });
+    // Weight can't be cleared on a physical product. Dimensions are only needed
+    // while volumetric shipping is on, and may already be stored from earlier.
+    if (data.productType === "physical" && data.weight === null) {
+      res.status(400).json({ message: PHYSICAL_SHIPPING_MESSAGE });
+      return;
+    }
+    if (data.useVolumetric === true) {
+      const stored = await pool.query<{
+        length_cm: string | null;
+        width_cm: string | null;
+        height_cm: string | null;
+      }>(`select length_cm::text, width_cm::text, height_cm::text from public.products where id = $1`, [
+        productId,
+      ]);
+      const have = stored.rows[0];
+      const length = data.lengthCm ?? (have?.length_cm != null ? Number(have.length_cm) : null);
+      const width = data.widthCm ?? (have?.width_cm != null ? Number(have.width_cm) : null);
+      const height = data.heightCm ?? (have?.height_cm != null ? Number(have.height_cm) : null);
+      if (!length || !width || !height) {
+        res.status(400).json({ message: VOLUMETRIC_MESSAGE });
         return;
       }
     }
@@ -1297,6 +1574,7 @@ sellerRouter.patch(
            customization_label = case when $20::boolean then $21 else customization_label end,
            processing_days = coalesce($22, processing_days),
            processing_days_max = case when $23::boolean then $24 else processing_days_max end,
+           use_volumetric = coalesce($25, use_volumetric),
            updated_at = now()
          where id = $1`,
         [
@@ -1331,6 +1609,7 @@ sellerRouter.patch(
           data.processingDays ?? null,
           data.processingDaysMax !== undefined,
           data.processingDaysMax ?? null,
+          data.useVolumetric ?? null,
         ]
       );
 

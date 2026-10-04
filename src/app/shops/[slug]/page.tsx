@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  Store,
   X,
 } from "lucide-react";
 import { supportMailto } from "@/utils/support";
@@ -45,13 +46,12 @@ import {
 import {
   FALLBACK_PRODUCT_IMAGE,
   FALLBACK_SHOP_LOGO,
-  FALLBACK_SHOP_BANNER,
   optimizedImage,
 } from "@/utils/media";
+import { fetchSiteMedia } from "@/utils/siteMedia";
 
 const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
 const FALLBACK_AVATAR = FALLBACK_SHOP_LOGO;
-const FALLBACK_BANNER = FALLBACK_SHOP_BANNER;
 
 const SORT_OPTIONS: Array<{ value: ProductSort; label: string }> = [
   { value: "popular", label: "Sort by: Popular" },
@@ -96,6 +96,11 @@ function ShopStorefrontInner() {
   const [followBusy, setFollowBusy] = useState(false);
   const [messageNote, setMessageNote] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [defaultBanner, setDefaultBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchSiteMedia().then((media) => setDefaultBanner(media["shop.banner_default"] ?? null));
+  }, []);
 
   useEffect(() => {
     setSelectedCategory(categoryFromUrl);
@@ -222,7 +227,8 @@ function ShopStorefrontInner() {
     })),
   ];
 
-  const bannerSrc = shop.bannerUrl || shop.logoUrl || FALLBACK_BANNER;
+  // Seller banner, else the admin default banner, else a plain brand panel.
+  const bannerSrc = shop.bannerUrl || defaultBanner;
 
   return (
     <div className={styles.container}>
@@ -289,7 +295,8 @@ function ShopStorefrontInner() {
               </div>
               <div className={styles.stat}>
                 <span className={styles.statValue}>
-                  {shop.stats.rating.toFixed(1)} ★
+                  {shop.stats.rating.toFixed(1)}{" "}
+                  <Star size={16} fill="currentColor" strokeWidth={0} aria-label="stars" />
                 </span>
                 <span className={styles.statLabel}>Shop Rating</span>
               </div>
@@ -397,8 +404,14 @@ function ShopStorefrontInner() {
               </div>
             </div>
             <div className={styles.bannerVisual}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={optimizedImage(bannerSrc, 1800)} alt="" className={styles.bannerImg} />
+              {bannerSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={optimizedImage(bannerSrc, 1800)} alt="" className={styles.bannerImg} />
+              ) : (
+                <span className={styles.bannerBlank} aria-hidden="true">
+                  <Store size={44} strokeWidth={1.5} />
+                </span>
+              )}
             </div>
           </div>
 

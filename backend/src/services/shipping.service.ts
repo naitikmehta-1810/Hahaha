@@ -207,6 +207,62 @@ export async function createPendingShipments(orderId: string) {
 }
 
 /** @deprecated Use createPendingShipments — kept as alias for callers. */
+export type ParcelLine = {
+  quantity: number;
+  unit_price: string | number;
+  weight: string | null;
+  length_cm: string | null;
+  width_cm: string | null;
+  height_cm: string | null;
+  use_volumetric: boolean | null;
+};
+
+/**
+ * Parcel sent to Shiprocket for one seller's items. Couriers bill
+ * max(dead weight, L×B×H ÷ 5000), so box dimensions only count for products
+ * whose seller opted in to volumetric billing; everything else ships in the
+ * small default box (10×10×5 cm) and is billed on dead weight.
+ */
+export function buildParcel(rows: ParcelLine[]) {
+  let weight = 0;
+  let length = 10;
+  let breadth = 10;
+  let height = 5;
+  let subTotal = 0;
+  for (const row of rows) {
+    let w = Number(row.weight ?? 0.5);
+    if (!Number.isFinite(w) || w <= 0) w = 0.5;
+    const rowL = Number(row.length_cm ?? 10) || 10;
+    const rowB = Number(row.width_cm ?? 10) || 10;
+    const rowH = Number(row.height_cm ?? 5) || 5;
+    // Couriers bill max(dead weight, L×B×H ÷ 5000). Product dimensions only enter
+    // the parcel when the seller opted in to volumetric billing; otherwise the
+    // parcel keeps the small default box and is billed on dead weight alone.
+    if (row.use_volumetric) {
+      length = Math.max(length, rowL);
+      breadth = Math.max(breadth, rowB);
+      height += rowH * Number(row.quantity);
+    }
+    // Sellers sometimes type grams into the kg field (e.g. 50 instead of 0.05).
+    // If dead weight dwarfs volumetric weight for a small box, treat as grams.
+    const volKg = (rowL * rowB * rowH) / 5000;
+    if (w >= 10 && volKg > 0 && w > volKg * 4) {
+      const asKg = w / 1000;
+      if (asKg >= 0.05 && asKg <= 20) {
+        console.warn("[shiprocket] normalizing weight (likely grams entered as kg)", {
+          raw: w,
+          normalized: asKg,
+        });
+        w = asKg;
+      }
+    }
+    weight += w * Number(row.quantity);
+    subTotal += Number(row.unit_price) * Number(row.quantity);
+  }
+  weight = Math.min(30, Math.max(0.5, Math.round(weight * 1000) / 1000));
+  return { weight, length, breadth, height, subTotal };
+}
+
 export async function createShipment(orderId: string) {
   return createPendingShipments(orderId);
 }
@@ -313,9 +369,11 @@ async function bookShiprocketAwb(opts: {
     length_cm: string | null;
     width_cm: string | null;
     height_cm: string | null;
+    use_volumetric: boolean | null;
   }>(
     `select oi.product_title, oi.quantity, oi.unit_price::text, oi.product_id::text,
-            p.weight::text, p.length_cm::text, p.width_cm::text, p.height_cm::text
+            p.weight::text, p.length_cm::text, p.width_cm::text, p.height_cm::text,
+            p.use_volumetric
      from public.order_items oi
      left join public.products p on p.id = oi.product_id
      where oi.order_id = $1 and oi.seller_id = $2`,
@@ -325,37 +383,7 @@ async function bookShiprocketAwb(opts: {
     throw new AppError(409, "NO_SELLER_ITEMS", "No items for this seller on the order");
   }
 
-  let weight = 0;
-  let length = 10;
-  let breadth = 10;
-  let height = 5;
-  let subTotal = 0;
-  for (const row of items.rows) {
-    let w = Number(row.weight ?? 0.5);
-    if (!Number.isFinite(w) || w <= 0) w = 0.5;
-    const rowL = Number(row.length_cm ?? 10) || 10;
-    const rowB = Number(row.width_cm ?? 10) || 10;
-    const rowH = Number(row.height_cm ?? 5) || 5;
-    length = Math.max(length, rowL);
-    breadth = Math.max(breadth, rowB);
-    height += rowH * Number(row.quantity);
-    // Sellers sometimes type grams into the kg field (e.g. 50 instead of 0.05).
-    // If dead weight dwarfs volumetric weight for a small box, treat as grams.
-    const volKg = (rowL * rowB * rowH) / 5000;
-    if (w >= 10 && volKg > 0 && w > volKg * 4) {
-      const asKg = w / 1000;
-      if (asKg >= 0.05 && asKg <= 20) {
-        console.warn("[shiprocket] normalizing weight (likely grams entered as kg)", {
-          raw: w,
-          normalized: asKg,
-        });
-        w = asKg;
-      }
-    }
-    weight += w * Number(row.quantity);
-    subTotal += Number(row.unit_price) * Number(row.quantity);
-  }
-  weight = Math.min(30, Math.max(0.5, Math.round(weight * 1000) / 1000));
+  const { weight, length, breadth, height, subTotal } = buildParcel(items.rows);
 
   // One booking per seller. Declare only this seller's goods, not the whole order,
   // so a second shop's shipment does not invoice or collect the other shop's total.

@@ -1,0 +1,338 @@
+.req {
+  color: var(--color-danger);
+}
+
+.spin {
+  animation: import-spin 0.9s linear infinite;
+}
+
+@keyframes import-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Source ──────────────────────────────────────────────────────────── */
+
+.sourceCard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 760px;
+}
+
+.methods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.method {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  text-align: left;
+  color: var(--color-text-muted);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.method span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.method strong {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--color-text-main);
+}
+
+.method small {
+  font-size: 0.78rem;
+}
+
+.method:hover {
+  border-color: var(--color-primary-border);
+}
+
+.methodActive,
+.methodActive:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.sourceForm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.sourceForm > :first-child {
+  align-self: stretch;
+}
+
+.steps {
+  align-self: stretch;
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+
+.steps strong {
+  color: var(--color-text-main);
+}
+
+.drop {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1.5px dashed var(--color-primary-border);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.drop:hover,
+.drop:focus-within {
+  border-color: var(--color-primary);
+}
+
+.drop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.drop span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.drop strong {
+  font-size: 0.92rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.drop small {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Review ──────────────────────────────────────────────────────────── */
+
+.optionsCard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  cursor: pointer;
+}
+
+.check input {
+  margin-top: 3px;
+  accent-color: var(--color-primary);
+}
+
+.check span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.check strong {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.check small {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.headActions {
+  display: flex;
+  gap: 8px;
+}
+
+.checkCol {
+  width: 44px;
+}
+
+.checkCol input,
+.table input[type="checkbox"] {
+  accent-color: var(--color-primary);
+}
+
+.rowDisabled {
+  opacity: 0.6;
+}
+
+.warn {
+  color: var(--color-warning-ink);
+}
+
+.stickyBar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+  box-shadow: var(--shadow-md);
+}
+
+.stickyBar p {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+/* ── Progress & results ──────────────────────────────────────────────── */
+
+.progressCard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.progressHead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--color-primary);
+}
+
+.doneIcon {
+  color: var(--color-success);
+}
+
+.bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-light);
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+  transition: width 0.3s ease;
+}
+
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.result {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.result:first-child {
+  border-top: 0;
+}
+
+.result > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.result strong {
+  font-size: 0.9rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.result small {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.result small.warn {
+  color: var(--color-warning-ink);
+}
+
+.resultSide {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.doneActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+@media (max-width: 640px) {
+  .methods {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stickyBar {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .result {
+    flex-direction: column;
+  }
+
+  .resultSide {
+    justify-content: space-between;
+    width: 100%;
+  }
+}
