@@ -78,14 +78,13 @@ export async function createUser(input: {
   return toAuthUser(result.rows[0]);
 }
 
-export async function findUserByEmailAndPhone(email: string, phoneNumber: string) {
+export async function findUserByEmailForLogin(email: string) {
   const result = await pool.query<UserRecord & { password_hash: string | null }>(
     `select ${USER_COLUMNS}, password_hash
      from public.users
      where lower(email) = lower($1)
-       and phone_number = $2
      limit 1`,
-    [email, phoneNumber]
+    [email]
   );
 
   return result.rows[0] ?? null;

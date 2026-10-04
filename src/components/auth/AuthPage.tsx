@@ -120,7 +120,6 @@ function AuthPageInner({ mode }: AuthPageProps) {
     const payload = isSignIn
       ? {
           email: String(formData.get("email") ?? "").trim(),
-          phoneNumber: String(formData.get("phoneNumber") ?? "").trim(),
           password: String(formData.get("password") ?? ""),
           rememberMe,
         }
@@ -270,19 +269,21 @@ function AuthPageInner({ mode }: AuthPageProps) {
                 </div>
               </label>
 
-              <label className={styles.field}>
-                <span>Phone Number</span>
-                <div className={styles.inputWrap}>
-                  <Phone className={styles.inputIcon} size={18} />
-                  <input
-                    required
-                    name="phoneNumber"
-                    type="tel"
-                    placeholder="Enter your phone number"
-                    className={styles.input}
-                  />
-                </div>
-              </label>
+              {!isSignIn && (
+                <label className={styles.field}>
+                  <span>Phone Number</span>
+                  <div className={styles.inputWrap}>
+                    <Phone className={styles.inputIcon} size={18} />
+                    <input
+                      required
+                      name="phoneNumber"
+                      type="tel"
+                      placeholder="Enter your phone number"
+                      className={styles.input}
+                    />
+                  </div>
+                </label>
+              )}
 
               <label className={styles.field}>
                 <span>Password</span>

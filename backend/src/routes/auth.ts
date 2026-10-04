@@ -13,7 +13,7 @@ import {
   createEmailVerificationToken,
   createUser,
   findOrCreateOAuthUser,
-  findUserByEmailAndPhone,
+  findUserByEmailForLogin,
   findUserById,
   issueAuthTokens,
   requestEmailVerification,
@@ -49,7 +49,6 @@ const signupSchema = z.object({
 
 const loginSchema = z.object({
   email: z.string().trim().email("Valid email is required"),
-  phoneNumber: z.string().trim().min(8, "Phone number is required"),
   password: z.string().min(1, "Password is required"),
   rememberMe: z.boolean().optional().default(false),
 });
@@ -206,11 +205,11 @@ authRouter.post(
       return;
     }
 
-    const { email, phoneNumber, password, rememberMe } = parsed.data;
-    const user = await findUserByEmailAndPhone(email, phoneNumber);
+    const { email, password, rememberMe } = parsed.data;
+    const user = await findUserByEmailForLogin(email);
 
     if (!user) {
-      res.status(401).json({ message: "Invalid email, phone number, or password" });
+      res.status(401).json({ message: "Invalid email or password" });
       return;
     }
 
@@ -223,7 +222,7 @@ authRouter.post(
 
     const isValidPassword = await comparePassword(password, user.password_hash);
     if (!isValidPassword) {
-      res.status(401).json({ message: "Invalid email, phone number, or password" });
+      res.status(401).json({ message: "Invalid email or password" });
       return;
     }
 
