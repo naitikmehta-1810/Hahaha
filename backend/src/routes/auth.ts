@@ -394,17 +394,37 @@ authRouter.post(
 
 authRouter.post(
   "/verify-email/request",
+  authWriteLimiter,
   optionalAuth,
   asyncHandler(async (req, res) => {
     const emailFromBody = z.string().trim().email().safeParse(req.body?.email);
     const email = req.user?.email ?? (emailFromBody.success ? emailFromBody.data : undefined);
 
+    let result: Awaited<ReturnType<typeof requestEmailVerification>> | null = null;
     if (email) {
       try {
-        await requestEmailVerification(email);
+        result = await requestEmailVerification(email);
       } catch (error) {
         console.error("[auth] verification email failed", error);
+        if (req.user) {
+          res.status(502).json({ message: "Could not send the email. Please try again shortly." });
+          return;
+        }
       }
+    }
+
+    // Signed-in users get the real outcome; anonymous callers always get the
+    // same answer so it never reveals whether an account exists.
+    if (req.user && result?.status === "cooldown") {
+      res.status(429).json({
+        message: `A link was just sent. You can request another in ${result.retryAfterSeconds}s.`,
+        retryAfterSeconds: result.retryAfterSeconds,
+      });
+      return;
+    }
+    if (req.user && result?.status === "sent") {
+      res.json({ message: `Verification link sent to ${email}.` });
+      return;
     }
 
     res.json({ message: "If an account exists for that email, a verification link was issued." });

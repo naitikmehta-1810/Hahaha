@@ -381,10 +381,13 @@ export async function revokeRefreshToken(rawRefreshToken: string) {
   );
 }
 
+const EMAIL_VERIFY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const EMAIL_VERIFY_RESEND_COOLDOWN_MS = 60 * 1000;
+
 export async function createEmailVerificationToken(userId: string) {
   const token = generateOpaqueToken();
   const tokenHash = hashToken(token);
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + EMAIL_VERIFY_TTL_MS);
 
   await pool.query(
     `insert into public.verification_tokens (id, user_id, token_hash, purpose, expires_at, created_at)
@@ -408,14 +411,36 @@ export async function sendVerificationEmailForUser(email: string, token: string)
   }
 }
 
-export async function requestEmailVerification(email: string) {
+/**
+ * Sends a fresh link unless the account is unknown, already verified, or got
+ * one within EMAIL_VERIFY_RESEND_COOLDOWN_MS (stops inbox flooding).
+ */
+export async function requestEmailVerification(
+  email: string
+): Promise<{ status: "sent" | "skipped" } | { status: "cooldown"; retryAfterSeconds: number }> {
   const user = await findUserByEmail(email);
   if (!user || user.email_verified_at) {
-    return;
+    return { status: "skipped" };
+  }
+
+  const last = await pool.query<{ created_at: Date }>(
+    `select created_at from public.verification_tokens
+     where user_id = $1 and purpose = 'email_verify'
+     order by created_at desc
+     limit 1`,
+    [user.id]
+  );
+  const sinceLast = last.rows[0] ? Date.now() - new Date(last.rows[0].created_at).getTime() : Infinity;
+  if (sinceLast < EMAIL_VERIFY_RESEND_COOLDOWN_MS) {
+    return {
+      status: "cooldown",
+      retryAfterSeconds: Math.ceil((EMAIL_VERIFY_RESEND_COOLDOWN_MS - sinceLast) / 1000),
+    };
   }
 
   const token = await createEmailVerificationToken(user.id);
   await sendVerificationEmailForUser(user.email, token);
+  return { status: "sent" };
 }
 
 export async function confirmEmailVerification(rawToken: string) {

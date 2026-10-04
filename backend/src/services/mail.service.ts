@@ -103,7 +103,7 @@ export async function sendVerificationEmail(email: string, token: string) {
       "Please verify your email by opening this link:",
       verifyUrl,
       "",
-      "This link expires in 24 hours.",
+      "This link expires in 7 days.",
       "",
       "If you did not create an account, you can ignore this email.",
     ].join("\n"),
@@ -118,7 +118,7 @@ export async function sendVerificationEmail(email: string, token: string) {
           </a>
         </p>
         <p style="font-size: 13px; color: #6b7280;">Or paste this link:<br/>${verifyUrl}</p>
-        <p style="font-size: 13px; color: #6b7280;">This link expires in 24 hours.</p>
+        <p style="font-size: 13px; color: #6b7280;">This link expires in 7 days.</p>
       </div>
     `,
   });

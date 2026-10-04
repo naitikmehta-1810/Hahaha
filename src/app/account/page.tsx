@@ -97,6 +97,47 @@ function initialsFromName(name: string) {
   return letters.toUpperCase() || "U";
 }
 
+/** Sends a fresh email-verification link; shown next to an unverified email. */
+function ResendVerificationButton() {
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [note, setNote] = useState<string | null>(null);
+
+  const resend = async () => {
+    setState("sending");
+    setNote(null);
+    const result = await apiRequest<{ message?: string }>("POST", "/api/auth/verify-email/request");
+    if (result.error) {
+      setState("error");
+      setNote(result.error);
+      return;
+    }
+    setState("sent");
+    setNote(result.data?.message ?? "Verification link sent. Check your inbox.");
+  };
+
+  return (
+    <span className={styles.resendVerify}>
+      <Button
+        type="button"
+        variant="text"
+        size="sm"
+        disabled={state === "sending"}
+        onClick={() => void resend()}
+      >
+        {state === "sending" ? "Sending…" : state === "sent" ? "Resend again" : "Resend verification email"}
+      </Button>
+      {note ? (
+        <span
+          className={state === "error" ? styles.resendVerifyError : styles.resendVerifyNote}
+          role="status"
+        >
+          {note}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 const EMPTY_ADDRESS = {
   label: "Home",
   recipientName: "",
@@ -685,6 +726,7 @@ function AccountPageInner() {
                       <span className={styles.contactItem}>
                         <Mail size={14} />
                         {user.email}
+                        {user.emailVerified ? null : <ResendVerificationButton />}
                       </span>
                       <span className={styles.contactItem}>
                         <Phone size={14} />
@@ -1139,6 +1181,11 @@ function AccountPageInner() {
                     </span>
                     <input value={sessionUser.email} readOnly />
                   </label>
+                  {user.emailVerified ? null : (
+                    <div className={styles.fieldWide}>
+                      <ResendVerificationButton />
+                    </div>
+                  )}
                 </div>
                 {profileMsg ? <Notice tone={profileMsg.tone}>{profileMsg.text}</Notice> : null}
                 <div className={styles.panelActions}>

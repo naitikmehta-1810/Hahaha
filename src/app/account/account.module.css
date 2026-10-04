@@ -851,3 +851,21 @@ a.orderRow:hover .orderTitle {
     align-items: flex-start;
   }
 }
+
+/* "Resend verification email" next to an unverified address. */
+.resendVerify {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.resendVerifyNote {
+  font-size: 0.8rem;
+  color: var(--color-success-ink);
+}
+
+.resendVerifyError {
+  font-size: 0.8rem;
+  color: var(--color-danger);
+}
