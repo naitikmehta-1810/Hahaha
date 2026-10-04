@@ -784,7 +784,7 @@ a.orderRow:hover .orderTitle {
 
   .splitGrid,
   .profileEditor {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -829,7 +829,7 @@ a.orderRow:hover .orderTitle {
   }
 
   .fieldGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .panel {
@@ -843,7 +843,7 @@ a.orderRow:hover .orderTitle {
 
 @media (max-width: 420px) {
   .statsRow {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .editorIdentity {

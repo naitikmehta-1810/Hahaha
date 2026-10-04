@@ -801,7 +801,7 @@
 
 @media (max-width: 1180px) {
   .productColumns {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .setupBoard {
@@ -823,7 +823,7 @@
 
   .setupBoard,
   .setupSide {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .settingsNav {

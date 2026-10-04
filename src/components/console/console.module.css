@@ -573,14 +573,14 @@ a.listRow:hover {
 @media (max-width: 1100px) {
   .split,
   .splitEven {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 760px) {
   .formGrid2,
   .formGrid3 {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -629,6 +629,6 @@ a.listRow:hover {
 
 @media (max-width: 380px) {
   .metrics {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }

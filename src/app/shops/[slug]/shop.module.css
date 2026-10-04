@@ -441,7 +441,7 @@
 @media (max-width: 480px) {
   .productsGrid,
   .trustBar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

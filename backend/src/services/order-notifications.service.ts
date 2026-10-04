@@ -143,7 +143,7 @@ export async function notifyOrderConfirmed(orderId: string) {
           customerName: seller.full_name ?? undefined,
           shopName: seller.shop_name,
           frontendOrderUrl: sellerUrl,
-        });
+        }, { dedupeKey: `${orderId}-${seller.user_id}` });
       }
 
       const phone = (seller.contact_phone || seller.phone_number || "").replace(/\s+/g, "");

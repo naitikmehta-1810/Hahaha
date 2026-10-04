@@ -426,7 +426,7 @@
 
 @media (max-width: 767px) {
   .card {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .dividerLine {
@@ -477,7 +477,7 @@
   .featureList,
   .featureBar,
   .socialRow {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .featureBarItem + .featureBarItem {
@@ -494,7 +494,7 @@
 
 /* Single-column card for short screens like email verification. */
 .card.cardSingle {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   max-width: 560px;
   min-height: auto;
 }

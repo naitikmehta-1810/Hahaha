@@ -4,13 +4,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  BadgeCheck,
   ChevronLeft,
   ChevronRight,
   LayoutGrid,
-  ShieldCheck,
-  Sparkles,
-  Store,
   X,
 } from "lucide-react";
 import styles from "./page.module.css";
@@ -40,14 +36,24 @@ import { apiRequest } from "@/utils/api-client";
 
 const SLIDE_INTERVAL_MS = 6500;
 
+type SlideTheme = "plum" | "lilac" | "violet";
+
 type Slide = {
-  eyebrow: string;
+  label: string;
   title: string;
   text: string;
   cta: string;
   href: string;
-  images: [string, string];
-  badge: { icon: React.ReactNode; label: string };
+  secondary?: { label: string; href: string };
+  /** One full-bleed photo, or two shown side by side. */
+  images: string[];
+  theme: SlideTheme;
+};
+
+const THEME_CLASS: Record<SlideTheme, string> = {
+  plum: styles.themePlum,
+  lilac: styles.themeLilac,
+  violet: styles.themeViolet,
 };
 
 const POPULAR_TABS = [
@@ -146,9 +152,11 @@ function HeroCarousel({ slides }: { slides: Slide[] }) {
     return () => window.clearTimeout(timer);
   }, [current, paused, reduceMotion, count]);
 
+  const theme = slides[current]?.theme ?? "plum";
+
   return (
     <div
-      className={`${styles.carousel} ${paused ? styles.carouselPaused : ""}`}
+      className={`${styles.carousel} ${THEME_CLASS[theme]} ${paused ? styles.carouselPaused : ""}`}
       aria-roledescription="carousel"
       aria-label="Featured"
       onMouseEnter={() => setPaused(true)}
@@ -167,96 +175,95 @@ function HeroCarousel({ slides }: { slides: Slide[] }) {
         if (Math.abs(delta) > 40) go(current + (delta < 0 ? 1 : -1));
       }}
     >
-      <span className={`${styles.orb} ${styles.orbA}`} aria-hidden="true" />
-      <span className={`${styles.orb} ${styles.orbB}`} aria-hidden="true" />
-      <span className={styles.gridPattern} aria-hidden="true" />
-
       {slides.map((slide, index) => {
         const active = index === current;
+        const onDark = slide.theme !== "lilac";
         return (
           <div
             key={slide.title}
-            className={`${styles.slide} ${active ? styles.slideActive : ""}`}
+            className={`${styles.slide} ${THEME_CLASS[slide.theme]} ${active ? styles.slideActive : ""}`}
             role="group"
             aria-roledescription="slide"
             aria-label={`${index + 1} of ${count}`}
             aria-hidden={!active}
           >
-            <div className={styles.carouselContent}>
-              <p className={styles.carouselEyebrow}>
-                <Sparkles size={13} aria-hidden="true" />
-                {slide.eyebrow}
-              </p>
+            <div className={styles.slideCopy}>
+              <p className={styles.slideLabel}>{slide.label}</p>
               {index === 0 ? (
-                <h1 className={styles.carouselTitle}>{slide.title}</h1>
+                <h1 className={styles.slideTitle}>{slide.title}</h1>
               ) : (
-                <h2 className={styles.carouselTitle}>{slide.title}</h2>
+                <h2 className={styles.slideTitle}>{slide.title}</h2>
               )}
-              <p className={styles.carouselSubtitle}>{slide.text}</p>
-              <ButtonLink
-                href={slide.href}
-                size="lg"
-                variant="secondary"
-                className={styles.carouselCta}
-                tabIndex={active ? 0 : -1}
-                rightIcon={<ArrowRight size={18} />}
-              >
-                {slide.cta}
-              </ButtonLink>
+              <p className={styles.slideText}>{slide.text}</p>
+              <div className={styles.slideActions}>
+                <ButtonLink
+                  href={slide.href}
+                  size="lg"
+                  variant={onDark ? "secondary" : "primary"}
+                  className={onDark ? styles.slideCtaLight : undefined}
+                  tabIndex={active ? 0 : -1}
+                  rightIcon={<ArrowRight size={18} />}
+                >
+                  {slide.cta}
+                </ButtonLink>
+                {slide.secondary ? (
+                  <Link
+                    href={slide.secondary.href}
+                    className={styles.slideLink}
+                    tabIndex={active ? 0 : -1}
+                  >
+                    {slide.secondary.label}
+                  </Link>
+                ) : null}
+              </div>
             </div>
-            <div className={styles.collage} aria-hidden="true">
-              <span className={`${styles.collageCard} ${styles.collageBack}`}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+            <div
+              className={`${styles.slideMedia} ${slide.images.length > 1 ? styles.slideMediaSplit : ""}`}
+              aria-hidden="true"
+            >
+              {slide.images.map((src, imageIndex) => (
                 <img
-                  src={optimizedImage(slide.images[1], 420)}
+                  key={`${src}-${imageIndex}`}
+                  src={optimizedImage(src, slide.images.length > 1 ? 420 : 760)}
                   alt=""
-                  loading={index === 0 ? "eager" : "lazy"}
+                  loading={index === 0 || index === current || index === (current + 1) % count ? "eager" : "lazy"}
+                  fetchPriority={index === 0 && imageIndex === 0 ? "high" : "auto"}
                   decoding="async"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
                   }}
                 />
-              </span>
-              <span className={`${styles.collageCard} ${styles.collageFront}`}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={optimizedImage(slide.images[0], 520)}
-                  alt=""
-                  loading={index === 0 ? "eager" : "lazy"}
-                  fetchPriority={index === 0 ? "high" : "auto"}
-                  decoding="async"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE;
-                  }}
-                />
-              </span>
-              <span className={styles.glassBadge}>
-                {slide.badge.icon}
-                {slide.badge.label}
-              </span>
+              ))}
             </div>
           </div>
         );
       })}
 
       <div className={styles.carouselControls}>
-        <div className={styles.carouselDots}>
+        <span className={styles.counter} aria-hidden="true">
+          <strong>{String(current + 1).padStart(2, "0")}</strong> / {String(count).padStart(2, "0")}
+        </span>
+        <div className={styles.progress}>
           {slides.map((slide, index) => (
             <button
               key={slide.title}
               type="button"
-              className={`${styles.dot} ${index === current ? styles.activeDot : ""}`}
+              className={styles.progressTrack}
               aria-label={`Show slide ${index + 1}: ${slide.title}`}
               aria-current={index === current}
               onClick={() => go(index)}
             >
-              {index === current && !reduceMotion ? (
-                <span
-                  key={`${current}-${paused}`}
-                  className={styles.dotProgress}
-                  style={{ animationDuration: `${SLIDE_INTERVAL_MS}ms` }}
-                />
-              ) : null}
+              <span
+                key={index === current ? `${current}-${paused}` : "idle"}
+                className={`${styles.progressFill} ${
+                  index < current || (index === current && reduceMotion)
+                    ? styles.progressDone
+                    : index === current
+                      ? styles.progressActive
+                      : ""
+                }`}
+                style={index === current ? { animationDuration: `${SLIDE_INTERVAL_MS}ms` } : undefined}
+              />
             </button>
           ))}
         </div>
@@ -362,34 +369,35 @@ export default function Home() {
   const arrivalImages = newArrivals.map((p) => productImageUrl(p));
   const slides: Slide[] = [
     {
-      eyebrow: "Handmade marketplace",
-      title: "Discover unique handmade treasures",
-      text: "Find things you'll love. Support real makers from across India.",
+      label: "Handmade in India",
+      title: "One-of-a-kind pieces from independent makers",
+      text: "Home decor, gifts, jewellery and art, made in small batches by real people across India.",
       cta: "Shop now",
       href: "/shop",
-      images: [HERO_CAROUSEL_IMAGES[0], HERO_CAROUSEL_IMAGES[1]],
-      badge: { icon: <BadgeCheck size={14} aria-hidden="true" />, label: "Made by real makers" },
+      secondary: { label: "See what's popular", href: "/shop?sort=popular" },
+      images: [HERO_CAROUSEL_IMAGES[0]],
+      theme: "plum",
     },
     {
-      eyebrow: "Fresh from the studio",
-      title: "New pieces, added every week",
-      text: "Be the first to see what makers are listing right now.",
+      label: "New this week",
+      title: "Fresh from the studio",
+      text: "The latest listings from makers across the country. Be the first to find them.",
       cta: "See new arrivals",
       href: "/shop?sort=newest",
-      images: [
-        arrivalImages[0] ?? HERO_CAROUSEL_IMAGES[1],
-        arrivalImages[1] ?? HERO_CAROUSEL_IMAGES[0],
-      ],
-      badge: { icon: <Sparkles size={14} aria-hidden="true" />, label: "Just listed" },
+      images:
+        arrivalImages.length >= 2
+          ? arrivalImages.slice(0, 2)
+          : [HERO_CAROUSEL_IMAGES[1], HERO_CAROUSEL_IMAGES[0]],
+      theme: "lilac",
     },
     {
-      eyebrow: "Sell on Stuffsy",
+      label: "Sell on Stuffsy",
       title: "Turn your craft into a business",
-      text: "Open a shop in minutes and reach buyers across India.",
+      text: "Open a shop in minutes and reach buyers across India. Payments and shipping handled for you.",
       cta: user?.isSeller ? "Open your seller hub" : "Start selling",
       href: user?.isSeller ? "/seller" : "/sell",
-      images: [SELL_STEP_IMAGES[1], SELL_STEP_IMAGES[2]],
-      badge: { icon: <ShieldCheck size={14} aria-hidden="true" />, label: "Secure payouts" },
+      images: [SELL_STEP_IMAGES[1]],
+      theme: "violet",
     },
   ];
 
@@ -518,10 +526,9 @@ export default function Home() {
       ) : null}
 
       <section className={styles.sellBand} aria-labelledby="sell-band-title">
-        <span className={`${styles.orb} ${styles.orbC}`} aria-hidden="true" />
         <div className={styles.sellCopy}>
           <p className={styles.sellEyebrow}>
-            <Store size={14} aria-hidden="true" /> For makers
+            For makers
           </p>
           <h2 id="sell-band-title" className={styles.sellTitle}>
             {user?.isSeller ? "Your shop is one click away" : "Your craft deserves a bigger audience"}

@@ -260,6 +260,7 @@
 /* ── Summary ─────────────────────────────────────────────────────────── */
 
 .summarySidebar {
+  min-width: 0;
   position: sticky;
   top: calc(var(--header-height) + 16px);
   display: flex;
@@ -416,7 +417,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Fieldsets default to min-content width; let this one shrink. */
   min-width: 0;
+  min-inline-size: 0;
 }
 
 .methodTitle {
@@ -515,8 +518,10 @@
 }
 
 @media (max-width: 968px) {
+  /* minmax(0, …) lets the single column shrink to the screen; a bare 1fr
+     grows to its widest child and pushes the page sideways on phones. */
   .cartLayout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .summarySidebar {
@@ -558,6 +563,16 @@
     grid-area: qty;
     justify-self: end;
     align-self: center;
+    white-space: nowrap;
+  }
+
+  .summaryCard,
+  .methodsCard {
+    padding: 18px 16px;
+  }
+
+  .couponBlock {
+    padding: 12px;
   }
 
   .productsGrid {
@@ -568,11 +583,15 @@
 
 .radioLabel {
   flex: 1;
+  min-width: 0;
 }
 
 .radioBrands {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 4px;
+  min-width: 0;
 }
 
 .radioBrands svg {

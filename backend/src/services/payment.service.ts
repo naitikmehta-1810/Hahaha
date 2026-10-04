@@ -294,7 +294,7 @@ async function enqueuePostCaptureJobs(orderId: string) {
       const items = await loadNotifyOrderItems(orderId);
       const emailPayload = buildOrderNotifyPayload(order, items);
       if (order.email) {
-        await enqueueEmailJob("order-confirmation", emailPayload);
+        await enqueueEmailJob("order-confirmation", emailPayload, { dedupeKey: orderId });
       }
       const waTo = resolveWhatsAppTo(order);
       if (waTo) {

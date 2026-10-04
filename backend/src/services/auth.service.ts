@@ -398,17 +398,14 @@ export async function createEmailVerificationToken(userId: string) {
   return token;
 }
 
+/**
+ * Verification mail is rendered and sent only by notification-services/email-service.
+ * Not awaited, so a slow or unreachable Redis never stalls signup; the enqueue
+ * helper logs its own errors.
+ */
 export async function sendVerificationEmailForUser(email: string, token: string) {
-  const { sendVerificationEmail } = await import("./mail.service.js");
-  // Primary: sync send for reliability (auth UX cannot wait on Redis/worker).
-  await sendVerificationEmail(email, token);
-  // Secondary: also enqueue worker job (best-effort; never blocks auth).
-  try {
-    const { enqueueEmailJob } = await import("./notify.enqueue.js");
-    void enqueueEmailJob("email-verification", { to: email, token });
-  } catch (error) {
-    console.error("[auth] email-verification enqueue skipped", error);
-  }
+  const { enqueueEmailJob } = await import("./notify.enqueue.js");
+  void enqueueEmailJob("email-verification", { to: email, token });
 }
 
 /**
@@ -494,19 +491,10 @@ export async function requestPasswordReset(email: string) {
     [user.id, tokenHash, expiresAt]
   );
 
-  const { sendPasswordResetEmail } = await import("./mail.service.js");
-  // Do not block the HTTP response on SMTP — Gmail from Render can hang and
-  // leave the forgot-password UI stuck on "Sending…".
-  void sendPasswordResetEmail(user.email, token).catch((error) => {
-    console.error("[auth] password reset email failed", error);
-  });
-  // Secondary: also enqueue worker job (best-effort).
-  try {
-    const { enqueueEmailJob } = await import("./notify.enqueue.js");
-    void enqueueEmailJob("password-reset", { to: user.email, token });
-  } catch (error) {
-    console.error("[auth] password-reset enqueue skipped", error);
-  }
+  // Sent only by notification-services/email-service. Not awaited, so the
+  // forgot-password response never waits on Redis.
+  const { enqueueEmailJob } = await import("./notify.enqueue.js");
+  void enqueueEmailJob("password-reset", { to: user.email, token });
 }
 
 export async function resetPasswordWithToken(rawToken: string, newPassword: string) {

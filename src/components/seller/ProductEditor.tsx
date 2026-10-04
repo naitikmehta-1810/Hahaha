@@ -49,6 +49,23 @@ type SellerProductDetail = {
 };
 
 const MAX_IMAGES = 8;
+/** Mirrors the API's product schema limits. */
+const MAX_TAGS = 10;
+const MAX_TAG_LENGTH = 40;
+
+/** Comma- or newline-separated tags, trimmed and de-duplicated (case-insensitive). */
+function parseTags(raw: string) {
+  const seen = new Set<string>();
+  return raw
+    .split(/[,\n]/)
+    .map((t) => t.trim().replace(/\s+/g, " "))
+    .filter((t) => {
+      const key = t.toLowerCase();
+      if (!t || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
 
 const EMPTY_FORM = {
   title: "",
@@ -269,6 +286,23 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       setError("Enter a price greater than ₹0.");
       return;
     }
+    const compareAt = parseOptionalNumber(form.compareAtPrice);
+    if (compareAt != null && compareAt <= Number(form.price)) {
+      setError("Compare-at price is the original price, so it must be higher than the price. Leave it blank if there's no discount.");
+      return;
+    }
+    const tags = parseTags(form.tags);
+    if (tags.length > MAX_TAGS) {
+      setError(`Add up to ${MAX_TAGS} tags. Separate tags with commas.`);
+      return;
+    }
+    const longTag = tags.find((t) => t.length > MAX_TAG_LENGTH);
+    if (longTag) {
+      setError(
+        `Each tag can be at most ${MAX_TAG_LENGTH} characters. Separate tags with commas, e.g. "wall art, canvas, gold foil".`
+      );
+      return;
+    }
     const shipMin = Number(form.processingDays);
     const shipMax = Number(form.processingDaysMax);
     if (!Number.isInteger(shipMin) || shipMin < 0 || shipMin > 60) {
@@ -298,11 +332,6 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       heightCm = dims.heightCm;
     }
 
-    const tags = form.tags
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .slice(0, 10);
     const urls = [...form.imageUrls];
     if (form.imageUrl.trim()) urls.unshift(form.imageUrl.trim());
     const imageUrls = [...new Set(urls)].slice(0, MAX_IMAGES);
@@ -316,7 +345,7 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       subcategoryId: form.subcategoryId || null,
       productType: form.productType,
       price: Number(form.price),
-      compareAtPrice: parseOptionalNumber(form.compareAtPrice),
+      compareAtPrice: compareAt,
       costPrice: parseOptionalNumber(form.costPrice),
       sku: form.sku.trim() || null,
       stockQuantity: Number(form.stockQuantity) || 0,
@@ -763,7 +792,10 @@ export default function ProductEditor({ productId }: { productId?: string }) {
                   placeholder="candle, soy, gift"
                   onChange={(e) => update("tags", e.target.value)}
                 />
-                <span className={ui.fieldHint}>Comma-separated, up to 10.</span>
+                <span className={ui.fieldHint}>
+                  Separate with commas. Up to {MAX_TAGS} tags, {MAX_TAG_LENGTH} characters each
+                  {form.tags.trim() ? ` · ${parseTags(form.tags).length}/${MAX_TAGS}` : ""}.
+                </span>
               </div>
               <div className={ui.field}>
                 <span className={ui.fieldLabel}>Collections</span>

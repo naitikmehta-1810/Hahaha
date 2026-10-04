@@ -743,6 +743,38 @@ sellerRouter.get(
   })
 );
 
+/** Product form labels, so a validation error names the field that failed. */
+const PRODUCT_FIELD_LABELS: Record<string, string> = {
+  title: "Title",
+  shortDescription: "Short description",
+  description: "Full description",
+  processingDays: "Earliest shipping day",
+  processingDaysMax: "Latest shipping day",
+  categoryId: "Category",
+  subcategoryId: "Subcategory",
+  price: "Price",
+  compareAtPrice: "Compare-at price",
+  costPrice: "Cost price",
+  sku: "SKU",
+  stockQuantity: "Stock quantity",
+  lowStockAlert: "Low stock alert",
+  weight: "Weight",
+  lengthCm: "Length",
+  widthCm: "Width",
+  heightCm: "Height",
+  tags: "Tags",
+  imageUrls: "Images",
+  collectionIds: "Collections",
+  customizationLabel: "Customization label",
+};
+
+function productValidationMessage(error: z.ZodError) {
+  const issue = error.issues[0];
+  if (!issue) return "Invalid product";
+  const label = PRODUCT_FIELD_LABELS[String(issue.path[0] ?? "")];
+  return label ? `${label}: ${issue.message}` : issue.message;
+}
+
 /** Rejects a "ships in" range whose upper bound is below the lower bound. */
 function assertShippingRange(min: number | undefined, max: number | null | undefined) {
   if (min != null && max != null && max < min) {
@@ -801,7 +833,12 @@ const productCreateSchema = z.object({
   widthCm: optionalDimensionCm,
   heightCm: optionalDimensionCm,
   status: z.enum(["draft", "active"]).default("draft"),
-  tags: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
+  tags: z
+    .array(
+      z.string().trim().min(1).max(40, "each tag can be at most 40 characters. Separate tags with commas.")
+    )
+    .max(10, "add up to 10 tags")
+    .default([]),
   imageUrls: z.array(z.string().min(1).max(500)).max(8).default([]),
   collectionIds: z.array(z.string().uuid()).max(20).default([]),
   isCustomizable: z.boolean().optional(),
@@ -985,7 +1022,7 @@ sellerRouter.post(
   asyncHandler(async (req, res) => {
     const parsed = productCreateSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid product" });
+      res.status(400).json({ message: productValidationMessage(parsed.error) });
       return;
     }
     const data = parsed.data;
@@ -1201,7 +1238,7 @@ sellerRouter.patch(
     const sellerId = req.seller!.id;
     const parsed = productPatchSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid product" });
+      res.status(400).json({ message: productValidationMessage(parsed.error) });
       return;
     }
 

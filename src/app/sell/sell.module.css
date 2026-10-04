@@ -813,7 +813,7 @@ select.formInput {
   }
 
   .choiceRow {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .categoryCard {
@@ -852,6 +852,6 @@ select.formInput {
 
 @media (max-width: 380px) {
   .categoryGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }

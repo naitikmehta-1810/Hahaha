@@ -130,296 +130,231 @@
   color: var(--color-primary-ink);
 }
 
-/* Carousel */
+/* Carousel: editorial split banner. Slides stack in one grid cell, so the
+   banner takes the tallest slide's height and never jumps between slides. */
 
 .carousel {
   position: relative;
   flex: 1;
   min-width: 0;
-  min-height: 420px;
+  display: grid;
   overflow: hidden;
   border-radius: var(--radius-xl);
-  background:
-    radial-gradient(120% 140% at 0% 0%, #8b5cf6 0%, transparent 55%),
-    linear-gradient(135deg, #4c1d95 0%, #6d28d9 45%, #7c3aed 70%, #a78bfa 100%);
-  box-shadow: var(--shadow-brand);
   isolation: isolate;
   touch-action: pan-y;
-  color: #ffffff;
+  transition: color 0.4s ease;
 }
 
-.orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(40px);
-  pointer-events: none;
-  z-index: -1;
+.themePlum {
+  --slide-bg: #2b1236;
+  --slide-fg: #ffffff;
+  --slide-muted: rgba(255, 255, 255, 0.72);
+  --slide-line: rgba(255, 255, 255, 0.22);
 }
 
-.orbA {
-  width: 360px;
-  height: 360px;
-  right: -80px;
-  top: -120px;
-  background: rgba(244, 114, 182, 0.45);
-  animation: drift 14s ease-in-out infinite alternate;
+.themeLilac {
+  --slide-bg: #efe8fb;
+  --slide-fg: var(--color-text-main);
+  --slide-muted: var(--color-text-muted);
+  --slide-line: rgba(76, 29, 149, 0.16);
 }
 
-.orbB {
-  width: 300px;
-  height: 300px;
-  left: 30%;
-  bottom: -160px;
-  background: rgba(56, 24, 64, 0.65);
-  animation: drift 18s ease-in-out infinite alternate-reverse;
+.themeViolet {
+  --slide-bg: #5b21b6;
+  --slide-fg: #ffffff;
+  --slide-muted: rgba(255, 255, 255, 0.76);
+  --slide-line: rgba(255, 255, 255, 0.24);
 }
 
-@keyframes drift {
-  from {
-    transform: translate(0, 0) scale(1);
-  }
-  to {
-    transform: translate(-40px, 30px) scale(1.12);
-  }
-}
-
-.gridPattern {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.18;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.35) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.35) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: radial-gradient(ellipse at 75% 40%, #000 0%, transparent 70%);
+.carousel {
+  color: var(--slide-fg);
+  background: var(--slide-bg);
 }
 
 .slide {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
+  grid-area: 1 / 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  min-height: 440px;
+  background: var(--slide-bg);
+  color: var(--slide-fg);
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.6s ease, visibility 0.6s;
+  transition: opacity 0.55s ease, visibility 0.55s;
 }
 
 .slideActive {
-  position: relative;
-  min-height: 420px;
   opacity: 1;
   visibility: visible;
+  z-index: 1;
 }
 
-.carouselContent {
-  position: relative;
-  z-index: 2;
-  width: 54%;
-  padding: 48px 0 84px 52px;
+.slideCopy {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: flex-start;
-  gap: 14px;
+  gap: 16px;
+  padding: 48px 48px 104px;
 }
 
-.slideActive .carouselContent > * {
-  animation: rise 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) both;
-}
-
-.slideActive .carouselContent > *:nth-child(2) {
-  animation-delay: 0.06s;
-}
-
-.slideActive .carouselContent > *:nth-child(3) {
-  animation-delay: 0.12s;
-}
-
-.slideActive .carouselContent > *:nth-child(4) {
-  animation-delay: 0.18s;
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.carouselEyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  backdrop-filter: blur(6px);
+.slideLabel {
   font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--slide-muted);
 }
 
-.carouselTitle {
-  font-size: clamp(1.9rem, 3.5vw, 2.85rem);
+.slideTitle {
+  max-width: 18ch;
+  font-size: clamp(1.9rem, 3vw, 2.7rem);
   font-weight: 800;
-  line-height: 1.08;
-  letter-spacing: -0.035em;
+  line-height: 1.04;
+  letter-spacing: -0.04em;
 }
 
-.carouselSubtitle {
+.slideText {
   max-width: 40ch;
-  font-size: 1.02rem;
-  line-height: 1.55;
-  opacity: 0.9;
-  margin-bottom: 6px;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--slide-muted);
 }
 
-.carousel .carouselCta {
+.slideActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+  margin-top: 8px;
+}
+
+.carousel .slideCtaLight {
   border: 0;
   background: #ffffff;
-  color: var(--color-primary-ink);
-  box-shadow: 0 10px 24px rgba(31, 20, 48, 0.25);
+  color: var(--color-text-main);
 }
 
-.carousel .carouselCta:hover {
+.carousel .slideCtaLight:hover {
   background: var(--color-primary-light);
 }
 
-/* Image collage */
-
-.collage {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 46%;
+.slideLink {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--slide-fg);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+  text-decoration-color: var(--slide-line);
+  transition: text-decoration-color var(--transition-fast);
 }
 
-.collageCard {
-  position: absolute;
+.slideLink:hover {
+  text-decoration-color: currentColor;
+}
+
+.slideMedia {
+  position: relative;
+  display: grid;
   overflow: hidden;
-  border-radius: 22px;
-  border: 5px solid rgba(255, 255, 255, 0.95);
-  background: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 28px 56px rgba(31, 20, 48, 0.4);
-  transition: transform 0.8s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.6s ease;
+  /* Photos fill the column; they never set the banner height. */
+  contain: size;
+  background: rgba(0, 0, 0, 0.08);
 }
 
-.collageCard img {
+.slideMediaSplit {
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  background: var(--slide-bg);
+}
+
+.slideMedia img {
   width: 100%;
   height: 100%;
+  min-height: 0;
   object-fit: cover;
   display: block;
+  transform: scale(1.05);
+  transition: transform 7s cubic-bezier(0.2, 0.6, 0.35, 1);
 }
 
-.collageFront {
-  width: 230px;
-  height: 270px;
-  right: 15%;
-  top: 14%;
-  transform: rotate(5deg) translateY(16px);
-  opacity: 0;
+.slideActive .slideMedia img {
+  transform: scale(1);
 }
 
-.collageBack {
-  width: 180px;
-  height: 200px;
-  left: 4%;
-  bottom: 14%;
-  transform: rotate(-9deg) translateY(16px);
-  opacity: 0;
-}
-
-.slideActive .collageFront {
-  transform: rotate(5deg);
-  opacity: 1;
-}
-
-.slideActive .collageBack {
-  transform: rotate(-9deg);
-  opacity: 1;
-  transition-delay: 0.1s;
-}
-
-.glassBadge {
-  position: absolute;
-  right: 8%;
-  bottom: 18%;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 14px;
-  border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--color-primary-ink);
-  font-size: 0.78rem;
-  font-weight: 700;
-  box-shadow: 0 12px 28px rgba(31, 20, 48, 0.25);
-  opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.5s ease 0.25s, transform 0.5s ease 0.25s;
-}
-
-.slideActive .glassBadge {
-  opacity: 1;
-  transform: none;
-}
-
-/* Controls */
+/* Controls: counter, segmented progress, arrows — along the copy column. */
 
 .carouselControls {
   position: absolute;
-  left: 52px;
-  right: 22px;
-  bottom: 24px;
   z-index: 3;
+  left: 48px;
+  bottom: 36px;
+  width: calc(51% - 96px);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
+  color: var(--slide-fg);
 }
 
-.carouselDots,
-.carouselArrows {
+.counter {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--slide-muted);
+}
+
+.counter strong {
+  font-weight: 700;
+  color: var(--slide-fg);
+}
+
+.progress {
+  flex: 1;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 60px;
 }
 
-.dot {
+.progressTrack {
   position: relative;
-  width: 10px;
-  height: 10px;
-  overflow: hidden;
-  border-radius: var(--radius-full);
-  background-color: rgba(255, 255, 255, 0.4);
-  transition: width var(--transition-normal), background-color var(--transition-fast);
+  flex: 1;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
 }
 
-.dot:hover {
-  background-color: rgba(255, 255, 255, 0.7);
-}
-
-.activeDot {
-  width: 40px;
-  background-color: rgba(255, 255, 255, 0.35);
-}
-
-.dotProgress {
+.progressTrack::before {
+  content: "";
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: #ffffff;
+  inset: 9px 0;
+  border-radius: 2px;
+  background: var(--slide-line);
+}
+
+.progressFill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 9px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: scaleX(0);
   transform-origin: left center;
+}
+
+.progressDone {
+  transform: scaleX(1);
+}
+
+.progressActive {
   animation: progress linear forwards;
 }
 
-.carouselPaused .dotProgress {
+.carouselPaused .progressActive {
   animation-play-state: paused;
 }
 
@@ -432,21 +367,33 @@
   }
 }
 
+.carouselArrows {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .arrow {
   width: 40px;
   height: 40px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
-  transition: background-color var(--transition-fast), transform var(--transition-fast);
+  border: 1px solid var(--slide-line);
+  color: var(--slide-fg);
+  background: transparent;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .arrow:hover {
-  background: rgba(255, 255, 255, 0.26);
-  transform: scale(1.05);
+  border-color: currentColor;
+}
+
+.arrow:focus-visible,
+.progressTrack:focus-visible,
+.slideLink:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
 }
 
 /* ── Sections ────────────────────────────────────────────────────────── */
@@ -621,19 +568,8 @@
   gap: 24px;
   padding: 40px 44px;
   border-radius: var(--radius-xl);
-  background:
-    radial-gradient(90% 160% at 100% 0%, rgba(236, 72, 153, 0.35), transparent 55%),
-    linear-gradient(120deg, var(--color-plum) 0%, #4c1d95 55%, #6d28d9 100%);
+  background: var(--color-plum);
   color: #ffffff;
-}
-
-.orbC {
-  width: 280px;
-  height: 280px;
-  left: -60px;
-  bottom: -140px;
-  background: rgba(167, 139, 250, 0.55);
-  animation: drift 16s ease-in-out infinite alternate;
 }
 
 .sellCopy {
@@ -685,14 +621,13 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .collageFront {
-    width: 200px;
-    height: 236px;
+  .slideCopy {
+    padding: 40px 36px 96px;
   }
 
-  .collageBack {
-    width: 150px;
-    height: 170px;
+  .carouselControls {
+    left: 36px;
+    width: calc(51% - 72px);
   }
 }
 
@@ -751,52 +686,32 @@
 }
 
 @media (max-width: 768px) {
-  .carousel,
-  .slideActive {
-    min-height: 570px;
-  }
-
   .slide {
-    align-items: flex-start;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 220px auto;
+    min-height: 0;
   }
 
-  .carouselContent {
-    width: 100%;
-    padding: 28px 24px 0;
+  .slideMedia {
+    grid-row: 1;
   }
 
-  .collage {
-    top: auto;
-    left: 0;
-    width: 100%;
-    height: 196px;
-    bottom: 62px;
+  .slideCopy {
+    grid-row: 2;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 24px 22px 84px;
   }
 
-  .collageFront {
-    width: 150px;
-    height: 170px;
-    right: 14%;
-    top: 10px;
-  }
-
-  .collageBack {
-    width: 118px;
-    height: 132px;
-    left: 12%;
-    bottom: 18px;
-  }
-
-  .glassBadge {
-    right: auto;
-    left: 42%;
-    bottom: 6px;
+  .slideTitle {
+    max-width: 18ch;
   }
 
   .carouselControls {
-    left: 24px;
-    right: 16px;
-    bottom: 18px;
+    left: 22px;
+    right: 22px;
+    bottom: 22px;
+    width: auto;
   }
 
   .arrow {
@@ -845,8 +760,16 @@
     height: 70px;
   }
 
-  .carouselTitle {
+  .slide {
+    grid-template-rows: 200px auto;
+  }
+
+  .slideTitle {
     font-size: 1.75rem;
+  }
+
+  .slideText {
+    font-size: 0.95rem;
   }
 
   .sellBand .sellCta {
@@ -855,7 +778,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orb {
-    animation: none;
+  .slide,
+  .slideMedia img {
+    transition: none;
+  }
+
+  .slideMedia img {
+    transform: none;
   }
 }

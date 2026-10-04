@@ -54,10 +54,27 @@ async function logEmailEnqueue(name: string, data: Record<string, unknown>) {
  * Enqueue an email worker job. Never throws to callers — Redis/queue errors are logged.
  * Also writes email_enqueue_log for lifecycle integration tests.
  */
-export async function enqueueEmailJob(name: string, data: Record<string, unknown>) {
+export async function enqueueEmailJob(
+  name: string,
+  data: Record<string, unknown>,
+  opts: { dedupeKey?: string } = {}
+) {
+  // A stable job id makes a repeat (e.g. webhook and client verify racing) a no-op
+  // while the first job is still retained by the queue.
+  const jobId = opts.dedupeKey
+    ? `${name}-${opts.dedupeKey}`.replace(/:/g, "-")
+    : undefined;
   await logEmailEnqueue(name, data);
   try {
-    const job = await getEmailQueue().add(name, data, defaultJobOpts);
+    if (jobId && (await getEmailQueue().getJob(jobId))) {
+      console.log(`[notify] skipped duplicate email job=${name} id=${jobId}`);
+      return jobId;
+    }
+  } catch (error) {
+    console.warn(`[notify] duplicate check failed name=${name}`, error);
+  }
+  try {
+    const job = await getEmailQueue().add(name, data, { ...defaultJobOpts, jobId });
     console.log(`[notify] enqueued email job=${name} id=${job.id}`);
     // Browser push mirrors the same events (prefs-gated) without blocking email.
     void import("./push.service.js")

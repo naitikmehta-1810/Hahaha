@@ -200,7 +200,7 @@
 
 @media (max-width: 768px) {
   .timelineSplit {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -443,7 +443,7 @@
 
 @media (max-width: 700px) {
   .deliveryGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
