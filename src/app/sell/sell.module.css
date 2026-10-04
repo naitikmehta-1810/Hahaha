@@ -488,26 +488,31 @@ select.formInput {
 }
 
 /* ── Step 3: Terms ────────────────────────────────────── */
-.termsPage {
-  height: 100dvh;
-  max-height: 100dvh;
-  overflow: hidden;
-}
+/* Desktop: the terms step fits one screen and only the terms box scrolls.
+   Phones stack the sidebar above the card, so there the page scrolls normally;
+   locking the height there hid the agree checkbox and the submit button. */
+@media (min-width: 861px) {
+  .termsPage {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
 
-.termsPage .body {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
+  .termsPage .body {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
 
-.termsPage .mainPanel,
-.termsPage .contentCard {
-  min-height: 0;
-  flex: 1;
-}
+  .termsPage .mainPanel,
+  .termsPage .contentCard {
+    min-height: 0;
+    flex: 1;
+  }
 
-.termsPage .contentCard {
-  overflow: hidden;
+  .termsPage .contentCard {
+    overflow: hidden;
+  }
 }
 
 .termsBox {
@@ -856,6 +861,18 @@ select.formInput {
 
   .cardFooter .btnNext {
     width: 100%;
+  }
+
+  /* Terms scroll inside their own box so the agree box and button stay close. */
+  .termsBox {
+    flex: none;
+    max-height: min(52vh, 420px);
+    padding: 18px 16px;
+  }
+
+  /* On the last step the reading matters more than the sidebar pitch. */
+  .termsPage .featureList {
+    display: none;
   }
 }
 

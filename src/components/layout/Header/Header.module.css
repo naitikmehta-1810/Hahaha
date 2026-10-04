@@ -385,4 +385,18 @@
     width: 36px;
     height: 36px;
   }
+
+  /* The icon row cannot hold the console shortcuts on a small phone without
+     pushing the cart and avatar off-screen. Both live in the drawer here. */
+  .sellLink {
+    display: none;
+  }
+}
+
+/* Narrowest phones: drop the wordmark and keep the gift-bag mark, so the icon
+   row still fits. The logo link keeps its "Stuffsy home" label either way. */
+@media (max-width: 360px) {
+  .headerLockup > span {
+    display: none;
+  }
 }

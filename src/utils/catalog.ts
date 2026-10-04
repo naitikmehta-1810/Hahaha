@@ -62,6 +62,9 @@ export type ProductDetail = ProductCard & {
     badge: string | null;
     rating: number;
     reviewCount: number;
+    /** "state" shops deliver only inside sellingState (no GSTIN yet). */
+    sellingScope?: string;
+    sellingState?: string | null;
   };
 };
 

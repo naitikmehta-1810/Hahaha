@@ -15,6 +15,7 @@ import {
   Sparkles,
   Store,
   PackageX,
+  MapPin,
 } from "lucide-react";
 import styles from "./product-details.module.css";
 import Button, { ButtonLink } from "@/components/ui/Button/Button";
@@ -39,8 +40,17 @@ import { isWished, toggleWishlist } from "@/utils/wishlist";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
 import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
+import DeliveryCheckDialog from "@/components/product/DeliveryCheckDialog";
+import {
+  checkDeliverability,
+  placeLabel,
+  savedPincode,
+  type Deliverability,
+} from "@/utils/deliverability";
 
 const FALLBACK_IMAGE = FALLBACK_PRODUCT_IMAGE;
+
+type CartAction = "cart" | "buy";
 
 export default function ProductDetailsPage() {
   const params = useParams();
@@ -57,6 +67,10 @@ export default function ProductDetailsPage() {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [customizationNote, setCustomizationNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [delivery, setDelivery] = useState<Deliverability | null>(null);
+  const [deliveryDialog, setDeliveryDialog] = useState<{ action: CartAction | null } | null>(
+    null
+  );
   const [busy, setBusy] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [notifyBusy, setNotifyBusy] = useState(false);
@@ -74,6 +88,13 @@ export default function ProductDetailsPage() {
       setSelectedVariantId(result.product?.variants[0]?.id ?? null);
       setActiveThumbnail(0);
       setLoading(false);
+      setDelivery(null);
+      const pincode = savedPincode();
+      if (result.product?.seller.sellingScope === "state" && pincode) {
+        void checkDeliverability(result.product.slug, pincode).then((check) => {
+          if (!cancelled && check.data) setDelivery(check.data);
+        });
+      }
       if (result.product?.id) {
         void isWished(result.product.id).then((wished) => {
           if (!cancelled) setLiked(wished);
@@ -163,30 +184,37 @@ export default function ProductDetailsPage() {
     );
   };
 
-  const handleAddToCart = () => {
+  const runCartAction = (action: CartAction) => {
     setActionError(null);
     setBusy(true);
     void addCurrentVariant()
-      .then(() => router.push("/cart"))
+      .then(() => router.push(action === "buy" ? "/checkout" : "/cart"))
       .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "Could not add to cart";
-        setActionError(message);
+        const fallback = action === "buy" ? "Could not start checkout" : "Could not add to cart";
+        setActionError(err instanceof Error ? err.message : fallback);
       })
       .finally(() => setBusy(false));
   };
 
-  /** Buy Now adds to cart and goes straight into the checkout flow (Section E7). */
-  const handleBuyNow = () => {
-    setActionError(null);
-    setBusy(true);
-    void addCurrentVariant()
-      .then(() => router.push("/checkout"))
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "Could not start checkout";
-        setActionError(message);
-      })
-      .finally(() => setBusy(false));
+  // A state-only shop's item goes into the cart only once a PIN code it can
+  // deliver to is known. "Unknown" (lookup down) is let through; checkout
+  // still enforces the rule against the real address.
+  const stateOnlySeller =
+    product?.seller.sellingScope === "state" && product.seller.sellingState
+      ? product.seller.sellingState
+      : null;
+  const deliveryCleared =
+    !stateOnlySeller || (delivery !== null && delivery.deliverable !== false);
+
+  const requestCartAction = (action: CartAction) => {
+    if (deliveryCleared) runCartAction(action);
+    else setDeliveryDialog({ action });
   };
+
+  const handleAddToCart = () => requestCartAction("cart");
+
+  /** Buy Now adds to cart and goes straight into the checkout flow (Section E7). */
+  const handleBuyNow = () => requestCartAction("buy");
 
   if (loading) {
     return (
@@ -393,6 +421,69 @@ export default function ProductDetailsPage() {
                 : "Out of stock"}
             </span>
           </div>
+
+          {stateOnlySeller ? (
+            <div
+              className={`${styles.deliveryNote} ${
+                delivery?.deliverable === false
+                  ? styles.deliveryNoteBlocked
+                  : delivery?.deliverable
+                    ? styles.deliveryNoteOk
+                    : ""
+              }`}
+            >
+              <MapPin size={15} aria-hidden="true" />
+              <span>
+                {delivery?.deliverable === true ? (
+                  <>
+                    Delivers to <strong>{delivery.pincode}</strong>
+                    {placeLabel(delivery) ? ` · ${placeLabel(delivery)}` : ""}.{" "}
+                  </>
+                ) : delivery?.deliverable === false ? (
+                  <>
+                    Can&apos;t deliver to <strong>{delivery.pincode}</strong>
+                    {delivery.state ? ` (${delivery.state})` : ""}. This maker delivers only within{" "}
+                    <strong>{stateOnlySeller}</strong>.{" "}
+                  </>
+                ) : (
+                  <>
+                    This maker delivers only within <strong>{stateOnlySeller}</strong>.{" "}
+                  </>
+                )}
+                <button
+                  type="button"
+                  className={styles.deliveryNoteLink}
+                  onClick={() => setDeliveryDialog({ action: null })}
+                >
+                  {delivery ? "Change PIN code" : "Check your PIN code"}
+                </button>
+              </span>
+            </div>
+          ) : null}
+
+          {deliveryDialog && stateOnlySeller ? (
+            <DeliveryCheckDialog
+              productSlug={product.slug}
+              shopName={product.shopName}
+              sellerState={stateOnlySeller}
+              initialPincode={delivery?.pincode ?? savedPincode()}
+              initialResult={delivery}
+              actionLabel={
+                deliveryDialog.action === "buy"
+                  ? "Buy now"
+                  : deliveryDialog.action === "cart"
+                    ? "Add to cart"
+                    : null
+              }
+              onResult={setDelivery}
+              onProceed={() => {
+                const action = deliveryDialog.action;
+                setDeliveryDialog(null);
+                if (action) runCartAction(action);
+              }}
+              onClose={() => setDeliveryDialog(null)}
+            />
+          ) : null}
 
           <div className={styles.optionsRow}>
             {product.variants.length > 1 ? (

@@ -789,11 +789,15 @@ a.orderRow:hover .orderTitle {
 @media (max-width: 968px) {
   .layout {
     flex-direction: column;
+    /* Stacked, the content must take the column's width. flex-start here
+       sizes it to its content, and nowrap order titles push it off-screen. */
+    align-items: stretch;
     gap: 16px;
   }
 
   .menuToggle {
     display: inline-flex;
+    align-self: flex-start;
   }
 
   .navScrim {

@@ -11,7 +11,8 @@ import {
 } from "../services/catalog.service.js";
 import { subscribeStockNotification } from "../services/stock-notifications.service.js";
 import { publicReadLimiter } from "../middleware/auth-rate-limit.js";
-import { canSellToState, resolveViewerRegion } from "../services/viewer-region.service.js";
+import { resolveViewerRegion } from "../services/viewer-region.service.js";
+import { normalizePincode, resolvePincode, sameState } from "../services/pincode.service.js";
 
 const productsRouter = Router();
 
@@ -150,16 +151,60 @@ productsRouter.post(
   })
 );
 
+/**
+ * Can this product be delivered to a PIN code? Mirrors the checkout rule: a
+ * state-only shop delivers only inside its selling state. `deliverable: null`
+ * means the PIN's state could not be determined right now.
+ */
+productsRouter.get(
+  "/:slug/deliverability",
+  asyncHandler(async (req, res) => {
+    const pincode = normalizePincode(req.query.pincode);
+    const slug = String(req.params.slug);
+    const product = await pool.query<{
+      selling_scope: string | null;
+      selling_state: string | null;
+      shop_name: string;
+    }>(
+      `select s.selling_scope, s.selling_state, s.shop_name
+       from public.products p
+       join public.sellers s on s.id = p.seller_id
+       where (p.slug = $1 or p.id::text = $1) and p.deleted_at is null
+       limit 1`,
+      [slug]
+    );
+    const seller = product.rows[0];
+    if (!seller) {
+      res.status(404).json({ message: "Product not found" });
+      return;
+    }
+    const stateOnly = seller.selling_scope === "state";
+    // Pan-India shops deliver anywhere; the PIN is still resolved so the
+    // buyer sees where it was checked against.
+    const place = await resolvePincode(pincode);
+    let deliverable: boolean | null;
+    if (!stateOnly) deliverable = true;
+    else if (!place) deliverable = null;
+    else deliverable = Boolean(seller.selling_state) && sameState(place.state, seller.selling_state);
+    res.json({
+      pincode,
+      state: place?.state ?? null,
+      district: place?.district ?? null,
+      deliverable,
+      sellerState: stateOnly ? seller.selling_state : null,
+      shopName: seller.shop_name,
+    });
+  })
+);
+
 productsRouter.get(
   "/:slug",
   optionalAuth,
   asyncHandler(async (req, res) => {
+    // Product pages are public. A state-only shop's page tells buyers where it
+    // delivers, and checkout enforces it against the shipping address.
     const product = await getProductBySlug(String(req.params.slug));
-    const region = await resolveViewerRegion(req);
-    if (
-      !product ||
-      !canSellToState(product.seller.sellingScope, product.seller.sellingState, region.state)
-    ) {
+    if (!product) {
       res.status(404).json({ message: "Product not found" });
       return;
     }

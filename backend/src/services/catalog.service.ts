@@ -237,17 +237,9 @@ function buildFilterClause(filters: ProductListFilters) {
     conditions.push(IN_STOCK_SQL);
   }
 
-  // State-only shops stay hidden unless the buyer is in that state.
-  // An unknown buyer state hides them (fail closed), including search.
-  const state = (filters.viewerState ?? "").trim().toLowerCase();
-  const stateParam = push(state);
-  conditions.push(`(
-    coalesce(s.selling_scope, 'pan_india') = 'pan_india'
-    or (
-      ${stateParam} <> ''
-      and lower(trim(coalesce(s.selling_state, ''))) = ${stateParam}
-    )
-  )`);
+  // Every active product is browsable. Shops that may only sell inside their
+  // own state (no GSTIN) are still listed (local shops rank first); checkout
+  // refuses delivery addresses outside that state (order.service.ts).
 
   return { where: conditions.join(" and "), params, searchRankSql };
 }
@@ -734,13 +726,6 @@ export async function getRelatedProducts(
      where ${PUBLIC_VISIBILITY_SQL}
        and (cardinality($1::uuid[]) = 0 or p.category_id = any($1::uuid[]))
        and not (p.id = any($2::uuid[]))
-       and (
-         coalesce(s.selling_scope, 'pan_india') = 'pan_india'
-         or (
-           $4 <> ''
-           and lower(trim(coalesce(s.selling_state, ''))) = $4
-         )
-       )
      order by
        case
          when $4 <> '' and lower(trim(coalesce(s.selling_state, ''))) = $4 then 0
@@ -762,12 +747,10 @@ export async function suggestSearch(q: string, limit = 8, viewerState: string | 
   }
 
   const useFts = term.length >= 3;
+  // Suggestions cover every shop; same-state shops sort first.
   const state = (viewerState ?? "").trim().toLowerCase();
-  const regionSql = `
-    and (
-      coalesce(s.selling_scope, 'pan_india') = 'pan_india'
-      or ($3 <> '' and lower(trim(coalesce(s.selling_state, ''))) = $3)
-    )`;
+  // Shops in the viewer's state come first.
+  const localFirst = `(lower(trim(coalesce(s.selling_state, ''))) = $3) desc`;
   const ilikeSql = `select p.id, p.slug, p.title
          from public.products p
          join public.sellers s on s.id = p.seller_id
@@ -777,8 +760,7 @@ export async function suggestSearch(q: string, limit = 8, viewerState: string | 
              or p.short_description ilike $1 escape '\\'
              or s.shop_name ilike $1 escape '\\'
            )
-           ${regionSql}
-         order by p.review_count desc
+         order by ${localFirst}, p.review_count desc
          limit $2`;
   const ftsSql = `select p.id, p.slug, p.title
          from public.products p
@@ -789,8 +771,7 @@ export async function suggestSearch(q: string, limit = 8, viewerState: string | 
              or to_tsvector('english', coalesce(s.shop_name, ''))
                   @@ websearch_to_tsquery('english', $1)
            )
-           ${regionSql}
-         order by ts_rank(p.search_vector, websearch_to_tsquery('english', $1)) desc
+         order by ${localFirst}, ts_rank(p.search_vector, websearch_to_tsquery('english', $1)) desc
          limit $2`;
 
   let products: { rows: { id: string; slug: string; title: string }[] };

@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 import { appliedGstPercent, taxForLines } from "./gst.js";
 import { clearCartItems, getUserCartForOrder } from "./cart.service.js";
 import { validateCoupon } from "./coupon.service.js";
+import { sameState } from "./pincode.service.js";
 import {
   ORDER_TRACKING_STAGES,
   recordInitialStatus,
@@ -348,8 +349,7 @@ export async function placeOrder(input: PlaceOrderInput) {
     const outOfState = lines.filter(
       (line) =>
         line.selling_scope === "state" &&
-        (!line.selling_state ||
-          line.selling_state.trim().toLowerCase() !== shippingAddress.state.trim().toLowerCase())
+        (!line.selling_state || !sameState(line.selling_state, shippingAddress.state))
     );
     if (outOfState.length > 0) {
       const names = [...new Set(outOfState.map((line) => line.title))].slice(0, 3).join(", ");

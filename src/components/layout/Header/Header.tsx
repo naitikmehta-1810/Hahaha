@@ -215,7 +215,13 @@ export const Header = () => {
             aria-label="Stuffsy home"
             onClick={() => setMobileOpen(false)}
           >
-            <BrandLogo variant="lockup" size={34} decorative priority />
+            <BrandLogo
+              variant="lockup"
+              size={34}
+              decorative
+              priority
+              className={styles.headerLockup}
+            />
           </Link>
         </div>
 

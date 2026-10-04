@@ -215,17 +215,39 @@ export default function SellPage() {
   const [sellerStatus,    setSellerStatus]    = useState("pending");
   const [submitting,      setSubmitting]      = useState(false);
   const [error,           setError]           = useState<string | null>(null);
-  const [authBanner,      setAuthBanner]      = useState(false);
   const [businessRegistered, setBusinessRegistered] = useState<boolean | null>(null);
   const [gstin, setGstin] = useState("");
   const [sellingState, setSellingState] = useState("");
   const [sellingCity, setSellingCity] = useState("");
   const [sellingScope, setSellingScope] = useState<string | null>(null);
-  const [gstStatus, setGstStatus] = useState<"idle" | "checking" | "verified" | "error">("idle");
-  const [gstMessage, setGstMessage] = useState<string | null>(null);
-  const [verifiedGstin, setVerifiedGstin] = useState<string | null>(null);
+  const [gstResult, setGstResult] = useState<{
+    gstin: string;
+    ok: boolean;
+    message: string;
+  } | null>(null);
   const autoSubmitRef = useRef(false);
 
+  const authBanner = authStatus === "ready" && !isAuthenticated;
+
+  // The GSTIN lookup result is the only thing worth storing; the status shown
+  // beside the field follows from it and from what is currently typed.
+  const normalizedGstin = gstin.trim().toUpperCase();
+  const gstActive = businessRegistered === true && normalizedGstin.length === 15;
+  const gstMatches = gstActive && gstResult?.gstin === normalizedGstin;
+  const gstStatus: "idle" | "checking" | "verified" | "error" = !gstActive
+    ? "idle"
+    : !gstMatches
+      ? "checking"
+      : gstResult!.ok
+        ? "verified"
+        : "error";
+  const gstMessage = gstMatches ? gstResult!.message : null;
+  const verifiedGstin = gstStatus === "verified" ? normalizedGstin : null;
+
+  // Restoring a saved draft has to happen after mount: sessionStorage does not
+  // exist while this page is rendered on the server, and seeding the fields
+  // during the first client render instead would not match the server's HTML.
+  /* eslint-disable react-hooks/set-state-in-effect -- one-shot restore from sessionStorage, see above */
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem("stuffsy-sell-draft");
@@ -254,30 +276,12 @@ export default function SellPage() {
       // ignore corrupt draft
     }
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (authStatus === "ready") {
-      setAuthBanner(!isAuthenticated);
-    }
-  }, [authStatus, isAuthenticated]);
-
-  useEffect(() => {
-    if (businessRegistered !== true) {
-      setGstStatus("idle");
-      setGstMessage(null);
-      setVerifiedGstin(null);
-      return;
-    }
-    const value = gstin.trim().toUpperCase();
-    if (value.length !== 15) {
-      setGstStatus("idle");
-      setGstMessage(null);
-      setVerifiedGstin(null);
-      return;
-    }
+    if (!gstActive) return;
+    const value = normalizedGstin;
     let cancelled = false;
-    setGstStatus("checking");
-    setGstMessage(null);
     const timer = window.setTimeout(() => {
       void (async () => {
         const result = await apiRequest<{ legalName: string; state: string }>(
@@ -287,21 +291,25 @@ export default function SellPage() {
         );
         if (cancelled) return;
         if (result.error || !result.data) {
-          setGstStatus("error");
-          setVerifiedGstin(null);
-          setGstMessage(result.error ?? "Could not verify this GSTIN.");
+          setGstResult({
+            gstin: value,
+            ok: false,
+            message: result.error ?? "Could not verify this GSTIN.",
+          });
           return;
         }
-        setGstStatus("verified");
-        setVerifiedGstin(value);
-        setGstMessage(`${result.data.legalName} · ${result.data.state}`);
+        setGstResult({
+          gstin: value,
+          ok: true,
+          message: `${result.data.legalName} · ${result.data.state}`,
+        });
       })();
     }, 350);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [businessRegistered, gstin]);
+  }, [gstActive, normalizedGstin]);
 
   // ── Step 1 helpers ────────────────────────────────────────────────────────
   const toggleCategory = (id: string) => {
@@ -479,7 +487,6 @@ export default function SellPage() {
     <div className={`${styles.page} ${step === 3 ? styles.termsPage : ""}`}>
       <div className={styles.scene} aria-hidden="true">
         {sceneImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={optimizedImage(sceneImage, 1920)} alt="" className={styles.sceneImage} />
         ) : (
           <Image
@@ -815,9 +822,7 @@ export default function SellPage() {
                     onChange={(e) => setAgreed(e.target.checked)}
                   />
                   <label htmlFor="agree-terms" className={styles.agreeLabel}>
-                    I have read, understood and agree to the{" "}
-                    <a href="#">Terms &amp; Conditions</a> and{" "}
-                    <a href="#">Privacy Policy</a>.
+                    I have read, understood and agree to the seller terms above.
                   </label>
                 </div>
 

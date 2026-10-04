@@ -43,10 +43,17 @@
 }
 
 .brandRow {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 10px;
   color: var(--color-text-main);
+  align-self: flex-start;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.brandRow:hover .brandName {
+  color: var(--color-primary);
 }
 
 .brandMark {

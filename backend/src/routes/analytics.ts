@@ -153,11 +153,8 @@ analyticsRouter.get(
        join public.products p on p.id = r.product_id
        join public.sellers s on s.id = p.seller_id
        where p.deleted_at is null and p.status = 'active'
-         and (
-           coalesce(s.selling_scope, 'pan_india') = 'pan_india'
-           or ($4 <> '' and lower(trim(coalesce(s.selling_state, ''))) = $4)
-         )
-       order by r.last_seen desc`,
+         and s.status = 'active' and s.is_vacation_mode = false
+       order by (lower(trim(coalesce(s.selling_state, ''))) = $4) desc, r.last_seen desc`,
       [userId, sessionId, limit, viewerState]
     );
 

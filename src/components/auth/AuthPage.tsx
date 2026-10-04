@@ -184,10 +184,10 @@ function AuthPageInner({ mode }: AuthPageProps) {
             isSignIn ? styles.signInTone : styles.signUpTone
           }`}
         >
-          <div className={styles.brandRow}>
+          <Link href="/" className={styles.brandRow} aria-label="Stuffsy home">
             <BrandLogo size={40} decorative className={styles.brandMark} />
             <span className={styles.brandName}>Stuffsy</span>
-          </div>
+          </Link>
 
           <div className={styles.leftCopy}>
             <h2 className={styles.leftTitle}>{isSignIn ? "Welcome back" : "Create your account"}</h2>

@@ -294,6 +294,7 @@ export default function Home() {
   const [circleCategories, setCircleCategories] = useState<CategoryNode[]>([]);
   const [popularProducts, setPopularProducts] = useState<CatalogProduct[]>([]);
   const [newArrivals, setNewArrivals] = useState<CatalogProduct[]>([]);
+  const [loadingArrivals, setLoadingArrivals] = useState(true);
   const [recommendedProducts, setRecommendedProducts] = useState<CatalogProduct[]>([]);
   const [loadingPopular, setLoadingPopular] = useState(true);
   const [loadingRecommended, setLoadingRecommended] = useState(true);
@@ -306,10 +307,11 @@ export default function Home() {
       setSidebarCategories(pickSidebarCategories(tree).slice(0, SIDEBAR_LIMIT));
       setCircleCategories(pickShopByCategoryNodes(tree, 8));
     });
-    // Real new listings give the "new arrivals" slide its own imagery.
-    void fetchProducts({ sort: "new_arrivals", pageSize: 8 }).then((result) =>
-      setNewArrivals(result.products)
-    );
+    // Newest listings feed the "Just added" row and the new-arrivals slide.
+    void fetchProducts({ sort: "new_arrivals", pageSize: 8 }).then((result) => {
+      setNewArrivals(result.products);
+      setLoadingArrivals(false);
+    });
     // Admin-uploaded storefront images replace the default artwork.
     void fetchSiteMedia().then(setMedia);
   }, []);
@@ -501,6 +503,23 @@ export default function Home() {
         </div>
         <ProductGrid products={popularProducts} loading={loadingPopular} />
       </section>
+
+      {/* Popularity rows rank by sales and reviews, so brand-new listings get their own row. */}
+      {loadingArrivals || newArrivals.length > 0 ? (
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.sectionEyebrow}>Fresh from makers</p>
+              <h2 className={styles.sectionTitle}>Just added</h2>
+            </div>
+            <Link href="/shop?sort=newest" className={styles.viewAllLink}>
+              <span>View all</span>
+              <ArrowRight size={14} />
+            </Link>
+          </div>
+          <ProductGrid products={newArrivals.slice(0, 6)} loading={loadingArrivals} />
+        </section>
+      ) : null}
 
       {circleCategories.length > 0 ? (
         <section className={styles.section}>
