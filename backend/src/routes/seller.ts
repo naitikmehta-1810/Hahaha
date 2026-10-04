@@ -451,17 +451,18 @@ sellerRouter.patch(
       }
     }
 
-    // Renaming the shop moves it to a slug that matches the new name. The old
-    // slug is kept in seller_slug_history so shared links still resolve.
+    // Saving the shop name moves the shop to a slug that matches it, also when
+    // the name is unchanged but the slug is stale. The old slug is kept in
+    // seller_slug_history so shared links still resolve.
     let nextSlug: string | null = null;
     let previousSlug: string | null = null;
     if (data.shopName) {
-      const existing = await pool.query<{ shop_name: string; shop_slug: string }>(
-        `select shop_name, shop_slug from public.sellers where id = $1`,
+      const existing = await pool.query<{ shop_slug: string }>(
+        `select shop_slug from public.sellers where id = $1`,
         [sellerId]
       );
       const row = existing.rows[0];
-      if (row && row.shop_name.trim() !== data.shopName.trim()) {
+      if (row) {
         const base = slugify(data.shopName);
         const suffix = row.shop_slug.slice(base.length);
         const alreadyMatches =
