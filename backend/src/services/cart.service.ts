@@ -7,9 +7,11 @@ import { baseCookieOptions } from "../utils/cookie-options.js";
 import { loadCartItemsForCoupon, validateCoupon } from "./coupon.service.js";
 import { appliedGstPercent } from "./gst.js";
 import { AppError } from "../utils/errors.js";
+import { RETENTION } from "./maintenance.service.js";
 
 export const GUEST_SESSION_COOKIE = "guest_session_id";
-const GUEST_SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+// Same window the cleanup job keeps an idle guest cart (maintenance.service.ts).
+const GUEST_SESSION_MAX_AGE_MS = RETENTION.guestCartIdleDays * 24 * 60 * 60 * 1000;
 
 export type CartRow = {
   id: string;

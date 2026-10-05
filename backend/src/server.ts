@@ -21,6 +21,7 @@ import adminRouter from "./routes/admin.js";
 import { env } from "./config/env.js";
 import { startReservationReleaseJob } from "./jobs/release-expired-reservations.js";
 import { startAbandonedCartJob } from "./jobs/find-abandoned-carts.js";
+import { startMaintenanceCleanupJob } from "./jobs/maintenance-cleanup.js";
 import { startCartPriceDropJob } from "./jobs/cart-price-drop.js";
 import { startRecentlyViewedDigestJob } from "./jobs/recently-viewed-digest.js";
 import { startInvoiceWorker } from "./jobs/generate-invoice.js";
@@ -185,6 +186,7 @@ async function start() {
     logger.info({ port: env.PORT }, `Stuffsy backend listening on http://localhost:${env.PORT}`);
     void startReservationReleaseJob();
     void startAbandonedCartJob();
+    void startMaintenanceCleanupJob();
     void startCartPriceDropJob();
     void startRecentlyViewedDigestJob();
     try {

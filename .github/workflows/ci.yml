@@ -118,6 +118,10 @@ jobs:
         working-directory: backend
         run: npm run proof:seller-scope
 
+      - name: Maintenance cleanup + transaction proof (required)
+        working-directory: backend
+        run: npm run proof:maintenance
+
       - name: Lifecycle email integration (soft — Redis/queue may be flaky)
         working-directory: backend
         continue-on-error: true

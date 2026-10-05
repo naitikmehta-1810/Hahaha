@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { env } from "./env.js";
 
 /** Neon / Supabase / most cloud PG need TLS; local Docker usually does not. */
@@ -42,4 +42,28 @@ if (env.PG_STATEMENT_TIMEOUT_MS > 0) {
         /* ignore — some proxies may still reject; app can run without it */
       });
   });
+}
+
+/**
+ * Runs `work` in one transaction on one dedicated connection.
+ *
+ * Never issue begin/commit through `pool.query`: each call can land on a
+ * different pooled connection, so the statements would not share a
+ * transaction and a connection could return to the pool mid-transaction.
+ */
+export async function withTransaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const result = await work(client);
+    await client.query("commit");
+    return result;
+  } catch (error) {
+    await client.query("rollback").catch(() => {
+      /* connection already broken: nothing left to roll back */
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
 }

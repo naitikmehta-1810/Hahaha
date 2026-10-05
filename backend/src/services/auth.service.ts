@@ -1,4 +1,4 @@
-import { pool } from "../config/db.js";
+import { pool, withTransaction } from "../config/db.js";
 import { comparePassword, hashPassword } from "../utils/password.js";
 import { generateOpaqueToken, hashToken } from "../utils/token-hash.js";
 import { refreshTtlSeconds } from "../utils/cookies.js";
@@ -113,10 +113,9 @@ export async function findOrCreateOAuthUser(profile: {
     return existing;
   }
 
-  await pool.query("begin");
-  try {
-    let userId: string;
-    const byEmail = await pool.query<UserRecord>(
+  const userId = await withTransaction(async (client) => {
+    let id: string;
+    const byEmail = await client.query<UserRecord>(
       `select ${USER_COLUMNS}
        from public.users
        where lower(email) = lower($1)
@@ -126,12 +125,12 @@ export async function findOrCreateOAuthUser(profile: {
     );
 
     if (byEmail.rows[0]) {
-      userId = byEmail.rows[0].id;
+      id = byEmail.rows[0].id;
       if (profile.emailVerified && !byEmail.rows[0].email_verified_at) {
-        await pool.query(`update public.users set email_verified_at = now() where id = $1`, [userId]);
+        await client.query(`update public.users set email_verified_at = now() where id = $1`, [id]);
       }
     } else {
-      const created = await pool.query<UserRecord>(
+      const created = await client.query<UserRecord>(
         `insert into public.users (
           full_name,
           email,
@@ -143,25 +142,22 @@ export async function findOrCreateOAuthUser(profile: {
         returning ${USER_COLUMNS}`,
         [profile.fullName, profile.email, profile.emailVerified ? new Date() : null]
       );
-      userId = created.rows[0].id;
+      id = created.rows[0].id;
     }
 
-    await pool.query(
+    await client.query(
       `insert into public.oauth_accounts (id, user_id, provider, provider_user_id, created_at, updated_at)
        values (gen_random_uuid(), $1, $2, $3, now(), now())`,
-      [userId, profile.provider, profile.providerUserId]
+      [id, profile.provider, profile.providerUserId]
     );
+    return id;
+  });
 
-    await pool.query("commit");
-    const user = await findUserById(userId);
-    if (!user) {
-      throw new Error("Failed to load OAuth user");
-    }
-    return user;
-  } catch (error) {
-    await pool.query("rollback");
-    throw error;
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new Error("Failed to load OAuth user");
   }
+  return user;
 }
 
 export async function findUserByEmail(email: string): Promise<UserRecord | null> {
@@ -461,17 +457,21 @@ export async function confirmEmailVerification(rawToken: string) {
     return false;
   }
 
-  await pool.query("begin");
-  try {
-    await pool.query(`update public.verification_tokens set used_at = now() where id = $1`, [row.id]);
-    await pool.query(`update public.users set email_verified_at = now() where id = $1`, [row.user_id]);
-    await pool.query("commit");
-  } catch (error) {
-    await pool.query("rollback");
-    throw error;
-  }
-
-  return true;
+  return withTransaction(async (client) => {
+    // `used_at is null` makes the claim atomic: two clicks on the same link
+    // cannot both pass the check above and both succeed.
+    const claimed = await client.query(
+      `update public.verification_tokens set used_at = now()
+       where id = $1 and used_at is null
+       returning id`,
+      [row.id]
+    );
+    if (!claimed.rows[0]) return false;
+    await client.query(`update public.users set email_verified_at = now() where id = $1`, [
+      row.user_id,
+    ]);
+    return true;
+  });
 }
 
 export async function requestPasswordReset(email: string) {
@@ -519,26 +519,29 @@ export async function resetPasswordWithToken(rawToken: string, newPassword: stri
   }
 
   const passwordHash = await hashPassword(newPassword);
-  await pool.query("begin");
-  try {
-    await pool.query(`update public.verification_tokens set used_at = now() where id = $1`, [
-      row.id,
-    ]);
-    await pool.query(
+  return withTransaction(async (client) => {
+    const claimed = await client.query(
+      `update public.verification_tokens set used_at = now()
+       where id = $1 and used_at is null
+       returning id`,
+      [row.id]
+    );
+    if (!claimed.rows[0]) return false;
+    await client.query(
       `update public.users set password_hash = $1, updated_at = now() where id = $2`,
       [passwordHash, row.user_id]
     );
-    // Invalidate outstanding refresh sessions after a password change.
-    await pool.query(
+    // A new password ends every session and every other pending reset link.
+    await client.query(
       `update public.refresh_tokens set revoked_at = now()
        where user_id = $1 and revoked_at is null`,
       [row.user_id]
     );
-    await pool.query("commit");
-  } catch (error) {
-    await pool.query("rollback");
-    throw error;
-  }
-
-  return true;
+    await client.query(
+      `update public.verification_tokens set used_at = now()
+       where user_id = $1 and purpose = 'password_reset' and used_at is null`,
+      [row.user_id]
+    );
+    return true;
+  });
 }
