@@ -91,8 +91,9 @@ export function createResilientJob(options: ResilientJobOptions) {
     try {
       await withTimeout(
         (async () => {
-          queue = new Queue(queueName, { connection: createBullConnection(), prefix });
-          queue.on("error", (err) => console.error(`[${label}] queue error`, err));
+          const scheduler = new Queue(queueName, { connection: createBullConnection(), prefix });
+          queue = scheduler;
+          scheduler.on("error", (err) => console.error(`[${label}] queue error`, err));
           worker = new Worker(queueName, async () => handler(), {
             connection: createBullConnection(),
             prefix,
@@ -103,11 +104,15 @@ export function createResilientJob(options: ResilientJobOptions) {
           worker.on("error", (err) => {
             console.error(`[${label}] redis error`, err);
           });
-          await queue.upsertJobScheduler(jobName, schedule, {
+          await scheduler.upsertJobScheduler(jobName, schedule, {
             name: jobName,
             data: {},
             opts: { removeOnComplete: keep.complete, removeOnFail: keep.fail },
           });
+          // The schedule lives in Redis; the Queue is only needed to register it.
+          // Closing it frees a connection per job, which matters on capped Redis plans.
+          queue = null;
+          await scheduler.close();
         })(),
         BULLMQ_START_TIMEOUT_MS,
         "BullMQ start"
