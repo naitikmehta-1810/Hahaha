@@ -62,13 +62,54 @@ export function createBullRedis(url = env.REDIS_URL): Redis {
 export function createRedisProbe(url = env.REDIS_URL): Redis {
   return new Redis(url, {
     maxRetriesPerRequest: 1,
-    connectTimeout: 2_000,
+    connectTimeout: 6_000,
     lazyConnect: true,
     enableOfflineQueue: false,
     family: 4,
     retryStrategy: () => null,
     ...tlsOptions(url),
   });
+}
+
+const PROBE_RETRY_DELAY_MS = 1_500;
+
+export type RedisProbeOptions = {
+  /** Tries before giving up. Startup uses a few; background recovery uses one. */
+  attempts?: number;
+  /** Skip the per-attempt warning (recovery loops would otherwise spam the log). */
+  quiet?: boolean;
+  url?: string;
+};
+
+/**
+ * Reachability check shared by the job workers. Retries because several jobs
+ * can probe at once on a cold boot, and one slow TLS handshake must not decide
+ * a job's fate.
+ */
+export async function isRedisReachable(
+  label: string,
+  { attempts = 3, quiet = false, url = env.REDIS_URL }: RedisProbeOptions = {}
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const client = createRedisProbe(url);
+    // A failed connect also emits "error"; without a listener it is logged as unhandled.
+    client.on("error", () => {});
+    try {
+      await client.connect();
+      if ((await client.ping()) === "PONG") return true;
+    } catch (error) {
+      if (!quiet) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[${label}] Redis probe ${attempt}/${attempts} failed: ${message}`);
+      }
+    } finally {
+      client.disconnect();
+    }
+    if (attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, PROBE_RETRY_DELAY_MS));
+    }
+  }
+  return false;
 }
 
 let redisSingleton: Redis | undefined;

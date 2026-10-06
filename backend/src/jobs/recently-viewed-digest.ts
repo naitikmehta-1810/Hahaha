@@ -1,9 +1,8 @@
-import { Queue, Worker } from "bullmq";
-import { createBullConnection } from "../config/queue.js";
 import { pool } from "../config/db.js";
 import { enqueueEmailJob } from "../services/notify.enqueue.js";
 import { userAllows } from "../services/notification-prefs.service.js";
 import { env } from "../config/env.js";
+import { createResilientJob } from "./resilient-job.js";
 
 const QUEUE_NAME = "recently-viewed-digest";
 const JOB_NAME = "send-recently-viewed-digests";
@@ -66,29 +65,20 @@ async function sendDigests() {
   return { enqueued };
 }
 
-export async function startRecentlyViewedDigestJob() {
-  try {
-    const queue = new Queue(QUEUE_NAME, { connection: createBullConnection() });
-    await queue.upsertJobScheduler(
-      JOB_NAME,
-      { every: 24 * 60 * 60 * 1000 },
-      {
-        name: JOB_NAME,
-        data: {},
-        opts: {
-          removeOnComplete: 10,
-          removeOnFail: 30,
-        },
-      }
-    );
-    const digestWorker = new Worker(QUEUE_NAME, async () => sendDigests(), {
-      connection: createBullConnection(),
-    });
-    digestWorker.on("error", (err) => {
-      console.error("[recently-viewed] redis error", err);
-    });
-    console.log("[recently-viewed] BullMQ worker started (daily)");
-  } catch (error) {
-    console.warn("[recently-viewed] failed to start", error);
-  }
-}
+// Only enqueues emails, which needs Redis, so there is no in-process fallback:
+// the job waits and starts by itself once Redis is reachable.
+// Prefix stays "bull" (the default) so the existing scheduler is reused.
+const job = createResilientJob({
+  label: "recently-viewed",
+  queueName: QUEUE_NAME,
+  jobName: JOB_NAME,
+  schedule: { every: 24 * 60 * 60 * 1000 },
+  handler: sendDigests,
+  fallbackIntervalMs: null,
+  fallbackInProduction: false,
+  prefix: "bull",
+  keep: { complete: 10, fail: 30 },
+});
+
+export const startRecentlyViewedDigestJob = job.start;
+export const stopRecentlyViewedDigestJob = job.stop;

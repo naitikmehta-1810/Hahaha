@@ -186,11 +186,18 @@ async function start() {
 
   const server = app.listen(env.PORT, () => {
     logger.info({ port: env.PORT }, `Stuffsy backend listening on http://localhost:${env.PORT}`);
-    void startReservationReleaseJob();
-    void startAbandonedCartJob();
-    void startMaintenanceCleanupJob();
-    void startCartPriceDropJob();
-    void startRecentlyViewedDigestJob();
+    // Stagger so the jobs don't open Redis (TLS) connections all at once on a cold boot.
+    [
+      startReservationReleaseJob,
+      startAbandonedCartJob,
+      startMaintenanceCleanupJob,
+      startCartPriceDropJob,
+      startRecentlyViewedDigestJob,
+    ].forEach((startJob, index) => {
+      setTimeout(() => {
+        void startJob().catch((error) => logger.error({ err: error }, "background job failed to start"));
+      }, index * 1_500);
+    });
     try {
       startInvoiceWorker();
     } catch (error) {

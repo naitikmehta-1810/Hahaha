@@ -1,18 +1,12 @@
-import { Queue, Worker } from "bullmq";
 import { env } from "../config/env.js";
-import { createBullConnection, queuePrefix } from "../config/queue.js";
-import { createRedisProbe } from "../config/redis.js";
 import { pool } from "../config/db.js";
 import { enqueueEmailJob } from "../services/notify.enqueue.js";
+import { createResilientJob } from "./resilient-job.js";
 
 const QUEUE_NAME = "find-abandoned-carts";
 const JOB_NAME = "find-abandoned-carts";
 const EVERY_MS = 60 * 60 * 1000;
 const FALLBACK_INTERVAL_MS = EVERY_MS;
-
-let queue: Queue | null = null;
-let worker: Worker | null = null;
-let fallbackTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Find user carts with items, idle >24h, and either never emailed or emailed >7 days ago.
@@ -102,95 +96,17 @@ export async function processAbandonedCarts() {
   return { scanned: carts.rows.length, enqueued };
 }
 
-async function isRedisReachable() {
-  const client = createRedisProbe();
+// Emails go out through the Redis-backed email queue, so in production this job
+// waits for Redis instead of running in-process.
+const job = createResilientJob({
+  label: "abandoned-carts",
+  queueName: QUEUE_NAME,
+  jobName: JOB_NAME,
+  schedule: { every: EVERY_MS },
+  handler: processAbandonedCarts,
+  fallbackIntervalMs: FALLBACK_INTERVAL_MS,
+  fallbackInProduction: false,
+});
 
-  try {
-    await client.connect();
-    const pong = await client.ping();
-    return pong === "PONG";
-  } catch {
-    return false;
-  } finally {
-    client.disconnect();
-  }
-}
-
-function startFallbackInterval() {
-  if (fallbackTimer) return;
-  console.warn(
-    "[abandoned-carts] Redis unavailable — using in-process hourly timer (dev fallback)."
-  );
-  fallbackTimer = setInterval(() => {
-    void processAbandonedCarts().catch((error) => {
-      console.error("[abandoned-carts] fallback tick failed", error);
-    });
-  }, FALLBACK_INTERVAL_MS);
-  fallbackTimer.unref?.();
-}
-
-export async function startAbandonedCartJob() {
-  if (queue || worker || fallbackTimer) {
-    return;
-  }
-
-  const redisOk = await isRedisReachable();
-  if (!redisOk) {
-    if (env.NODE_ENV === "production") {
-      console.warn(
-        "[abandoned-carts] Redis unreachable — abandoned cart job not started. Fix REDIS_URL."
-      );
-      return;
-    }
-    startFallbackInterval();
-    return;
-  }
-
-  try {
-    queue = new Queue(QUEUE_NAME, { connection: createBullConnection(), prefix: queuePrefix });
-    worker = new Worker(
-      QUEUE_NAME,
-      async () => processAbandonedCarts(),
-      { connection: createBullConnection(), prefix: queuePrefix }
-    );
-
-    worker.on("failed", (job, err) => {
-      console.error(`[abandoned-carts] job failed id=${job?.id}`, err);
-    });
-    worker.on("error", (err) => {
-      console.error("[abandoned-carts] redis error", err);
-    });
-
-    await queue.upsertJobScheduler(
-      JOB_NAME,
-      { every: EVERY_MS },
-      {
-        name: JOB_NAME,
-        data: {},
-        opts: {
-          removeOnComplete: 20,
-          removeOnFail: 50,
-        },
-      }
-    );
-
-    console.log("[abandoned-carts] BullMQ worker started (every 1h)");
-  } catch (error) {
-    console.warn("[abandoned-carts] failed to start BullMQ worker", error);
-    await stopAbandonedCartJob();
-    if (env.NODE_ENV !== "production") {
-      startFallbackInterval();
-    }
-  }
-}
-
-export async function stopAbandonedCartJob() {
-  if (fallbackTimer) {
-    clearInterval(fallbackTimer);
-    fallbackTimer = null;
-  }
-  await worker?.close();
-  await queue?.close();
-  worker = null;
-  queue = null;
-}
+export const startAbandonedCartJob = job.start;
+export const stopAbandonedCartJob = job.stop;

@@ -1,9 +1,8 @@
-import { Queue, Worker } from "bullmq";
-import { createBullConnection } from "../config/queue.js";
 import { pool } from "../config/db.js";
 import { enqueueEmailJob } from "../services/notify.enqueue.js";
 import { userAllows } from "../services/notification-prefs.service.js";
 import { env } from "../config/env.js";
+import { createResilientJob } from "./resilient-job.js";
 
 const QUEUE_NAME = "cart-price-drop";
 const JOB_NAME = "scan-cart-price-drops";
@@ -82,29 +81,19 @@ async function scanPriceDrops() {
   return { scanned: rows.rows.length, enqueued };
 }
 
-export async function startCartPriceDropJob() {
-  try {
-    const queue = new Queue(QUEUE_NAME, { connection: createBullConnection() });
-    await queue.upsertJobScheduler(
-      JOB_NAME,
-      { every: 60 * 60 * 1000 },
-      {
-        name: JOB_NAME,
-        data: {},
-        opts: {
-          removeOnComplete: 20,
-          removeOnFail: 50,
-        },
-      }
-    );
-    const priceWorker = new Worker(QUEUE_NAME, async () => scanPriceDrops(), {
-      connection: createBullConnection(),
-    });
-    priceWorker.on("error", (err) => {
-      console.error("[cart-price-drop] redis error", err);
-    });
-    console.log("[cart-price-drop] BullMQ worker started (hourly)");
-  } catch (error) {
-    console.warn("[cart-price-drop] failed to start", error);
-  }
-}
+// Only enqueues emails, which needs Redis, so there is no in-process fallback:
+// the job waits and starts by itself once Redis is reachable.
+// Prefix stays "bull" (the default) so the existing scheduler is reused.
+const job = createResilientJob({
+  label: "cart-price-drop",
+  queueName: QUEUE_NAME,
+  jobName: JOB_NAME,
+  schedule: { every: 60 * 60 * 1000 },
+  handler: scanPriceDrops,
+  fallbackIntervalMs: null,
+  fallbackInProduction: false,
+  prefix: "bull",
+});
+
+export const startCartPriceDropJob = job.start;
+export const stopCartPriceDropJob = job.stop;
