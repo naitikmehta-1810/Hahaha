@@ -1,5 +1,5 @@
 import React from "react";
-import { Headphones, RotateCcw, ShieldCheck, Truck } from "lucide-react";
+import { Download, Headphones, Mail, RotateCcw, ShieldCheck, Truck } from "lucide-react";
 import styles from "./ValueProps.module.css";
 
 const PROPS = [
@@ -9,11 +9,21 @@ const PROPS = [
   { Icon: Headphones, title: "24/7 support", desc: "We're here to help" },
 ];
 
+/** A download has nothing to ship or return, so the first two promises differ. */
+const DIGITAL_PROPS = [
+  { Icon: Download, title: "Instant download", desc: "Right after payment" },
+  { Icon: Mail, title: "Also sent by email", desc: "Plus your order page" },
+  PROPS[2],
+  PROPS[3],
+];
+
 type ValuePropsProps = {
   /** `card` sits on the page background; `tinted` is the softer violet strip. */
   variant?: "card" | "tinted";
   /** Two columns even on wide screens, for narrow containers like the cart. */
   compact?: boolean;
+  /** Promises for a downloadable product instead of shipping and returns. */
+  digital?: boolean;
   className?: string;
 };
 
@@ -21,6 +31,7 @@ type ValuePropsProps = {
 export default function ValueProps({
   variant = "card",
   compact = false,
+  digital = false,
   className = "",
 }: ValuePropsProps) {
   return (
@@ -28,7 +39,7 @@ export default function ValueProps({
       className={`${styles.strip} ${styles[variant]} ${compact ? styles.compact : ""} ${className}`}
       aria-label="Why shop with Stuffsy"
     >
-      {PROPS.map(({ Icon, title, desc }) => (
+      {(digital ? DIGITAL_PROPS : PROPS).map(({ Icon, title, desc }) => (
         <li key={title} className={styles.item}>
           <span className={styles.icon} aria-hidden="true">
             <Icon size={20} />

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { appliedGstPercent, PRODUCT_GST_PERCENT_SQL } from "../services/gst.js";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
@@ -18,12 +19,13 @@ wishlistsRouter.get(
       title: string;
       slug: string;
       base_price: string;
+      gst_percent: string;
       thumbnail_url: string | null;
       shop_name: string;
       shop_slug: string;
     }>(
       `select w.id, w.product_id, w.created_at,
-              p.title, p.slug, p.base_price,
+              p.title, p.slug, p.base_price, ${PRODUCT_GST_PERCENT_SQL} as gst_percent,
               (
                 select pi.url from public.product_images pi
                 where pi.product_id = p.id
@@ -46,6 +48,7 @@ wishlistsRouter.get(
         title: row.title,
         slug: row.slug,
         price: Number(row.base_price),
+        gstPercent: appliedGstPercent(row.gst_percent),
         thumbnailUrl: row.thumbnail_url,
         shopName: row.shop_name,
         shopSlug: row.shop_slug,

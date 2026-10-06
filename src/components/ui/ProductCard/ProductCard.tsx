@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { formatInr, priceWithGst } from "@/utils/gst";
 import { Heart, Star } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -153,29 +154,27 @@ const ProductCardSubtitle = ({ children }: ProductCardTextProps) => {
 };
 
 interface ProductCardPriceProps {
+  /** Seller price before GST; shown with GST added when gstPercent is given. */
   amount: number;
   originalAmount?: number;
   discountPercentage?: number;
-  currency?: string;
+  /** The product's GST percent. Buyers always see GST-inclusive prices. */
+  gstPercent?: number | null;
 }
 
 const ProductCardPrice = ({
   amount,
   originalAmount,
   discountPercentage,
-  currency = "₹",
+  gstPercent,
 }: ProductCardPriceProps) => {
+  const shown = priceWithGst(amount, gstPercent);
+  const original = originalAmount ? priceWithGst(originalAmount, gstPercent) : null;
   return (
     <div className={styles.priceRow}>
-      <span className={styles.price}>
-        {currency}
-        {amount.toLocaleString("en-IN")}
-      </span>
-      {originalAmount && originalAmount > amount ? (
-        <span className={styles.originalPrice}>
-          {currency}
-          {originalAmount.toLocaleString("en-IN")}
-        </span>
+      <span className={styles.price}>{formatInr(shown)}</span>
+      {original && original > shown ? (
+        <span className={styles.originalPrice}>{formatInr(original)}</span>
       ) : null}
       {discountPercentage ? (
         <span className={styles.discount}>{discountPercentage}% off</span>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { formatInr, priceWithGst } from "@/utils/gst";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -41,6 +42,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
 import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
 import DeliveryCheckDialog from "@/components/product/DeliveryCheckDialog";
+import MediaGallery from "@/components/product/MediaGallery";
 import {
   checkDeliverability,
   placeLabel,
@@ -61,7 +63,6 @@ export default function ProductDetailsPage() {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeThumbnail, setActiveThumbnail] = useState(0);
   const [qty, setQty] = useState(1);
   const [liked, setLiked] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
@@ -86,7 +87,6 @@ export default function ProductDetailsPage() {
       setProduct(result.product);
       setError(result.error);
       setSelectedVariantId(result.product?.variants[0]?.id ?? null);
-      setActiveThumbnail(0);
       setLoading(false);
       setDelivery(null);
       const pincode = savedPincode();
@@ -255,6 +255,7 @@ export default function ProductDetailsPage() {
         ? "Ships today"
         : `Ships in ${shipMin} day${shipMin === 1 ? "" : "s"}`
       : `Ships in ${shipMin}–${shipMax} days`;
+  const isDigital = product.productType === "digital";
   const description = product.description || product.shortDescription || "";
   const longDescription = description.length > 280;
 
@@ -294,61 +295,29 @@ export default function ProductDetailsPage() {
       </Breadcrumbs>
 
       <div className={styles.productLayout}>
-        <div className={styles.gallerySection}>
-          {images.length > 1 ? (
-            <div className={styles.thumbnailsList} role="tablist" aria-label="Product images">
-              {images.map((img, idx) => (
-                <button
-                  key={`${img}-${idx}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeThumbnail === idx}
-                  aria-label={`Show image ${idx + 1}`}
-                  className={`${styles.thumbnailBtn} ${
-                    activeThumbnail === idx ? styles.activeThumbnailBtn : ""
-                  }`}
-                  onClick={() => setActiveThumbnail(idx)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={optimizedImage(img, 200)}
-                    alt=""
-                    className={styles.thumbnailImg}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = FALLBACK_IMAGE;
-                    }}
-                  />
-                </button>
-              ))}
-            </div>
+        <MediaGallery
+          className={styles.gallerySection}
+          title={product.title}
+          images={images}
+          video={product.video ?? null}
+          fallbackImage={FALLBACK_IMAGE}
+        >
+          {product.isBestseller ? (
+            <span className={styles.imageBadge}>
+              <Sparkles size={13} aria-hidden="true" />
+              Bestseller
+            </span>
           ) : null}
-          <div className={styles.mainImageWrapper}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={optimizedImage(images[activeThumbnail] ?? FALLBACK_IMAGE, 1200)}
-              alt={product.title}
-              className={styles.mainImage}
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = FALLBACK_IMAGE;
-              }}
-            />
-            {product.isBestseller ? (
-              <span className={styles.imageBadge}>
-                <Sparkles size={13} aria-hidden="true" />
-                Bestseller
-              </span>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void handleWishlistToggle()}
-              className={`${styles.likeBtn} ${liked ? styles.liked : ""}`}
-              aria-label={liked ? "Remove from wishlist" : "Save to wishlist"}
-              aria-pressed={liked}
-            >
-              <Heart size={18} fill={liked ? "currentColor" : "none"} />
-            </button>
-          </div>
-        </div>
+          <button
+            type="button"
+            onClick={() => void handleWishlistToggle()}
+            className={`${styles.likeBtn} ${liked ? styles.liked : ""}`}
+            aria-label={liked ? "Remove from wishlist" : "Save to wishlist"}
+            aria-pressed={liked}
+          >
+            <Heart size={18} fill={liked ? "currentColor" : "none"} />
+          </button>
+        </MediaGallery>
 
         <div className={styles.detailsSection}>
           <div className={styles.titleArea}>
@@ -387,10 +356,10 @@ export default function ProductDetailsPage() {
 
           <div className={styles.priceArea}>
             <div className={styles.priceRow}>
-              <span className={styles.price}>₹{price.toLocaleString("en-IN")}</span>
+              <span className={styles.price}>{formatInr(priceWithGst(price, product.gstPercent))}</span>
               {product.compareAtPrice && product.compareAtPrice > price ? (
                 <span className={styles.originalPrice}>
-                  ₹{product.compareAtPrice.toLocaleString("en-IN")}
+                  {formatInr(priceWithGst(product.compareAtPrice, product.gstPercent))}
                 </span>
               ) : null}
               {product.discountPercent ? (
@@ -398,7 +367,7 @@ export default function ProductDetailsPage() {
               ) : null}
             </div>
             <span className={styles.priceTax}>
-              GST {product.gstPercent ?? 18}% added at checkout
+              Inclusive of all taxes (GST {product.gstPercent ?? 18}%)
             </span>
           </div>
 
@@ -417,7 +386,9 @@ export default function ProductDetailsPage() {
             <span className={styles.stockDot} aria-hidden="true" />
             <span>
               {inStock
-                ? `In stock · ${shipsIn}`
+                ? isDigital
+                  ? "Digital download · instant access after payment"
+                  : `In stock · ${shipsIn}`
                 : "Out of stock"}
             </span>
           </div>
@@ -436,18 +407,20 @@ export default function ProductDetailsPage() {
               <span>
                 {delivery?.deliverable === true ? (
                   <>
-                    Delivers to <strong>{delivery.pincode}</strong>
+                    {isDigital ? "Available for" : "Delivers to"} <strong>{delivery.pincode}</strong>
                     {placeLabel(delivery) ? ` · ${placeLabel(delivery)}` : ""}.{" "}
                   </>
                 ) : delivery?.deliverable === false ? (
                   <>
-                    Can&apos;t deliver to <strong>{delivery.pincode}</strong>
-                    {delivery.state ? ` (${delivery.state})` : ""}. This maker delivers only within{" "}
+                    {isDigital ? "Not available for" : "Can’t deliver to"} <strong>{delivery.pincode}</strong>
+                    {delivery.state ? ` (${delivery.state})` : ""}. This maker{" "}
+                    {isDigital ? "can sell only within" : "delivers only within"}{" "}
                     <strong>{stateOnlySeller}</strong>.{" "}
                   </>
                 ) : (
                   <>
-                    This maker delivers only within <strong>{stateOnlySeller}</strong>.{" "}
+                    This maker {isDigital ? "can sell only within" : "delivers only within"}{" "}
+                    <strong>{stateOnlySeller}</strong>.{" "}
                   </>
                 )}
                 <button
@@ -466,6 +439,7 @@ export default function ProductDetailsPage() {
               productSlug={product.slug}
               shopName={product.shopName}
               sellerState={stateOnlySeller}
+              isDigital={isDigital}
               initialPincode={delivery?.pincode ?? savedPincode()}
               initialResult={delivery}
               actionLabel={
@@ -506,6 +480,7 @@ export default function ProductDetailsPage() {
               </label>
             ) : null}
 
+            {isDigital ? null : (
             <div className={styles.optionGroup}>
               <span className={styles.quantityLabel} id="qty-label">
                 Quantity
@@ -534,6 +509,7 @@ export default function ProductDetailsPage() {
                 </button>
               </div>
             </div>
+            )}
           </div>
 
           {product.isCustomizable ? (
@@ -607,7 +583,7 @@ export default function ProductDetailsPage() {
         </div>
       </div>
 
-      <ValueProps variant="tinted" />
+      <ValueProps variant="tinted" digital={isDigital} />
 
       <section className={styles.detailsBox}>
         <h2 className={styles.boxTitle}>Product details</h2>
@@ -690,6 +666,7 @@ export default function ProductDetailsPage() {
                   <ProductCard.Subtitle>{item.shopName}</ProductCard.Subtitle>
                   <ProductCard.Price
                     amount={item.price}
+                    gstPercent={item.gstPercent}
                     originalAmount={item.compareAtPrice ?? undefined}
                     discountPercentage={item.discountPercent ?? undefined}
                   />

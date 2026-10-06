@@ -15,6 +15,8 @@ export interface CartItem {
   /** GST percent charged on this line. 18 when the category has no rate. */
   gstPercent?: number;
   customizationNote?: string | null;
+  /** A download: one copy, no shipping, no Cash on Delivery. */
+  isDigital?: boolean;
 }
 
 type ApiCartLine = {
@@ -30,6 +32,7 @@ type ApiCartLine = {
   lineTotal: number;
   gstPercent?: number;
   customizationNote?: string | null;
+  isDigital?: boolean;
 };
 
 type ApiCart = {
@@ -87,6 +90,7 @@ function mapApiCart(cart: ApiCart): CartItem[] {
     availableStock: Number(line.availableStock ?? 0),
     gstPercent: Number(line.gstPercent ?? 18),
     customizationNote: line.customizationNote ?? null,
+    isDigital: Boolean(line.isDigital),
   }));
 }
 
@@ -450,6 +454,11 @@ export type OrderDetail = {
     isBackordered: boolean;
     canReview: boolean;
     customizationNote?: string | null;
+    isDigital?: boolean;
+    /** GST percent charged on this line; line amounts are stored before GST. */
+    gstPercent?: number;
+    /** Files the buyer can download now (empty until payment is confirmed). */
+    downloads?: Array<{ id: string; fileName: string; bytes: number; contentType: string | null }>;
   }>;
   timeline: Array<{ status: string; note: string | null; createdAt: string }>;
   trackingStages: Array<{
@@ -462,6 +471,10 @@ export type OrderDetail = {
   canBuyAgain: boolean;
   returnEligible: boolean;
   returnWindowClosesAt: string | null;
+  /** Server-side rule (paid orders with downloads can't be cancelled). */
+  canCancel?: boolean;
+  hasDigitalItems?: boolean;
+  isDigitalOnly?: boolean;
   shipping: {
     trackingNumber: string | null;
     courierName: string | null;

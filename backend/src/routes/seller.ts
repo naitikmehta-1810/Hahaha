@@ -14,6 +14,7 @@ import {
   type ImportProduct,
 } from "../services/shopify-import.service.js";
 import { requireSeller, requireSellerAnyStatus } from "../middleware/requireSeller.js";
+import type { PoolClient } from "pg";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
 import {
@@ -29,6 +30,13 @@ import { env } from "../config/env.js";
 import { syncSellerPickupToShiprocket } from "../services/shipping.service.js";
 import { INDIA_STATE_NAMES, verifyGstin } from "../services/gstin.service.js";
 import { samePlace } from "../services/viewer-region.service.js";
+import {
+  deleteVideoAsset,
+  isOwnDirectUpload,
+  productVideoPosterUrl,
+  productVideoUrl,
+  signDirectUpload,
+} from "../services/media.service.js";
 
 const sellerRouter = Router();
 
@@ -816,6 +824,15 @@ const optionalDimensionCm = z.preprocess(
   z.number().nonnegative().optional().nullable()
 );
 
+const MAX_DIGITAL_FILES = 10;
+
+/** What Cloudinary returns for a signed direct upload; verified before use. */
+const uploadProofSchema = z.object({
+  publicId: z.string().trim().min(1).max(300),
+  version: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]),
+  signature: z.string().trim().min(10).max(128),
+});
+
 const productCreateSchema = z.object({
   title: z.string().trim().min(1).max(150),
   shortDescription: z
@@ -859,6 +876,25 @@ const productCreateSchema = z.object({
   collectionIds: z.array(z.string().uuid()).max(20).default([]),
   isCustomizable: z.boolean().optional(),
   customizationLabel: z.string().trim().max(120).optional().nullable(),
+  /** A fresh direct upload (see POST /uploads/sign). Omit to keep the current video, null to remove it. */
+  video: uploadProofSchema.nullable().optional(),
+  /**
+   * Digital products only. The full list in display order: `{ id }` keeps a file
+   * already on the product, a proof object adds a new upload. Omit to leave files unchanged.
+   */
+  digitalFiles: z
+    .array(
+      z.union([
+        z.object({ id: z.string().uuid() }),
+        uploadProofSchema.extend({
+          fileName: z.string().trim().min(1).max(200),
+          bytes: z.number().int().nonnegative(),
+          contentType: z.string().trim().max(120).optional().nullable(),
+        }),
+      ])
+    )
+    .max(MAX_DIGITAL_FILES, `add up to ${MAX_DIGITAL_FILES} files`)
+    .optional(),
 });
 
 sellerRouter.get(
@@ -881,12 +917,13 @@ sellerRouter.get(
       title: string;
       slug: string;
       status: string;
+      product_type: string;
       base_price: string;
       updated_at: Date;
       stock: string | null;
       thumbnail_url: string | null;
     }>(
-      `select p.id, p.title, p.slug, p.status, p.base_price::text, p.updated_at,
+      `select p.id, p.title, p.slug, p.status, p.product_type, p.base_price::text, p.updated_at,
               (
                 select i.quantity_on_hand::text
                 from public.product_variants pv
@@ -917,6 +954,7 @@ sellerRouter.get(
         title: row.title,
         slug: row.slug,
         status: row.status,
+        productType: row.product_type,
         price: Number(row.base_price),
         stockQuantity: Number(row.stock ?? 0),
         thumbnailUrl: row.thumbnail_url,
@@ -959,13 +997,14 @@ sellerRouter.get(
       processing_days: number | null;
       processing_days_max: number | null;
       use_volumetric: boolean;
+      video_public_id: string | null;
     }>(
       `select id, title, slug, short_description, description, category_id, subcategory_id,
               product_type, base_price::text, compare_at_price::text, cost_price::text,
               status, tags, weight::text, weight_unit, length_cm::text, width_cm::text,
               height_cm::text, continue_selling_when_out_of_stock,
               is_customizable, customization_label, processing_days, processing_days_max,
-              use_volumetric
+              use_volumetric, video_public_id
        from public.products
        where id = $1`,
       [productId]
@@ -996,6 +1035,19 @@ sellerRouter.get(
 
     const collections = await pool.query<{ collection_id: string }>(
       `select collection_id from public.product_collections where product_id = $1`,
+      [productId]
+    );
+
+    const digitalFiles = await pool.query<{
+      id: string;
+      file_name: string;
+      bytes: string;
+      content_type: string | null;
+    }>(
+      `select id, file_name, bytes::text, content_type
+       from public.product_digital_files
+       where product_id = $1 and removed_at is null
+       order by display_order asc, created_at asc`,
       [productId]
     );
 
@@ -1030,6 +1082,18 @@ sellerRouter.get(
         tags: row.tags ?? [],
         imageUrls: images.rows.map((img) => img.url),
         collectionIds: collections.rows.map((c) => c.collection_id),
+        video: row.video_public_id
+          ? {
+              url: productVideoUrl(row.video_public_id),
+              posterUrl: productVideoPosterUrl(row.video_public_id),
+            }
+          : null,
+        digitalFiles: digitalFiles.rows.map((f) => ({
+          id: f.id,
+          fileName: f.file_name,
+          bytes: Number(f.bytes),
+          contentType: f.content_type,
+        })),
       },
     });
   })
@@ -1058,6 +1122,142 @@ function assertProductShipping(data: ProductCreateInput) {
   assertShippingRange(data.processingDays, data.processingDaysMax);
 }
 
+/**
+ * A digital product has nothing to weigh, pack or dispatch, and a download never
+ * runs out, so those fields are fixed rather than left to the form.
+ */
+function normalizeForProductType<T extends Partial<ProductCreateInput>>(data: T, productType: string): T {
+  if (productType !== "digital") return data;
+  return {
+    ...data,
+    weight: null,
+    lengthCm: null,
+    widthCm: null,
+    heightCm: null,
+    useVolumetric: false,
+    continueSellingWhenOutOfStock: true,
+    processingDays: 0,
+    processingDaysMax: 0,
+  };
+}
+
+const DIGITAL_FILE_REQUIRED_MESSAGE = "Add at least one file buyers will download before publishing.";
+
+/** Keeps the seller's file name but drops path separators and control characters. */
+function cleanFileName(name: string) {
+  // eslint-disable-next-line no-control-regex
+  return name.replace(/[\\/\u0000-\u001f]/g, "_").trim().slice(0, 200) || "file";
+}
+
+/**
+ * Applies the video and digital-file parts of a product save inside the caller's
+ * transaction. Uploads are verified as this seller's own Cloudinary uploads.
+ * Removed files are only marked removed: buyers who ordered before keep access.
+ * Returns the replaced video's public id so the caller can delete it after commit.
+ */
+async function applyProductMedia(
+  client: PoolClient,
+  opts: {
+    sellerId: string;
+    productId: string;
+    /** Refuse to save unless at least one downloadable file remains (publishing a digital product). */
+    requireFiles: boolean;
+    video: ProductCreateInput["video"];
+    digitalFiles: ProductCreateInput["digitalFiles"];
+  }
+): Promise<{ replacedVideoPublicId: string | null }> {
+  let replacedVideoPublicId: string | null = null;
+
+  if (opts.video !== undefined) {
+    const previous = await client.query<{ video_public_id: string | null }>(
+      `select video_public_id from public.products where id = $1`,
+      [opts.productId]
+    );
+    const oldId = previous.rows[0]?.video_public_id ?? null;
+    if (opts.video === null) {
+      await client.query(
+        `update public.products set video_url = null, video_public_id = null where id = $1`,
+        [opts.productId]
+      );
+      replacedVideoPublicId = oldId;
+    } else {
+      if (!isOwnDirectUpload(opts.video, "video", opts.sellerId)) {
+        throw new AppError(400, "VIDEO_UPLOAD_INVALID", "That video upload could not be verified. Upload it again.");
+      }
+      await client.query(
+        `update public.products set video_url = $2, video_public_id = $3 where id = $1`,
+        [opts.productId, productVideoUrl(opts.video.publicId), opts.video.publicId]
+      );
+      if (oldId && oldId !== opts.video.publicId) replacedVideoPublicId = oldId;
+    }
+  }
+
+  if (opts.digitalFiles !== undefined) {
+    const current = await client.query<{ id: string }>(
+      `select id from public.product_digital_files where product_id = $1 and removed_at is null`,
+      [opts.productId]
+    );
+    const currentIds = new Set(current.rows.map((r) => r.id));
+    const keptIds = new Set<string>();
+    const maxBytes = env.DIGITAL_FILE_MAX_MB * 1024 * 1024;
+
+    for (const entry of opts.digitalFiles) {
+      if ("id" in entry) {
+        if (!currentIds.has(entry.id)) {
+          throw new AppError(400, "DIGITAL_FILE_NOT_FOUND", "One of the files is no longer on this product. Reload and try again.");
+        }
+        keptIds.add(entry.id);
+      } else {
+        if (!isOwnDirectUpload(entry, "digital", opts.sellerId)) {
+          throw new AppError(400, "FILE_UPLOAD_INVALID", `"${entry.fileName}" could not be verified. Upload it again.`);
+        }
+        if (entry.bytes > maxBytes) {
+          throw new AppError(400, "FILE_TOO_LARGE", `"${entry.fileName}" is larger than ${env.DIGITAL_FILE_MAX_MB} MB.`);
+        }
+      }
+    }
+
+    await client.query(
+      `update public.product_digital_files
+       set removed_at = now()
+       where product_id = $1 and removed_at is null and not (id = any($2::uuid[]))`,
+      [opts.productId, [...keptIds]]
+    );
+
+    for (let i = 0; i < opts.digitalFiles.length; i += 1) {
+      const entry = opts.digitalFiles[i];
+      if ("id" in entry) {
+        await client.query(
+          `update public.product_digital_files set display_order = $2 where id = $1`,
+          [entry.id, i]
+        );
+      } else {
+        await client.query(
+          `insert into public.product_digital_files
+             (product_id, public_id, file_name, bytes, content_type, display_order)
+           values ($1, $2, $3, $4, $5, $6)
+           on conflict (product_id, public_id)
+           do update set removed_at = null, display_order = excluded.display_order`,
+          [opts.productId, entry.publicId, cleanFileName(entry.fileName), entry.bytes, entry.contentType ?? null, i]
+        );
+      }
+    }
+  }
+
+  if (opts.requireFiles) {
+    const files = await client.query<{ c: string }>(
+      `select count(*)::text as c from public.product_digital_files
+       where product_id = $1 and removed_at is null`,
+      [opts.productId]
+    );
+    if (Number(files.rows[0]?.c ?? 0) === 0) {
+      throw new AppError(400, "DIGITAL_FILE_REQUIRED", DIGITAL_FILE_REQUIRED_MESSAGE);
+    }
+  }
+
+  return { replacedVideoPublicId };
+}
+
 /** Where an imported product came from; null for products created in the form. */
 type ProductExternalRef = { source: string; id: string };
 
@@ -1067,9 +1267,10 @@ type ProductExternalRef = { source: string; id: string };
  */
 async function createProductRecord(
   sellerId: string,
-  data: ProductCreateInput,
+  input: ProductCreateInput,
   external: ProductExternalRef | null = null
 ) {
+  const data = normalizeForProductType(input, input.productType);
   const sellerRow = await pool.query<{ shop_name: string }>(
     `select shop_name from public.sellers where id = $1`,
     [sellerId]
@@ -1167,6 +1368,14 @@ async function createProductRecord(
         [productId, collectionId]
       );
     }
+
+    await applyProductMedia(client, {
+      sellerId,
+      productId,
+      requireFiles: data.productType === "digital" && data.status === "active",
+      video: data.video,
+      digitalFiles: data.digitalFiles,
+    });
 
     await client.query("commit");
     return { id: productId, slug: product.rows[0].slug, status: data.status };
@@ -1504,6 +1713,23 @@ sellerRouter.post(
   })
 );
 
+/**
+ * Signed parameters for uploading a product video or a digital file straight to
+ * Cloudinary from the browser. The returned proof is checked again on save.
+ */
+sellerRouter.post(
+  "/uploads/sign",
+  requireSellerAnyStatus,
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({ kind: z.enum(["video", "digital"]) }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "kind must be video or digital" });
+      return;
+    }
+    res.json(signDirectUpload(parsed.data.kind, req.seller!.id));
+  })
+);
+
 const productPatchSchema = productCreateSchema.partial();
 
 sellerRouter.patch(
@@ -1520,7 +1746,13 @@ sellerRouter.patch(
 
     await assertSellerOwnsProduct(sellerId, productId);
 
-    const data = parsed.data;
+    const currentRow = await pool.query<{ product_type: string; status: string }>(
+      `select product_type, status from public.products where id = $1`,
+      [productId]
+    );
+    const effectiveType = parsed.data.productType ?? currentRow.rows[0]?.product_type ?? "physical";
+    const effectiveStatus = parsed.data.status ?? currentRow.rows[0]?.status ?? "draft";
+    const data = normalizeForProductType(parsed.data, effectiveType);
     assertShippingRange(data.processingDays, data.processingDaysMax);
     // Weight can't be cleared on a physical product. Dimensions are only needed
     // while volumetric shipping is on, and may already be stored from earlier.
@@ -1548,6 +1780,7 @@ sellerRouter.patch(
 
     const client = await pool.connect();
     let restockVariantIds: string[] = [];
+    let replacedVideoPublicId: string | null = null;
     try {
       await client.query("begin");
 
@@ -1688,6 +1921,22 @@ sellerRouter.patch(
         }
       }
 
+      // Edits that don't touch publishing, type or files never trip the file
+      // rule, so older digital listings without files can still be edited.
+      const media = await applyProductMedia(client, {
+        sellerId,
+        productId,
+        requireFiles:
+          effectiveType === "digital" &&
+          effectiveStatus === "active" &&
+          (parsed.data.status !== undefined ||
+            parsed.data.productType !== undefined ||
+            parsed.data.digitalFiles !== undefined),
+        video: data.video,
+        digitalFiles: data.digitalFiles,
+      });
+      replacedVideoPublicId = media.replacedVideoPublicId;
+
       await client.query("commit");
     } catch (error) {
       await client.query("rollback");
@@ -1695,6 +1944,8 @@ sellerRouter.patch(
     } finally {
       client.release();
     }
+
+    if (replacedVideoPublicId) void deleteVideoAsset(replacedVideoPublicId);
 
     if (restockVariantIds.length > 0) {
       const { enqueueBackInStockForVariants } = await import(
@@ -1879,9 +2130,10 @@ sellerRouter.get(
       line_total: string;
       variant_option_values: Record<string, unknown> | null;
       customization_note: string | null;
+      is_digital: boolean;
     }>(
       `select id, product_id, product_title, product_thumbnail_url, quantity, unit_price, line_total,
-              variant_option_values, customization_note
+              variant_option_values, customization_note, is_digital
        from public.order_items
        where order_id = $1 and seller_id = $2`,
       [orderId, sellerId]
@@ -1927,7 +2179,10 @@ sellerRouter.get(
                 .join(" / ") || null
             : null,
           customizationNote: row.customization_note,
+          isDigital: row.is_digital,
         })),
+        // This seller's part is downloads only: delivered at payment, nothing to ship.
+        digitalOnly: items.rows.length > 0 && items.rows.every((row) => row.is_digital),
         shipment: sh
           ? {
               id: sh.id,

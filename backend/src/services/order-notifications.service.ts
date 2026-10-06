@@ -113,13 +113,16 @@ export async function notifyOrderConfirmed(orderId: string) {
       shop_name: string;
       contact_phone: string | null;
       phone_number: string | null;
+      digital_only: boolean;
     }>(
-      `select distinct s.user_id, u.email, u.full_name, s.shop_name,
-              s.contact_phone, u.phone_number
+      `select s.user_id, u.email, u.full_name, s.shop_name,
+              s.contact_phone, u.phone_number,
+              bool_and(oi.is_digital) as digital_only
        from public.order_items oi
        join public.sellers s on s.id = oi.seller_id
        join public.users u on u.id = s.user_id
-       where oi.order_id = $1`,
+       where oi.order_id = $1
+       group by s.user_id, u.email, u.full_name, s.shop_name, s.contact_phone, u.phone_number`,
       [orderId]
     );
 
@@ -143,6 +146,7 @@ export async function notifyOrderConfirmed(orderId: string) {
           customerName: seller.full_name ?? undefined,
           shopName: seller.shop_name,
           frontendOrderUrl: sellerUrl,
+          digitalOnly: seller.digital_only,
         }, { dedupeKey: `${orderId}-${seller.user_id}` });
       }
 

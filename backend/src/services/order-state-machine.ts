@@ -28,6 +28,10 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
  * customers must open a return request instead. Paid, processing, and accepted
  * cancels restore captured stock and trigger a refund outside the status flip.
  *
+ * An order made only of digital products goes paid → delivered: the files are
+ * released at payment and there is nothing to ship. transition() refuses that
+ * edge for any order with a physical line.
+ *
  * `refunded` is reached after a successful gateway refund from cancelled (buyer cancel)
  * or from returned (return-approved refund). Delivered returns still go delivered→returned first.
  *
@@ -35,7 +39,7 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
  */
 export const ORDER_TRANSITIONS: Readonly<Record<OrderStatus, readonly OrderStatus[]>> = {
   pending_payment: ["paid", "cancelled"],
-  paid: ["processing", "cancelled"],
+  paid: ["processing", "cancelled", "delivered"],
   processing: ["accepted", "cancelled"],
   accepted: ["shipped", "cancelled"],
   shipped: ["out_for_delivery"],
@@ -130,6 +134,21 @@ export async function transition(
         `Cannot transition order from ${fromStatus} to ${toStatus}`,
         { fromStatus, toStatus, allowed }
       );
+    }
+
+    if (fromStatus === "paid" && toStatus === "delivered") {
+      const physical = await client.query(
+        `select 1 from public.order_items where order_id = $1 and not is_digital limit 1`,
+        [orderId]
+      );
+      if (physical.rows[0]) {
+        throw new AppError(
+          409,
+          "ILLEGAL_STATUS_TRANSITION",
+          "Only an all-digital order can be delivered without shipping",
+          { fromStatus, toStatus }
+        );
+      }
     }
 
     // delivered_at anchors the return window, so it is stamped by the same

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { appliedGstPercent, PRODUCT_GST_PERCENT_SQL } from "../services/gst.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
@@ -133,6 +134,7 @@ analyticsRouter.get(
       shop_slug: string;
       seller_id: string;
       maker_name: string | null;
+      gst_percent: string;
     }>(
       `with recent as (
          select v.product_id, max(v.created_at) as last_seen
@@ -145,7 +147,7 @@ analyticsRouter.get(
        )
        select p.id, p.slug, p.title, p.base_price::text, p.compare_at_price::text,
               p.avg_rating::text, p.review_count::text, p.is_bestseller, p.maker_name, p.seller_id,
-              s.shop_name, s.shop_slug,
+              s.shop_name, s.shop_slug, ${PRODUCT_GST_PERCENT_SQL} as gst_percent,
               (select pi.url from public.product_images pi
                where pi.product_id = p.id
                order by pi.is_thumbnail desc, pi.display_order asc limit 1) as thumbnail_url
@@ -164,6 +166,7 @@ analyticsRouter.get(
         slug: row.slug,
         title: row.title,
         price: Number(row.base_price),
+        gstPercent: appliedGstPercent(row.gst_percent),
         compareAtPrice: row.compare_at_price != null ? Number(row.compare_at_price) : null,
         discountPercent: null,
         thumbnailUrl: row.thumbnail_url,

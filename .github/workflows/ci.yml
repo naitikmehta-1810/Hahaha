@@ -122,6 +122,10 @@ jobs:
         working-directory: backend
         run: npm run proof:maintenance
 
+      - name: Digital products proof (required)
+        working-directory: backend
+        run: npm run proof:digital
+
       - name: Lifecycle email integration (soft — Redis/queue may be flaky)
         working-directory: backend
         continue-on-error: true

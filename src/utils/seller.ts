@@ -133,7 +133,10 @@ export type SellerOrderDetail = {
     lineTotal: number;
     variantLabel: string | null;
     customizationNote: string | null;
+    isDigital?: boolean;
   }>;
+  /** Only downloads from this shop: delivered at payment, nothing to ship. */
+  digitalOnly?: boolean;
   shipment: {
     id: string;
     status: string;

@@ -18,7 +18,6 @@ import styles from "./cart.module.css";
 import Button, { ButtonLink } from "@/components/ui/Button/Button";
 import EmptyState from "@/components/ui/EmptyState/EmptyState";
 import Notice from "@/components/ui/Notice/Notice";
-import PaymentIcon, { type PaymentBrand } from "@/components/ui/PaymentMarks/PaymentIcon";
 import ValueProps from "@/components/ui/ValueProps/ValueProps";
 import ProductCard from "@/components/ui/ProductCard/ProductCard";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
@@ -36,7 +35,7 @@ import {
   removeCoupon,
   updateCartItemQty,
 } from "@/utils/cart";
-import { computeGstAmount, gstSummaryLabel } from "@/utils/gst";
+import { formatInr, inclusiveLineTotal, priceWithGst, totalsInclGst } from "@/utils/gst";
 import {
   fetchProducts,
   productHref,
@@ -48,7 +47,6 @@ import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
 export default function CartPage() {
   const router = useRouter();
   const { isAuthenticated, status: authStatus } = useAuth();
-  const [selectedMethod, setSelectedMethod] = useState("card");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartLoading, setCartLoading] = useState(true);
   const [status, setStatus] = useState<{ type: "error" | "success"; message: string } | null>(
@@ -162,15 +160,14 @@ export default function CartPage() {
   };
 
   const availableItems = cartItems.filter((item) => item.available);
-  const subtotal = availableItems.reduce((acc, item) => acc + item.price * item.qty, 0);
+  // Downloads don't ship, so a cart of only digital items has no delivery charge.
+  const hasPhysical = availableItems.some((item) => !item.isDigital);
+  // Free shipping is measured on the GST-inclusive item value buyers see.
+  const itemsInclGst = totalsInclGst(availableItems, 0, 0).itemsInclGst;
   const shipping =
-    freeShipping.qualifies || subtotal >= freeShipping.threshold ? 0 : availableItems.length > 0 ? 49 : 0;
-  const taxable = Math.max(subtotal - discountAmount, 0);
-  const tax = computeGstAmount(availableItems, discountAmount);
-  const taxLabel = gstSummaryLabel(availableItems);
-  const total = taxable + shipping + tax;
+    !hasPhysical || freeShipping.qualifies || itemsInclGst >= freeShipping.threshold ? 0 : 49;
+  const { discountInclGst, gstIncluded, total } = totalsInclGst(availableItems, discountAmount, shipping);
 
-  /** Cart payment radio pre-selects method on the dedicated checkout page. */
   const handleProceedToCheckout = () => {
     setStatus(null);
     if (authStatus === "loading") return;
@@ -185,26 +182,13 @@ export default function CartPage() {
       });
       return;
     }
-    const payment =
-      selectedMethod === "wallets"
-        ? "wallet"
-        : selectedMethod === "netbanking"
-          ? "netbanking"
-          : selectedMethod;
-    router.push(`/checkout?payment=${encodeURIComponent(payment)}`);
+    router.push("/checkout");
   };
 
   const itemCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
   const isEmpty = !cartLoading && cartItems.length === 0;
   const freeShippingProgress =
-    freeShipping.threshold > 0 ? Math.min(100, (subtotal / freeShipping.threshold) * 100) : 100;
-
-  const paymentOptions = [
-    { value: "card", label: "Credit / debit card", brands: ["visa", "mastercard", "rupay"] as PaymentBrand[] },
-    { value: "upi", label: "UPI", brands: ["upi"] as PaymentBrand[] },
-    { value: "netbanking", label: "Net banking", brands: [] as PaymentBrand[] },
-    { value: "wallets", label: "Wallets", brands: ["paytm"] as PaymentBrand[] },
-  ];
+    freeShipping.threshold > 0 ? Math.min(100, (itemsInclGst / freeShipping.threshold) * 100) : 100;
 
   return (
     <div className={styles.container}>
@@ -244,7 +228,7 @@ export default function CartPage() {
       ) : (
         <div className={styles.cartLayout}>
           <div className={styles.itemsSection}>
-            {availableItems.length > 0 ? (
+            {hasPhysical ? (
               <div className={styles.shippingBanner}>
                 <Truck size={18} className={styles.shippingBannerIcon} />
                 <div className={styles.shippingBannerBody}>
@@ -293,12 +277,16 @@ export default function CartPage() {
                   </div>
                   <div className={styles.itemDetails}>
                     <h2 className={styles.itemTitle}>{item.title}</h2>
-                    <span className={styles.itemSubtitle}>{item.subtitle}</span>
+                    <span className={styles.itemSubtitle}>
+                      {item.isDigital && item.available ? "Digital download" : item.subtitle}
+                    </span>
                     {item.customizationNote ? (
                       <span className={styles.itemNote}>For the maker: {item.customizationNote}</span>
                     ) : null}
                     <span className={styles.itemUnit}>
-                      {item.available ? `₹${item.price.toLocaleString("en-IN")} each` : "No longer available"}
+                      {item.available
+                        ? `${formatInr(priceWithGst(item.price, item.gstPercent))} each`
+                        : "No longer available"}
                     </span>
                     <button
                       type="button"
@@ -310,6 +298,9 @@ export default function CartPage() {
                       Remove
                     </button>
                   </div>
+                  {item.isDigital ? (
+                    <span className={styles.digitalQty}>1 copy</span>
+                  ) : (
                   <div className={styles.qtySelector} role="group" aria-label={`Quantity for ${item.title}`}>
                     <button
                       type="button"
@@ -331,8 +322,9 @@ export default function CartPage() {
                       <Plus size={14} />
                     </button>
                   </div>
+                  )}
                   <span className={styles.itemPrice}>
-                    {item.available ? `₹${(item.price * item.qty).toLocaleString("en-IN")}` : "—"}
+                    {item.available ? formatInr(inclusiveLineTotal(item.price * item.qty, item.gstPercent)) : "—"}
                   </span>
                 </div>
               ))}
@@ -346,29 +338,33 @@ export default function CartPage() {
               <h2 className={styles.summaryTitle}>Order summary</h2>
               <dl className={styles.summaryRows}>
                 <div className={styles.row}>
-                  <dt>Subtotal</dt>
-                  <dd>₹{subtotal.toLocaleString("en-IN")}</dd>
+                  <dt>Items (incl. GST)</dt>
+                  <dd>{formatInr(itemsInclGst)}</dd>
                 </div>
                 {discountAmount > 0 ? (
                   <div className={styles.row}>
                     <dt>Discount{couponCode ? ` (${couponCode})` : ""}</dt>
-                    <dd className={styles.positive}>−₹{discountAmount.toLocaleString("en-IN")}</dd>
+                    <dd className={styles.positive}>−{formatInr(discountInclGst)}</dd>
                   </div>
                 ) : null}
-                <div className={styles.row}>
-                  <dt>Shipping</dt>
-                  <dd className={shipping === 0 ? styles.positive : ""}>
-                    {shipping === 0 ? "Free" : `₹${shipping}`}
-                  </dd>
-                </div>
-                <div className={styles.row}>
-                  <dt>{taxLabel}</dt>
-                  <dd>₹{tax.toLocaleString("en-IN")}</dd>
-                </div>
+                {hasPhysical ? (
+                  <div className={styles.row}>
+                    <dt>Shipping</dt>
+                    <dd className={shipping === 0 ? styles.positive : ""}>
+                      {shipping === 0 ? "Free" : formatInr(shipping)}
+                    </dd>
+                  </div>
+                ) : null}
                 <div className={styles.rowBold}>
                   <dt>Total</dt>
-                  <dd>₹{total.toLocaleString("en-IN")}</dd>
+                  <dd>{formatInr(total)}</dd>
                 </div>
+                {gstIncluded > 0 ? (
+                  <div className={styles.row}>
+                    <dt>Includes GST</dt>
+                    <dd>{formatInr(gstIncluded)}</dd>
+                  </div>
+                ) : null}
               </dl>
 
               <div className={styles.couponBlock}>
@@ -437,35 +433,6 @@ export default function CartPage() {
                 <span>Secure checkout</span>
               </div>
             </div>
-
-            <fieldset className={styles.methodsCard}>
-              <legend className={styles.methodTitle}>Preferred payment</legend>
-              <p className={styles.methodHint}>We&apos;ll pre-select this at checkout.</p>
-              {paymentOptions.map((option) => (
-                <label
-                  key={option.value}
-                  className={`${styles.radioItem} ${
-                    selectedMethod === option.value ? styles.radioItemActive : ""
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="cart-payment"
-                    className={styles.radio}
-                    checked={selectedMethod === option.value}
-                    onChange={() => setSelectedMethod(option.value)}
-                  />
-                  <span className={styles.radioLabel}>{option.label}</span>
-                  {option.brands.length > 0 ? (
-                    <span className={styles.radioBrands}>
-                      {option.brands.map((brand) => (
-                        <PaymentIcon key={brand} brand={brand} />
-                      ))}
-                    </span>
-                  ) : null}
-                </label>
-              ))}
-            </fieldset>
           </aside>
         </div>
       )}
@@ -495,6 +462,7 @@ export default function CartPage() {
                   <ProductCard.Subtitle>{product.shopName}</ProductCard.Subtitle>
                   <ProductCard.Price
                     amount={product.price}
+                    gstPercent={product.gstPercent}
                     originalAmount={product.compareAtPrice ?? undefined}
                     discountPercentage={product.discountPercent ?? undefined}
                   />

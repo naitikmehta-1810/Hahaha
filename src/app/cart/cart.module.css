@@ -268,8 +268,7 @@
   gap: 16px;
 }
 
-.summaryCard,
-.methodsCard {
+.summaryCard {
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -405,59 +404,6 @@
   color: var(--color-success-ink);
 }
 
-.methodsCard {
-  border-width: 1px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  /* Fieldsets default to min-content width; let this one shrink. */
-  min-width: 0;
-  min-inline-size: 0;
-}
-
-.methodTitle {
-  float: left;
-  width: 100%;
-  font-size: 0.95rem;
-  font-weight: 750;
-}
-
-.methodHint {
-  clear: both;
-  margin-bottom: 4px;
-  font-size: 0.78rem;
-  color: var(--color-text-muted);
-}
-
-.radioItem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
-}
-
-.radioItem:hover {
-  border-color: var(--color-border-dark);
-}
-
-.radioItemActive,
-.radioItemActive:hover {
-  border-color: var(--color-primary);
-  background: var(--color-primary-light);
-  color: var(--color-primary-ink);
-}
-
-.radio {
-  width: 16px;
-  height: 16px;
-}
-
 /* ── Recommendations ─────────────────────────────────────────────────── */
 
 .recommendations {
@@ -559,8 +505,7 @@
     white-space: nowrap;
   }
 
-  .summaryCard,
-  .methodsCard {
+  .summaryCard {
     padding: 18px 16px;
   }
 
@@ -574,20 +519,14 @@
   }
 }
 
-.radioLabel {
-  flex: 1;
-  min-width: 0;
-}
-
-.radioBrands {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px;
-  min-width: 0;
-}
-
-.radioBrands svg {
-  width: 34px;
-  height: 22px;
+/* A download is always one copy: shown instead of the quantity stepper. */
+.digitalQty {
+  justify-self: center;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-light);
+  color: var(--color-primary-ink);
+  font-size: 0.8rem;
+  font-weight: 650;
+  white-space: nowrap;
 }

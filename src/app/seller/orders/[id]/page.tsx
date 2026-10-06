@@ -172,7 +172,9 @@ export default function SellerOrderDetailPage() {
                   <span className={ui.listMain}>
                     <span className={ui.listTitle}>{item.title}</span>
                     <span className={ui.listMeta}>
-                      Qty {item.quantity} × {rupees(item.unitPrice)}
+                      {item.isDigital
+                        ? `Digital download · ${rupees(item.unitPrice)}`
+                        : `Qty ${item.quantity} × ${rupees(item.unitPrice)}`}
                       {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                     </span>
                     {item.customizationNote ? (
@@ -217,7 +219,13 @@ export default function SellerOrderDetailPage() {
             {order.shipment ? <StatusPill status={order.shipment.status} /> : null}
           </div>
           {!order.shipment ? (
-            <p className={ui.muted}>Waiting for payment confirmation…</p>
+            <p className={ui.muted}>
+              {order.digitalOnly
+                ? order.status === "pending_payment"
+                  ? "Digital order. The buyer gets the files as soon as payment is confirmed."
+                  : "Digital order: the buyer received download links at payment. Nothing to ship."
+                : "Waiting for payment confirmation…"}
+            </p>
           ) : (
             <>
               <dl className={ui.kv}>

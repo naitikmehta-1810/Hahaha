@@ -15,6 +15,29 @@ const defaultJobOpts = {
 let emailQueue: Queue | null = null;
 let whatsappQueue: Queue | null = null;
 
+/**
+ * Longest a caller waits on Redis to accept a job. BullMQ connections retry
+ * forever, so without a ceiling an unreachable Redis would stall whatever runs
+ * after an enqueue (e.g. creating shipments after payment). On timeout the job
+ * is reported as not enqueued; the add may still land once Redis returns.
+ */
+const QUEUE_WRITE_TIMEOUT_MS = 4000;
+
+export async function withQueueTimeout<T>(work: Promise<T>, label: string): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      console.error(`[notify] queue write timed out after ${QUEUE_WRITE_TIMEOUT_MS}ms (${label})`);
+      resolve(null);
+    }, QUEUE_WRITE_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function getEmailQueue() {
   if (!emailQueue) {
     emailQueue = new Queue(EMAIL_QUEUE, {
@@ -66,7 +89,7 @@ export async function enqueueEmailJob(
     : undefined;
   await logEmailEnqueue(name, data);
   try {
-    if (jobId && (await getEmailQueue().getJob(jobId))) {
+    if (jobId && (await withQueueTimeout(getEmailQueue().getJob(jobId), `email ${name} duplicate check`))) {
       console.log(`[notify] skipped duplicate email job=${name} id=${jobId}`);
       return jobId;
     }
@@ -74,7 +97,11 @@ export async function enqueueEmailJob(
     console.warn(`[notify] duplicate check failed name=${name}`, error);
   }
   try {
-    const job = await getEmailQueue().add(name, data, { ...defaultJobOpts, jobId });
+    const job = await withQueueTimeout(
+      getEmailQueue().add(name, data, { ...defaultJobOpts, jobId }),
+      `email ${name}`
+    );
+    if (!job) return null;
     console.log(`[notify] enqueued email job=${name} id=${job.id}`);
     // Browser push mirrors the same events (prefs-gated) without blocking email.
     void import("./push.service.js")
@@ -92,7 +119,8 @@ export async function enqueueEmailJob(
  */
 export async function enqueueWhatsAppJob(name: string, data: Record<string, unknown>) {
   try {
-    const job = await getWhatsAppQueue().add(name, data, defaultJobOpts);
+    const job = await withQueueTimeout(getWhatsAppQueue().add(name, data, defaultJobOpts), `whatsapp ${name}`);
+    if (!job) return null;
     console.log(`[notify] enqueued whatsapp job=${name} id=${job.id}`);
     return job.id;
   } catch (error) {

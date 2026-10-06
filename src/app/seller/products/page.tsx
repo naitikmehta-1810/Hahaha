@@ -24,6 +24,7 @@ type SellerProduct = {
   status: string;
   price: number;
   stockQuantity: number;
+  productType?: string;
   thumbnailUrl: string | null;
   updatedAt: string;
 };
@@ -226,7 +227,9 @@ export default function SellerProductsPage() {
                         <StatusPill status={product.status} />
                       </td>
                       <td className={ui.num}>
-                        {product.stockQuantity <= 0 ? (
+                        {product.productType === "digital" ? (
+                          <StatusPill tone="info">Digital</StatusPill>
+                        ) : product.stockQuantity <= 0 ? (
                           <StatusPill tone="danger">Out of stock</StatusPill>
                         ) : (
                           product.stockQuantity.toLocaleString("en-IN")

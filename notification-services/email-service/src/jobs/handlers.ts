@@ -4,6 +4,7 @@ import {
   renderAbandonedCart,
   renderBackInStock,
   renderCouponOffer,
+  renderDigitalDelivery,
   renderCartPriceDrop,
   renderRecentlyViewedDigest,
   renderEmailVerification,
@@ -22,6 +23,7 @@ import {
   type BackInStockPayload,
   type CartPriceDropPayload,
   type CouponOfferPayload,
+  type DigitalDeliveryPayload,
   type LowStockAlertPayload,
   type OrderEmailPayload,
   type RecentlyViewedDigestPayload,
@@ -45,6 +47,7 @@ export const EMAIL_JOB_NAMES = [
   "low-stock-alert",
   "back-in-stock",
   "seller-new-order",
+  "digital-delivery",
 ] as const;
 
 export type EmailJobName = (typeof EMAIL_JOB_NAMES)[number];
@@ -118,6 +121,14 @@ export async function processEmailJob(job: Job) {
             ]
           : attachments,
       });
+    }
+    case "digital-delivery": {
+      const payload = job.data as DigitalDeliveryPayload;
+      if (!payload?.to || !payload.orderNumber || !Array.isArray(payload.products)) {
+        throw new Error("digital-delivery requires to, orderNumber and products[]");
+      }
+      const rendered = renderDigitalDelivery(payload);
+      return sendMail({ to: payload.to, ...rendered });
     }
     case "abandoned-cart": {
       const payload = job.data as AbandonedCartPayload;

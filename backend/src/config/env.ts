@@ -23,6 +23,15 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
+  /**
+   * Upload ceilings for direct browser-to-Cloudinary uploads. Keep them at or
+   * below your Cloudinary plan's per-file limits (free plan: video 100 MB,
+   * raw files 10 MB), or uploads above the plan limit are rejected by Cloudinary.
+   */
+  PRODUCT_VIDEO_MAX_MB: z.coerce.number().positive().default(100),
+  DIGITAL_FILE_MAX_MB: z.coerce.number().positive().default(100),
+  /** How long the download links in the digital-delivery email keep working. */
+  DIGITAL_EMAIL_LINK_DAYS: z.coerce.number().int().positive().default(7),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   FACEBOOK_APP_ID: z.string().min(1).optional(),

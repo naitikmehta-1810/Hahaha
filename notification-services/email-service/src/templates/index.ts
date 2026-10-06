@@ -7,6 +7,9 @@ export type OrderEmailItem = {
   unitPrice: number;
   lineTotal: number;
   variantLabel?: string | null;
+  /** Newer payloads: the prices as the site shows them, GST included. */
+  unitPriceInclGst?: number;
+  lineTotalInclGst?: number;
 };
 
 export type ShippingAddress = {
@@ -43,6 +46,15 @@ export type OrderEmailPayload = {
   estimatedDeliveryAt?: string | null;
   frontendOrderUrl?: string;
   shopName?: string;
+  /** Every line is a download: nothing ships, so no delivery details. */
+  isDigitalOnly?: boolean;
+  hasDigitalItems?: boolean;
+  /** Seller email: this shop's part of the order is downloads only. */
+  digitalOnly?: boolean;
+  /** GST-inclusive totals (newer payloads); rows add up to totalAmount. */
+  itemsInclGst?: number;
+  discountInclGst?: number;
+  gstIncluded?: number;
 };
 
 export type CartEmailItem = {
@@ -107,6 +119,19 @@ export type RecentlyViewedDigestPayload = {
   customerName?: string;
   items: Array<{ title: string; url: string; imageUrl?: string }>;
   shopUrl?: string;
+};
+
+export type DigitalDeliveryPayload = {
+  to: string;
+  customerName?: string;
+  orderNumber: string;
+  orderUrl?: string;
+  linkDays?: number;
+  products: Array<{
+    title: string;
+    imageUrl?: string | null;
+    files: Array<{ fileName: string; bytes?: number; url: string }>;
+  }>;
 };
 
 export type RenderedEmail = { subject: string; text: string; html: string };
@@ -326,18 +351,36 @@ function itemsTable(items: Array<OrderEmailItem | CartEmailItem> | undefined, la
         <td valign="top" style="padding:14px 12px 14px 14px;${border}">
           <div style="font-family:${FONT};font-size:14px;font-weight:600;line-height:1.4;color:${C.ink};">${escapeHtml(item.productTitle)}</div>
           ${variant}
-          <div style="font-family:${FONT};font-size:13px;color:${C.muted};margin-top:4px;">Qty ${Number(item.quantity)} × ${formatInr(item.unitPrice)}</div>
+          <div style="font-family:${FONT};font-size:13px;color:${C.muted};margin-top:4px;">Qty ${Number(item.quantity)} × ${formatInr(inclOr(item, "unit"))}</div>
         </td>
-        <td valign="top" align="right" style="padding:14px 0;${border}font-family:${FONT};font-size:14px;font-weight:700;color:${C.ink};white-space:nowrap;">${formatInr(item.lineTotal)}</td>
+        <td valign="top" align="right" style="padding:14px 0;${border}font-family:${FONT};font-size:14px;font-weight:700;color:${C.ink};white-space:nowrap;">${formatInr(inclOr(item, "line"))}</td>
       </tr>`;
     })
     .join("");
   return `${sectionLabel(label)}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px;border-top:1px solid ${C.border};">${rows}</table>`;
 }
 
+/** The GST-inclusive figure when the payload has one (newer jobs), else the stored one. */
+function inclOr(item: OrderEmailItem | CartEmailItem, kind: "unit" | "line") {
+  const i = item as OrderEmailItem;
+  if (kind === "unit") return i.unitPriceInclGst ?? item.unitPrice;
+  return i.lineTotalInclGst ?? item.lineTotal;
+}
+
 function totalsBlock(order: OrderEmailPayload) {
   if (order.totalAmount == null) return "";
   const rows: Array<[string, string, string?]> = [];
+  if (order.itemsInclGst != null) {
+    // Same presentation as the site: prices include GST.
+    rows.push(["Items (incl. GST)", formatInr(order.itemsInclGst)]);
+    if ((order.discountInclGst ?? 0) > 0) {
+      rows.push(["Discount", `−${formatInr(order.discountInclGst)}`, C.success]);
+    }
+    if (order.shippingAmount != null && !order.isDigitalOnly) {
+      rows.push(["Shipping", Number(order.shippingAmount) > 0 ? formatInr(order.shippingAmount) : "Free"]);
+    }
+    return totalsTable(rows, order.totalAmount, order.gstIncluded);
+  }
   if (order.subtotal != null) rows.push(["Subtotal", formatInr(order.subtotal)]);
   if ((order.discountAmount ?? 0) > 0) {
     rows.push(["Discount", `−${formatInr(order.discountAmount)}`, C.success]);
@@ -349,6 +392,10 @@ function totalsBlock(order: OrderEmailPayload) {
     const pct = order.taxRate != null && Number(order.taxRate) > 0 ? ` (${Math.round(Number(order.taxRate) * 100)}%)` : "";
     rows.push([`Tax${pct}`, formatInr(order.taxAmount)]);
   }
+  return totalsTable(rows, order.totalAmount);
+}
+
+function totalsTable(rows: Array<[string, string, string?]>, total: number, gstIncluded?: number) {
   const lines = rows
     .map(
       ([label, value, color]) => `<tr>
@@ -357,12 +404,17 @@ function totalsBlock(order: OrderEmailPayload) {
       </tr>`
     )
     .join("");
+  const gstNote =
+    gstIncluded && gstIncluded > 0
+      ? `<tr><td colspan="2" align="right" style="padding:6px 0 0;font-family:${FONT};font-size:12px;color:${C.muted};">Includes ${formatInr(gstIncluded)} GST</td></tr>`
+      : "";
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
     ${lines}
     <tr>
       <td style="padding:14px 0 0;border-top:1px solid ${C.border};font-family:${FONT};font-size:16px;font-weight:800;color:${C.ink};">Total</td>
-      <td align="right" style="padding:14px 0 0;border-top:1px solid ${C.border};font-family:${FONT};font-size:18px;font-weight:800;color:${C.ink};">${formatInr(order.totalAmount)}</td>
+      <td align="right" style="padding:14px 0 0;border-top:1px solid ${C.border};font-family:${FONT};font-size:18px;font-weight:800;color:${C.ink};">${formatInr(total)}</td>
     </tr>
+    ${gstNote}
   </table>`;
 }
 
@@ -523,14 +575,19 @@ function orderNo(order: OrderEmailPayload) {
 /* ------------------------------------------------------------------ */
 
 export function renderOrderConfirmation(order: OrderEmailPayload): RenderedEmail {
+  const intro = order.isDigitalOnly
+    ? `${greeting(order.customerName)} thank you for your order. Your downloads are ready: we’ve sent the links in a separate email, and they’re always on your order page.`
+    : order.hasDigitalItems
+      ? `${greeting(order.customerName)} we’ve received your order and passed it to the maker. Your digital items are ready to download now (see the separate email), and we’ll email you again when the rest ships.`
+      : `${greeting(order.customerName)} we’ve received your order and passed it to the maker. We’ll email you again as soon as it ships.`;
   const body = `
     ${hero({
       eyebrow: "Order confirmed",
       tone: "success",
       title: "Thank you for your order",
-      intro: `${greeting(order.customerName)} we’ve received your order and passed it to the maker. We’ll email you again as soon as it ships.`,
+      intro,
     })}
-    ${orderProgress(0)}
+    ${order.isDigitalOnly ? "" : orderProgress(0)}
     ${facts([
       ["Order number", orderNo(order)],
       ["Order total", formatInr(order.totalAmount)],
@@ -538,7 +595,7 @@ export function renderOrderConfirmation(order: OrderEmailPayload): RenderedEmail
     ${divider("8px 0 24px")}
     ${itemsTable(order.items, "Order summary")}
     ${totalsBlock(order)}
-    ${deliveryPanel(order, { showMethod: true })}
+    ${order.isDigitalOnly ? "" : deliveryPanel(order, { showMethod: true })}
     ${actions({ href: order.frontendOrderUrl, label: "View order" })}
   `;
   return {
@@ -551,7 +608,9 @@ export function renderOrderConfirmation(order: OrderEmailPayload): RenderedEmail
     ),
     html: layout({
       title: "Order confirmed",
-      preheader: `Order #${order.orderNumber} is confirmed — ${formatInr(order.totalAmount)}. We’ll let you know when it ships.`,
+      preheader: order.isDigitalOnly
+        ? `Order #${order.orderNumber} is confirmed — ${formatInr(order.totalAmount)}. Your downloads are ready.`
+        : `Order #${order.orderNumber} is confirmed — ${formatInr(order.totalAmount)}. We’ll let you know when it ships.`,
       body,
     }),
   };
@@ -995,7 +1054,9 @@ export function renderSellerNewOrder(order: OrderEmailPayload): RenderedEmail {
     ${itemsTable(order.items)}
     ${panel(
       `${sectionLabel("Next steps")}${p(
-        "Accept the order, pack it carefully and ship it within your dispatch time. Fast dispatch keeps your shop rating high.",
+        order.digitalOnly
+          ? "Nothing to do: these are digital products, and the buyer received their download links as soon as payment was confirmed."
+          : "Accept the order, pack it carefully and ship it within your dispatch time. Fast dispatch keeps your shop rating high.",
         { size: 14, margin: "0" }
       )}`
     )}
@@ -1010,7 +1071,9 @@ export function renderSellerNewOrder(order: OrderEmailPayload): RenderedEmail {
     ),
     html: layout({
       title: "New order",
-      preheader: `Order #${order.orderNumber} is waiting for you to accept and ship.`,
+      preheader: order.digitalOnly
+        ? `Order #${order.orderNumber}: digital items delivered automatically.`
+        : `Order #${order.orderNumber} is waiting for you to accept and ship.`,
       body,
     }),
   };
@@ -1037,6 +1100,84 @@ export function renderBackInStock(payload: BackInStockPayload): RenderedEmail {
       preheader: `${payload.productTitle} is available again.`,
       body,
       marketing: true,
+    }),
+  };
+}
+
+function formatBytes(bytes: number | undefined) {
+  if (!bytes || bytes <= 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+}
+
+/**
+ * Download links for a paid order's digital products. Links rather than
+ * attachments: mail providers block many file types and cap attachment size.
+ */
+export function renderDigitalDelivery(payload: DigitalDeliveryPayload): RenderedEmail {
+  const days = payload.linkDays ?? 7;
+  const productBlocks = payload.products
+    .map((product) => {
+      const files = product.files
+        .map((file) => {
+          const size = formatBytes(file.bytes);
+          return `<tr>
+            <td style="padding:10px 0;border-top:1px solid ${C.border};font-family:${FONT};font-size:14px;color:${C.ink};word-break:break-word;">
+              ${escapeHtml(file.fileName)}${size ? `<span style="color:${C.muted};"> · ${escapeHtml(size)}</span>` : ""}
+            </td>
+            <td align="right" style="padding:10px 0 10px 12px;border-top:1px solid ${C.border};white-space:nowrap;">
+              <a href="${escapeHtml(file.url)}" target="_blank" style="font-family:${FONT};font-size:14px;font-weight:700;color:${C.primary};text-decoration:none;">Download</a>
+            </td>
+          </tr>`;
+        })
+        .join("");
+      return panel(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td width="64" valign="top" style="padding:0 14px 12px 0;">${thumb(product.imageUrl, 56)}</td>
+            <td valign="middle" style="padding:0 0 12px;font-family:${FONT};font-size:15px;font-weight:700;color:${C.ink};">${escapeHtml(product.title)}</td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${files}</table>`);
+    })
+    .join("");
+
+  const body = `
+    ${hero({
+      eyebrow: "Ready to download",
+      tone: "success",
+      title: "Your downloads are ready",
+      intro: `${greeting(payload.customerName)} thanks for your order <strong style="color:${C.ink};">#${escapeHtml(payload.orderNumber)}</strong>. Your files are below.`,
+    })}
+    ${productBlocks}
+    ${actions(payload.orderUrl ? { href: payload.orderUrl, label: "Open your order" } : undefined)}
+    ${securityNote(
+      `These links work for ${days} days and are meant for you, so please don’t share them. After that, sign in and open the order to download again at any time.`
+    )}
+  `;
+
+  const textFiles = payload.products
+    .map(
+      (product) =>
+        `${product.title}\n${product.files.map((file) => `  ${file.fileName}: ${file.url}`).join("\n")}`
+    )
+    .join("\n\n");
+  return {
+    subject: `Your downloads for order #${payload.orderNumber}`,
+    text: textBody(
+      `${payload.customerName ? `Hi ${payload.customerName.split(" ")[0]},` : "Hi there,"} your downloads for order #${payload.orderNumber} are ready.`,
+      textFiles,
+      `These links work for ${days} days. After that, download from your order page${payload.orderUrl ? `: ${payload.orderUrl}` : "."}`
+    ),
+    html: layout({
+      title: "Your downloads are ready",
+      preheader: `Your files for order #${payload.orderNumber} are ready to download.`,
+      body,
     }),
   };
 }

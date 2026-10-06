@@ -563,3 +563,8 @@
   text-align: center;
   color: var(--color-text-muted);
 }
+
+/* A digital line's files, under its title on the order details page. */
+.itemDownloads {
+  margin-top: 10px;
+}

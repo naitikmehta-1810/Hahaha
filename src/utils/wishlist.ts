@@ -5,7 +5,9 @@ export type WishlistItem = {
   productId: string;
   title: string;
   slug: string;
+  /** Before GST; shown with gstPercent added. */
   price: number;
+  gstPercent?: number;
   thumbnailUrl: string | null;
   shopName: string;
   shopSlug: string;

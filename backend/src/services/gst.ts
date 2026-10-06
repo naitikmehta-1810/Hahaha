@@ -62,3 +62,30 @@ export function taxForLines(
 
   return { taxAmount, taxRate };
 }
+
+/**
+ * A line's price with its GST, rounded exactly as checkout rounds the tax, so
+ * the GST-inclusive figures buyers see add up to what they are charged.
+ */
+export function inclusiveLineTotal(gross: number, gstPercent: number | string | null | undefined) {
+  return roundMoney(gross + roundMoney(gross * gstFractionFromPercent(gstPercent)));
+}
+
+/** Goods value including GST, before any coupon: the basis buyers see for thresholds. */
+export function goodsValueInclGst(
+  lines: { gross: number; gstPercent: number | string | null | undefined }[]
+) {
+  return roundMoney(lines.reduce((sum, line) => sum + inclusiveLineTotal(line.gross, line.gstPercent), 0));
+}
+
+/** GST percent for product `p` (subcategory rate, else category rate, else the default). */
+export const PRODUCT_GST_PERCENT_SQL = `coalesce(
+  (select coalesce(gsc.gst_rate, gc.gst_rate)
+   from public.categories gc
+   left join public.categories gsc on gsc.id = p.subcategory_id
+   where gc.id = p.category_id),
+  ${defaultGstPercent()}
+)`;
+
+/** Product `p`'s price as buyers see it, GST included (used to filter and sort). */
+export const PRODUCT_PRICE_INCL_GST_SQL = `round(p.base_price * (1 + ${PRODUCT_GST_PERCENT_SQL} / 100.0), 2)`;

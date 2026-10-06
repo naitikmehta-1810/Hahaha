@@ -1,5 +1,6 @@
 import { pool } from "../config/db.js";
-import { appliedGstPercent } from "./gst.js";
+import { productVideoPosterUrl, productVideoUrl } from "./media.service.js";
+import { appliedGstPercent, PRODUCT_GST_PERCENT_SQL, PRODUCT_PRICE_INCL_GST_SQL } from "./gst.js";
 import {
   cacheGetJson,
   cacheSetJson,
@@ -49,8 +50,8 @@ export const PRODUCT_SORTS = {
   top_rated: `p.avg_rating desc, p.review_count desc`,
   newest: `p.created_at desc`,
   new_arrivals: `p.created_at desc`,
-  price_asc: `p.base_price asc`,
-  price_desc: `p.base_price desc`,
+  price_asc: `${PRODUCT_PRICE_INCL_GST_SQL} asc`,
+  price_desc: `${PRODUCT_PRICE_INCL_GST_SQL} desc`,
   rating: `p.avg_rating desc, p.review_count desc`,
 } as const;
 
@@ -95,6 +96,8 @@ export type ProductCard = {
   shopName: string;
   shopSlug: string;
   makerName: string | null;
+  /** GST percent for this product; buyers see prices with it included. */
+  gstPercent: number;
 };
 
 function money(value: string | number | null | undefined) {
@@ -124,6 +127,7 @@ type ProductCardRow = {
   shop_name: string;
   shop_slug: string;
   maker_name: string | null;
+  gst_percent: string | number | null;
 };
 
 function mapProductCard(row: ProductCardRow): ProductCard {
@@ -145,6 +149,7 @@ function mapProductCard(row: ProductCardRow): ProductCard {
     shopName: row.shop_name,
     shopSlug: row.shop_slug,
     makerName: row.maker_name,
+    gstPercent: appliedGstPercent(row.gst_percent),
   };
 }
 
@@ -222,11 +227,11 @@ function buildFilterClause(filters: ProductListFilters) {
   }
 
   if (filters.priceMin !== null && filters.priceMin !== undefined) {
-    conditions.push(`p.base_price >= ${push(filters.priceMin)}`);
+    conditions.push(`${PRODUCT_PRICE_INCL_GST_SQL} >= ${push(filters.priceMin)}`);
   }
 
   if (filters.priceMax !== null && filters.priceMax !== undefined) {
-    conditions.push(`p.base_price <= ${push(filters.priceMax)}`);
+    conditions.push(`${PRODUCT_PRICE_INCL_GST_SQL} <= ${push(filters.priceMax)}`);
   }
 
   if (filters.minRating !== null && filters.minRating !== undefined) {
@@ -313,6 +318,7 @@ async function listProductsUncached(
       p.seller_id,
       s.shop_name,
       s.shop_slug,
+      ${PRODUCT_GST_PERCENT_SQL} as gst_percent,
       (
         select pi.url from public.product_images pi
         where pi.product_id = p.id
@@ -353,7 +359,8 @@ async function listProductsUncached(
       params
     ),
     pool.query<{ min_price: string | null; max_price: string | null }>(
-      `select min(p.base_price)::text as min_price, max(p.base_price)::text as max_price
+      `select min(${PRODUCT_PRICE_INCL_GST_SQL})::text as min_price,
+              max(${PRODUCT_PRICE_INCL_GST_SQL})::text as max_price
        from public.products p
        join public.sellers s on s.id = p.seller_id
        where ${rangeClause.where}`,
@@ -390,6 +397,8 @@ export type ProductDetail = ProductCard & {
   gstPercent: number;
   isCustomizable: boolean;
   customizationLabel: string | null;
+  /** Shown first in the gallery, before the photos. */
+  video: { url: string; posterUrl: string } | null;
   breadcrumb: Array<{ id: string; name: string; slug: string }>;
   images: Array<{ id: string; url: string; altText: string | null; isThumbnail: boolean }>;
   variants: Array<{
@@ -469,6 +478,7 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
       gst_rate: string | null;
       is_customizable: boolean;
       customization_label: string | null;
+      video_public_id: string | null;
     }
   >(
     `select
@@ -476,7 +486,7 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
        p.review_count, p.is_bestseller, p.maker_name, p.seller_id,
        p.short_description, p.description, p.product_type, p.specs,
        p.processing_days, p.processing_days_max, p.tags, p.category_id, p.subcategory_id,
-       p.is_customizable, p.customization_label,
+       p.is_customizable, p.customization_label, p.video_public_id,
        s.shop_name, s.shop_slug, s.logo_url, s.badge,
        s.selling_scope, s.selling_state,
        coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
@@ -549,6 +559,9 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
     shortDescription: row.short_description,
     description: row.description,
     productType: row.product_type,
+    video: row.video_public_id
+      ? { url: productVideoUrl(row.video_public_id), posterUrl: productVideoPosterUrl(row.video_public_id) }
+      : null,
     specs: row.specs ?? [],
     processingDays: Number(row.processing_days),
     // Upper bound of the "ships in" estimate; older listings fall back to min + 1.
@@ -714,6 +727,7 @@ export async function getRelatedProducts(
        p.id, p.slug, p.title, p.base_price, p.compare_at_price, p.avg_rating,
        p.review_count, p.is_bestseller, p.maker_name, p.seller_id,
        s.shop_name, s.shop_slug,
+       ${PRODUCT_GST_PERCENT_SQL} as gst_percent,
        (
          select pi.url from public.product_images pi
          where pi.product_id = p.id

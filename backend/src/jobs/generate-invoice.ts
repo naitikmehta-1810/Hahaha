@@ -30,7 +30,11 @@ function getQueue() {
 
 export async function enqueueInvoiceGeneration(orderId: string) {
   try {
-    await getQueue().add("generate-invoice", { orderId }, { jobId: `invoice-${orderId}` });
+    const { withQueueTimeout } = await import("../services/notify.enqueue.js");
+    await withQueueTimeout(
+      getQueue().add("generate-invoice", { orderId }, { jobId: `invoice-${orderId}` }),
+      "invoice"
+    );
   } catch (error) {
     console.error("[invoice] enqueue failed", error);
   }
@@ -674,7 +678,8 @@ async function loadInvoiceData(
       invoiceNumber,
       orderNumber: row.order_number,
       orderDate: new Date(row.placed_at ?? row.created_at).toLocaleDateString("en-IN"),
-      paymentMethod: row.payment_method ?? "card",
+      // Unknown only if Razorpay did not report a method; never guess "card".
+      paymentMethod: row.payment_method ?? "online",
       paymentReference: row.payment_reference,
       customerName: address.recipientName || row.full_name || "Customer",
       shippingLines: [

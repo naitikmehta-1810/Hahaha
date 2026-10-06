@@ -123,12 +123,22 @@ export async function createPendingShipments(orderId: string) {
     throw new AppError(404, "ORDER_NOT_FOUND", "Order not found");
   }
 
+  // Only sellers with something physical on the order ship a parcel.
   const sellers = await pool.query<{ seller_id: string }>(
-    `select distinct seller_id from public.order_items where order_id = $1 order by seller_id`,
+    `select distinct seller_id from public.order_items
+     where order_id = $1 and not is_digital
+     order by seller_id`,
     [orderId]
   );
   if (sellers.rows.length === 0) {
-    throw new AppError(409, "ORDER_HAS_NO_ITEMS", "Order has no line items to ship");
+    const anyItems = await pool.query(`select 1 from public.order_items where order_id = $1 limit 1`, [
+      orderId,
+    ]);
+    if (!anyItems.rows[0]) {
+      throw new AppError(409, "ORDER_HAS_NO_ITEMS", "Order has no line items to ship");
+    }
+    // All-digital order: delivered by digital-delivery.service, not by courier.
+    return { shipments: [] as Array<{ id: string; sellerId: string }> };
   }
 
   const created: Array<{ id: string; sellerId: string }> = [];
@@ -376,7 +386,7 @@ async function bookShiprocketAwb(opts: {
             p.use_volumetric
      from public.order_items oi
      left join public.products p on p.id = oi.product_id
-     where oi.order_id = $1 and oi.seller_id = $2`,
+     where oi.order_id = $1 and oi.seller_id = $2 and not oi.is_digital`,
     [opts.orderId, opts.sellerId]
   );
   if (items.rows.length === 0) {

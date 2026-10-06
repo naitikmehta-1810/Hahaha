@@ -5,6 +5,7 @@ import express from "express";
 import helmet from "helmet";
 import authRouter from "./routes/auth.js";
 import cartRouter from "./routes/cart.js";
+import downloadsRouter from "./routes/downloads.js";
 import ordersRouter from "./routes/orders.js";
 import addressesRouter from "./routes/addresses.js";
 import categoriesRouter from "./routes/categories.js";
@@ -137,6 +138,7 @@ app.get("/api/health", async (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/cart", cartRouter);
 app.use("/api/orders", ordersRouter);
+app.use("/api/downloads", downloadsRouter);
 app.use("/api/addresses", addressesRouter);
 // Public catalog + storefront reads (no auth required).
 app.use("/api/categories", categoriesRouter);

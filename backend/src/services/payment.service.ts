@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from "node:crypto";
+import { inclusiveLineTotal, taxForLines } from "./gst.js";
 import type { PoolClient } from "pg";
 import Razorpay from "razorpay";
 import { pool } from "../config/db.js";
@@ -40,7 +41,7 @@ export async function captureInventoryForPaidOrder(client: PoolClient, orderId: 
   const items = await client.query<{ variant_id: string; quantity: number }>(
     `select variant_id, quantity
      from public.order_items
-     where order_id = $1 and is_backordered = false
+     where order_id = $1 and is_backordered = false and is_digital = false
      for update`,
     [orderId]
   );
@@ -220,9 +221,11 @@ async function loadNotifyOrderItems(orderId: string) {
     unit_price: string;
     line_total: string;
     variant_option_values: Record<string, unknown> | null;
+    is_digital: boolean;
+    gst_rate: string | null;
   }>(
     `select product_title, product_thumbnail_url, quantity, unit_price, line_total,
-            variant_option_values
+            variant_option_values, is_digital, gst_rate
      from public.order_items
      where order_id = $1
      order by created_at asc`,
@@ -239,7 +242,36 @@ async function loadNotifyOrderItems(orderId: string) {
           .map(([k, v]) => `${k}: ${String(v)}`)
           .join(", ")
       : null,
+    isDigital: item.is_digital,
+    // Buyers see GST-inclusive prices on the site, so emails match.
+    gstPercent: item.gst_rate,
+    unitPriceInclGst: inclusiveLineTotal(Number(item.unit_price), item.gst_rate),
+    lineTotalInclGst: inclusiveLineTotal(Number(item.line_total), item.gst_rate),
   }));
+}
+
+/**
+ * Totals as the site shows them: items with GST, the coupon's effect on the
+ * GST-inclusive total, shipping, and the GST contained in the total. The rows
+ * add up exactly to total_amount.
+ */
+function inclusiveTotals(
+  order: NotifyOrderSnapshot,
+  items: Awaited<ReturnType<typeof loadNotifyOrderItems>>
+) {
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const itemsInclGst = round(
+    Number(order.subtotal) +
+      taxForLines(items.map((item) => ({ gross: item.lineTotal, gstPercent: item.gstPercent })), 0).taxAmount
+  );
+  const goodsAfterDiscount = round(
+    Number(order.subtotal) - Number(order.discount_amount) + Number(order.tax_amount)
+  );
+  return {
+    itemsInclGst,
+    discountInclGst: Number(order.discount_amount) > 0 ? round(itemsInclGst - goodsAfterDiscount) : 0,
+    gstIncluded: Number(order.tax_amount),
+  };
 }
 
 function buildOrderNotifyPayload(order: NotifyOrderSnapshot, items: Awaited<ReturnType<typeof loadNotifyOrderItems>>) {
@@ -250,6 +282,9 @@ function buildOrderNotifyPayload(order: NotifyOrderSnapshot, items: Awaited<Retu
     orderNumber: order.order_number,
     customerName: order.full_name ?? address.recipientName ?? undefined,
     items,
+    hasDigitalItems: items.some((item) => item.isDigital),
+    ...inclusiveTotals(order, items),
+    isDigitalOnly: items.length > 0 && items.every((item) => item.isDigital),
     shippingAddress: {
       recipientName: address.recipientName ?? order.full_name ?? "Customer",
       phoneNumber: address.phoneNumber ?? order.phone_number ?? undefined,
@@ -283,6 +318,12 @@ function resolveWhatsAppTo(order: NotifyOrderSnapshot): string | null {
 
 /** Phase 5/6 enqueue — never throw into the webhook path. */
 async function enqueuePostCaptureJobs(orderId: string) {
+  // Started first and on its own: completing an all-digital order must not wait
+  // on (or be skipped by) the email/invoice steps below, which can stall when
+  // Redis is unreachable.
+  void import("./digital-delivery.service.js")
+    .then(({ fulfilDigitalItems }) => fulfilDigitalItems(orderId))
+    .catch((error) => console.error(`[payments] digital fulfilment failed order=${orderId}`, error));
   try {
     const { enqueueInvoiceGeneration } = await import("../jobs/generate-invoice.js");
     const { createPendingShipments } = await import("./shipping.service.js");
@@ -317,6 +358,7 @@ async function enqueuePostCaptureJobs(orderId: string) {
       console.error("[payments] createPendingShipments after capture failed", error);
     }
 
+
     try {
       await maybeEnqueueLowStockAlerts(pool, orderId);
     } catch (error) {
@@ -334,6 +376,19 @@ async function markPaymentFailed(paymentId: string, payload: unknown) {
      where id = $1 and status in ('created', 'authorized')`,
     [paymentId, JSON.stringify(payload)]
   );
+}
+
+/** Razorpay's payment.method, when it is one we record ("emi" etc. are left out). */
+function gatewayMethodFrom(payload: unknown): "card" | "upi" | "netbanking" | "wallet" | null {
+  const p = payload as {
+    method?: unknown;
+    entity?: { method?: unknown };
+    payload?: { payment?: { entity?: { method?: unknown } } };
+  } | null;
+  const method = p?.payload?.payment?.entity?.method ?? p?.entity?.method ?? p?.method;
+  return method === "card" || method === "upi" || method === "netbanking" || method === "wallet"
+    ? method
+    : null;
 }
 
 async function applyCapturedPayment(opts: {
@@ -410,6 +465,15 @@ async function applyCapturedPayment(opts: {
          where id = $2`,
         [opts.gatewayPaymentId, payment.order_id]
       );
+      // "Pay online" leaves the method open; record what Razorpay actually used.
+      const usedMethod = gatewayMethodFrom(opts.payload);
+      if (usedMethod) {
+        await client.query(
+          `update public.orders set payment_method = $1
+           where id = $2 and payment_method is null`,
+          [usedMethod, payment.order_id]
+        );
+      }
     } else if (orderStatus === "paid") {
       // Already paid (race / replay) — still ensure this payment row is captured if possible.
     } else {

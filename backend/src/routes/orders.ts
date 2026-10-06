@@ -12,6 +12,7 @@ import {
 import { getInvoicePdfForOrder } from "../jobs/generate-invoice.js";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
+import { resolveDigitalDownload } from "../services/digital-delivery.service.js";
 
 const ordersRouter = Router();
 
@@ -104,6 +105,28 @@ ordersRouter.post(
       parsed.data.reason ?? null
     );
     res.json(result);
+  })
+);
+
+/** A short-lived link to one file the buyer bought on this order. */
+ordersRouter.get(
+  "/:id/items/:itemId/files/:fileId/download",
+  asyncHandler(async (req, res) => {
+    const ids = z
+      .object({ id: z.string().uuid(), itemId: z.string().uuid(), fileId: z.string().uuid() })
+      .safeParse(req.params);
+    if (!ids.success) {
+      res.status(404).json({ message: "Download not found" });
+      return;
+    }
+    const download = await resolveDigitalDownload({
+      orderId: ids.data.id,
+      orderItemId: ids.data.itemId,
+      fileId: ids.data.fileId,
+      userId: req.user!.id,
+    });
+    res.setHeader("Cache-Control", "no-store");
+    res.json(download);
   })
 );
 

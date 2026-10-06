@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { formatInr, inclusiveLineTotal, orderTotalsInclGst } from "@/utils/gst";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -120,6 +121,7 @@ export default function OrderTrackingPage() {
     );
   }
 
+  const orderTotals = orderTotalsInclGst(order);
   const address = order.shippingAddress;
   const stages = order.trackingStages.length
     ? order.trackingStages
@@ -346,7 +348,7 @@ export default function OrderTrackingPage() {
                   ) : null}
                 </div>
                 <span className={styles.itemPrice}>
-                  ₹{item.lineTotal.toLocaleString("en-IN")}
+                  {formatInr(inclusiveLineTotal(item.lineTotal, item.gstPercent))}
                 </span>
               </div>
             ))}
@@ -381,9 +383,15 @@ export default function OrderTrackingPage() {
               <FileText size={16} className={styles.cardTitleIcon} /> Order Summary
             </h3>
             <div className={styles.row}>
-              <span>Subtotal</span>
-              <span>₹{order.subtotal.toLocaleString("en-IN")}</span>
+              <span>Items (incl. GST)</span>
+              <span>{formatInr(orderTotals.itemsInclGst)}</span>
             </div>
+            {orderTotals.discountInclGst > 0 ? (
+              <div className={styles.row}>
+                <span>Discount{order.couponCode ? ` (${order.couponCode})` : ""}</span>
+                <span>−{formatInr(orderTotals.discountInclGst)}</span>
+              </div>
+            ) : null}
             <div className={styles.row}>
               <span>Shipping</span>
               <span className={order.shippingAmount === 0 ? styles.freeText : undefined}>
@@ -392,14 +400,16 @@ export default function OrderTrackingPage() {
                   : `₹${order.shippingAmount.toLocaleString("en-IN")}`}
               </span>
             </div>
-            <div className={styles.row}>
-              <span>GST ({Number(((order.taxRate ?? 0.18) * 100).toFixed(2))}%)</span>
-              <span>₹{order.taxAmount.toLocaleString("en-IN")}</span>
-            </div>
             <div className={styles.rowBold}>
               <span>Total</span>
-              <span>₹{order.totalAmount.toLocaleString("en-IN")}</span>
+              <span>{formatInr(order.totalAmount)}</span>
             </div>
+            {orderTotals.gstIncluded > 0 ? (
+              <div className={styles.row}>
+                <span>Includes GST</span>
+                <span>{formatInr(orderTotals.gstIncluded)}</span>
+              </div>
+            ) : null}
             {shippingSaved > 0 ? (
               <div className={styles.savingsBanner}>
                 You saved ₹{shippingSaved} on shipping.

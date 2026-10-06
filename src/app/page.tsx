@@ -93,6 +93,7 @@ function ProductGrid({ products, loading }: { products: CatalogProduct[]; loadin
                 <ProductCard.Subtitle>{product.shopName}</ProductCard.Subtitle>
                 <ProductCard.Price
                   amount={product.price}
+                    gstPercent={product.gstPercent}
                   originalAmount={product.compareAtPrice ?? undefined}
                   discountPercentage={product.discountPercent ?? undefined}
                 />

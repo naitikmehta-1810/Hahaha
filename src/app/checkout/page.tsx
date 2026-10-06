@@ -9,6 +9,8 @@ import {
   Tag,
   Truck,
   RotateCcw,
+  Download,
+  Mail,
   ShieldCheck,
   Headphones,
 } from "lucide-react";
@@ -33,7 +35,7 @@ import {
   placeOrder,
   refreshCart,
 } from "@/utils/cart";
-import { computeGstAmount, gstSummaryLabel } from "@/utils/gst";
+import { formatInr, inclusiveLineTotal, totalsInclGst } from "@/utils/gst";
 import {
   createPaymentOrder,
   openRazorpayCheckout,
@@ -80,27 +82,24 @@ const STEPS = [
   "Place Order",
 ] as const;
 
-type PaymentMethod = "card" | "upi" | "netbanking" | "wallet" | "cod";
+/** Razorpay Checkout offers UPI, cards, net banking and wallets itself. */
+type PaymentMethod = "online" | "cod";
 type DeliveryOption = "standard" | "express";
 
 const EXPRESS_SHIPPING = 249;
 const STANDARD_SHIPPING_BELOW_THRESHOLD = 49;
 const COD_MAX_ORDER_VALUE = 5000;
+const PAID_OR_LATER = new Set([
+  "paid",
+  "processing",
+  "accepted",
+  "shipped",
+  "out_for_delivery",
+  "delivered",
+]);
 
 function normalizePayment(raw: string | null): PaymentMethod {
-  if (
-    raw === "upi" ||
-    raw === "netbanking" ||
-    raw === "wallet" ||
-    raw === "card" ||
-    raw === "cod"
-  ) {
-    return raw;
-  }
-  if (raw === "wallets") return "wallet";
-  if (raw === "net") return "netbanking";
-  if (raw === "cash" || raw === "cash_on_delivery") return "cod";
-  return "card";
+  return raw === "cod" || raw === "cash" || raw === "cash_on_delivery" ? "cod" : "online";
 }
 
 export default function CheckoutPage() {
@@ -203,24 +202,36 @@ function CheckoutInner() {
     [cartItems]
   );
 
-  const subtotal = availableItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+  // Buyers see GST-inclusive prices; free shipping is measured on that value too.
+  const itemsInclGst = totalsInclGst(availableItems, 0, 0).itemsInclGst;
+  const hasDigital = availableItems.some((item) => item.isDigital);
+  // Downloads don't ship: an all-digital order has no delivery step or charge.
+  const hasPhysical = availableItems.some((item) => !item.isDigital);
   const qualifiesFree =
-    freeShipping.qualifies || subtotal >= freeShipping.threshold || freeShipping.remaining <= 0;
+    freeShipping.qualifies || itemsInclGst >= freeShipping.threshold || freeShipping.remaining <= 0;
 
-  const shippingAmount =
-    deliveryOption === "express"
+  const shippingAmount = !hasPhysical
+    ? 0
+    : deliveryOption === "express"
       ? EXPRESS_SHIPPING
       : qualifiesFree
         ? 0
-        : availableItems.length > 0
-          ? STANDARD_SHIPPING_BELOW_THRESHOLD
-          : 0;
+        : STANDARD_SHIPPING_BELOW_THRESHOLD;
 
-  const tax = computeGstAmount(availableItems, discountAmount);
-  const taxLabel = gstSummaryLabel(availableItems);
-  const total = Math.max(subtotal - discountAmount, 0) + shippingAmount + tax;
+  const { discountInclGst, gstIncluded, total } = totalsInclGst(
+    availableItems,
+    discountAmount,
+    shippingAmount
+  );
   const savedOnShipping =
-    deliveryOption === "standard" && qualifiesFree ? EXPRESS_SHIPPING : 0;
+    hasPhysical && deliveryOption === "standard" && qualifiesFree ? EXPRESS_SHIPPING : 0;
+  const codBlockedReason = hasDigital
+    ? "Not available for digital products"
+    : total > COD_MAX_ORDER_VALUE
+      ? `Unavailable over ₹${COD_MAX_ORDER_VALUE.toLocaleString("en-IN")}`
+      : null;
+  // A COD choice made before a download was added falls back to paying online.
+  const effectivePayment: PaymentMethod = paymentMethod === "cod" && codBlockedReason ? "online" : paymentMethod;
 
   const updateField = (key: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -304,7 +315,9 @@ function CheckoutInner() {
     const deadline = Date.now() + 45_000;
     while (Date.now() < deadline) {
       const detail = await fetchOrderDetail(orderId);
-      if (detail?.status === "paid") {
+      // Payment moves the order on fast (processing, or delivered for an
+      // all-digital order), so any post-payment status counts as paid.
+      if (detail && PAID_OR_LATER.has(detail.status)) {
         return "paid" as const;
       }
       await new Promise((r) => setTimeout(r, 2000));
@@ -344,7 +357,8 @@ function CheckoutInner() {
       name: form.fullName || user?.fullName || undefined,
       email: email || undefined,
       contact: form.phone || user?.phoneNumber || undefined,
-      method: paymentMethod === "cod" ? undefined : paymentMethod,
+      // No method preset: Razorpay shows every option the buyer can use.
+      method: undefined,
       onSuccess: () => {
         void (async () => {
           // Never trust client callback alone — poll until webhook marks paid.
@@ -387,26 +401,20 @@ function CheckoutInner() {
       return;
     }
 
-    if (paymentMethod === "cod" && total > COD_MAX_ORDER_VALUE) {
-      setStatus(
-        `Cash on Delivery is only available for orders up to ₹${COD_MAX_ORDER_VALUE.toLocaleString("en-IN")}. Please pay online instead.`
-      );
-      return;
-    }
-
     setPlacing(true);
     try {
       const addressId = await resolveAddressId();
       const result = await placeOrder(addressId, {
-        deliveryOption,
-        paymentMethod,
+        deliveryOption: hasPhysical ? deliveryOption : "standard",
+        // Online orders record the method Razorpay actually used, at capture.
+        paymentMethod: effectivePayment === "cod" ? "cod" : null,
       });
       const orderNumber =
         result.order.orderNumber || result.payment.receipt || result.order.id.slice(0, 8);
       const email = form.email || user?.email || "";
       setCartItems([]);
 
-      if (paymentMethod === "cod") {
+      if (effectivePayment === "cod") {
         setConfirmation({
           orderId: result.order.id,
           orderNumber,
@@ -551,7 +559,9 @@ function CheckoutInner() {
               <span className={styles.stepCircle}>
                 {index < step ? <Check size={14} /> : index + 1}
               </span>
-              <span className={styles.stepLabel}>{label}</span>
+              <span className={styles.stepLabel}>
+                {index === 0 && !hasPhysical && availableItems.length > 0 ? "Billing Information" : label}
+              </span>
             </div>
           </React.Fragment>
         ))}
@@ -567,9 +577,15 @@ function CheckoutInner() {
         <div className={styles.main}>
           {step === 0 ? (
             <div className={styles.card}>
-              <h3 className={styles.cardTitle}>Shipping Information</h3>
+              <h3 className={styles.cardTitle}>
+                {hasPhysical ? "Shipping Information" : "Billing Information"}
+              </h3>
               <p className={styles.cardSub}>
-                Enter your details to get your order delivered.
+                {hasPhysical
+                  ? hasDigital
+                    ? "Enter your details to get your order delivered. Your digital items are emailed right after payment."
+                    : "Enter your details to get your order delivered."
+                  : "Nothing ships: your downloads are ready right after payment. We need a billing address for your GST invoice."}
               </p>
 
               {addresses.length > 0 ? (
@@ -712,6 +728,8 @@ function CheckoutInner() {
                 </label>
               )}
 
+              {hasPhysical ? (
+              <>
               <h3 className={`${styles.cardTitle} ${styles.cardTitleSpaced}`}>
                 Delivery Options
               </h3>
@@ -759,6 +777,8 @@ function CheckoutInner() {
                   <span className={styles.deliveryPrice}>₹{EXPRESS_SHIPPING}</span>
                 </label>
               </div>
+              </>
+              ) : null}
 
               <div className={styles.stepActions}>
                 <Link href="/cart">
@@ -797,7 +817,7 @@ function CheckoutInner() {
                         </div>
                       </div>
                       <div className={styles.summaryItemPrice}>
-                        ₹{(item.price * item.qty).toLocaleString("en-IN")}
+                        {formatInr(inclusiveLineTotal(item.price * item.qty, item.gstPercent))}
                       </div>
                     </div>
                   ))}
@@ -818,59 +838,51 @@ function CheckoutInner() {
             <div className={styles.card}>
               <h3 className={styles.cardTitle}>Payment Method</h3>
               <p className={styles.cardSub}>
-                Select how you&apos;ll pay. Online methods open Razorpay Checkout; COD
-                confirms the order without a card charge.
+                Pay online through Razorpay with UPI, cards, net banking or wallets
+                {hasDigital ? "." : ", or pay in cash when your order arrives."}
               </p>
 
               {(
                 [
-                  ["card", "Credit / Debit Card"],
-                  ["upi", "UPI"],
-                  ["netbanking", "Net Banking"],
-                  ["wallet", "Wallets"],
+                  ["online", "Pay online"],
                   ["cod", "Cash on Delivery"],
                 ] as Array<[PaymentMethod, string]>
-              ).map(([value, label]) => (
-                <label
-                  key={value}
-                  className={`${styles.radioItem} ${
-                    paymentMethod === value ? styles.radioItemActive : ""
-                  }`}
-                >
-                  <span className={styles.radioLeft}>
-                    <input
-                      type="radio"
-                      name="checkout-payment"
-                      checked={paymentMethod === value}
-                      disabled={value === "cod" && total > COD_MAX_ORDER_VALUE}
-                      onChange={() => setPaymentMethod(value)}
-                    />
-                    <span>{label}</span>
-                  </span>
-                  {value === "card" ? (
-                    <span className={styles.methodLogos}>
-                      <PaymentIcon brand="visa" />
-                      <PaymentIcon brand="mastercard" />
-                      <PaymentIcon brand="rupay" />
+              ).map(([value, label]) => {
+                const blocked = value === "cod" ? codBlockedReason : null;
+                return (
+                  <label
+                    key={value}
+                    className={`${styles.radioItem} ${
+                      effectivePayment === value ? styles.radioItemActive : ""
+                    } ${blocked ? styles.radioItemDisabled : ""}`}
+                  >
+                    <span className={styles.radioLeft}>
+                      <input
+                        type="radio"
+                        name="checkout-payment"
+                        checked={effectivePayment === value}
+                        disabled={Boolean(blocked)}
+                        onChange={() => setPaymentMethod(value)}
+                      />
+                      <span>
+                        <span>{label}</span>
+                        {value === "online" ? (
+                          <span className={styles.methodNote}>UPI · Cards · Net banking · Wallets</span>
+                        ) : null}
+                      </span>
                     </span>
-                  ) : null}
-                  {value === "upi" ? (
-                    <span className={styles.methodLogos}>
-                      <PaymentIcon brand="upi" />
-                    </span>
-                  ) : null}
-                  {value === "wallet" ? (
-                    <span className={styles.methodLogos}>
-                      <PaymentIcon brand="paytm" />
-                    </span>
-                  ) : null}
-                  {value === "cod" && total > COD_MAX_ORDER_VALUE ? (
-                    <span className={styles.cardSub}>
-                      Unavailable over ₹{COD_MAX_ORDER_VALUE.toLocaleString("en-IN")}
-                    </span>
-                  ) : null}
-                </label>
-              ))}
+                    {value === "online" ? (
+                      <span className={styles.methodLogos}>
+                        <PaymentIcon brand="upi" />
+                        <PaymentIcon brand="visa" />
+                        <PaymentIcon brand="mastercard" />
+                        <PaymentIcon brand="rupay" />
+                      </span>
+                    ) : null}
+                    {blocked ? <span className={styles.cardSub}>{blocked}</span> : null}
+                  </label>
+                );
+              })}
 
               <div className={styles.stepActions}>
                 <Button variant="outline" onClick={goBack}>
@@ -914,7 +926,7 @@ function CheckoutInner() {
                     </div>
                   </div>
                   <span className={styles.summaryItemPrice}>
-                    ₹{(item.price * item.qty).toLocaleString("en-IN")}
+                    {formatInr(inclusiveLineTotal(item.price * item.qty, item.gstPercent))}
                   </span>
                 </div>
               ))}
@@ -925,29 +937,33 @@ function CheckoutInner() {
               ) : null}
             </div>
             <div className={styles.row}>
-              <span>Subtotal</span>
-              <span>₹{subtotal.toLocaleString("en-IN")}</span>
+              <span>Items (incl. GST)</span>
+              <span>{formatInr(itemsInclGst)}</span>
             </div>
             {discountAmount > 0 ? (
               <div className={styles.row}>
                 <span>Discount</span>
-                <span>−₹{discountAmount.toLocaleString("en-IN")}</span>
+                <span>−{formatInr(discountInclGst)}</span>
               </div>
             ) : null}
-            <div className={styles.row}>
-              <span>Shipping</span>
-              <span className={shippingAmount === 0 ? styles.freePrice : undefined}>
-                {shippingAmount === 0 ? "Free" : `₹${shippingAmount}`}
-              </span>
-            </div>
-            <div className={styles.row}>
-              <span>{taxLabel}</span>
-              <span>₹{tax.toLocaleString("en-IN")}</span>
-            </div>
+            {hasPhysical ? (
+              <div className={styles.row}>
+                <span>Shipping</span>
+                <span className={shippingAmount === 0 ? styles.freePrice : undefined}>
+                  {shippingAmount === 0 ? "Free" : formatInr(shippingAmount)}
+                </span>
+              </div>
+            ) : null}
             <div className={styles.rowBold}>
               <span>Total</span>
-              <span>₹{total.toLocaleString("en-IN")}</span>
+              <span>{formatInr(total)}</span>
             </div>
+            {gstIncluded > 0 ? (
+              <div className={styles.row}>
+                <span>Includes GST</span>
+                <span>{formatInr(gstIncluded)}</span>
+              </div>
+            ) : null}
             {savedOnShipping > 0 ? (
               <div className={styles.savingsBanner}>
                 <Tag size={14} />
@@ -979,20 +995,41 @@ function CheckoutInner() {
       </div>
 
       <div className={styles.valueProps}>
-        <div className={styles.propItem}>
-          <Truck size={18} className={styles.propIcon} />
-          <div>
-            <div className={styles.propTitle}>Free Shipping</div>
-            <div className={styles.propDesc}>On orders over ₹499</div>
-          </div>
-        </div>
-        <div className={styles.propItem}>
-          <RotateCcw size={18} className={styles.propIcon} />
-          <div>
-            <div className={styles.propTitle}>Easy Returns</div>
-            <div className={styles.propDesc}>Within 7 days</div>
-          </div>
-        </div>
+        {hasPhysical || availableItems.length === 0 ? (
+          <>
+            <div className={styles.propItem}>
+              <Truck size={18} className={styles.propIcon} />
+              <div>
+                <div className={styles.propTitle}>Free Shipping</div>
+                <div className={styles.propDesc}>On orders over ₹499</div>
+              </div>
+            </div>
+            <div className={styles.propItem}>
+              <RotateCcw size={18} className={styles.propIcon} />
+              <div>
+                <div className={styles.propTitle}>Easy Returns</div>
+                <div className={styles.propDesc}>Within 7 days</div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={styles.propItem}>
+              <Download size={18} className={styles.propIcon} />
+              <div>
+                <div className={styles.propTitle}>Instant Download</div>
+                <div className={styles.propDesc}>Right after payment</div>
+              </div>
+            </div>
+            <div className={styles.propItem}>
+              <Mail size={18} className={styles.propIcon} />
+              <div>
+                <div className={styles.propTitle}>Sent by Email</div>
+                <div className={styles.propDesc}>Plus your order page</div>
+              </div>
+            </div>
+          </>
+        )}
         <div className={styles.propItem}>
           <ShieldCheck size={18} className={styles.propIcon} />
           <div>

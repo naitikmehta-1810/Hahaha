@@ -16,6 +16,7 @@
     "proof:race": "tsx scripts/concurrency-race-proof.mts",
     "proof:seller-scope": "tsx scripts/seller-scope-regression.mts",
     "proof:maintenance": "tsx scripts/maintenance-proof.mts",
+    "proof:digital": "tsx scripts/digital-products-proof.mts",
     "proof:lifecycle": "tsx scripts/lifecycle-email-integration.mts",
     "proof:cod-invoice": "tsx scripts/cod-invoice-proof.mts",
     "proof:analytics": "tsx scripts/edit-analytics-proof.mts",

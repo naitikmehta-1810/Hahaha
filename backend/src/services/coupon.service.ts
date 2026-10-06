@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { goodsValueInclGst, PRODUCT_GST_PERCENT_SQL } from "./gst.js";
 import { pool } from "../config/db.js";
 
 export type CouponInvalidReason =
@@ -21,6 +22,8 @@ export type CouponCartItem = {
   unitPrice: number;
   categoryId: string;
   available: boolean;
+  /** Line GST rate; the minimum order is checked against the GST-inclusive value. */
+  gstPercent?: number | string | null;
 };
 
 export type CouponRow = {
@@ -108,7 +111,13 @@ export async function validateCoupon(
     return { valid: false, reason: "EXPIRED" };
   }
 
-  if (coupon.min_order_value != null && cartSubtotal < money(coupon.min_order_value)) {
+  // Buyers see GST-inclusive prices, so "minimum order ₹X" is measured the same way.
+  const minOrderBasis = goodsValueInclGst(
+    cartItems
+      .filter((item) => item.available)
+      .map((item) => ({ gross: item.unitPrice * item.quantity, gstPercent: item.gstPercent }))
+  );
+  if (coupon.min_order_value != null && minOrderBasis < money(coupon.min_order_value)) {
     return { valid: false, reason: "MIN_ORDER_NOT_MET" };
   }
 
@@ -166,6 +175,7 @@ export async function loadCartItemsForCoupon(
     quantity: number;
     price: string;
     category_id: string;
+    gst_percent: string;
     variant_active: boolean;
     product_status: string;
     variant_deleted: Date | null;
@@ -176,6 +186,7 @@ export async function loadCartItemsForCoupon(
        ci.quantity,
        pv.price,
        p.category_id,
+       ${PRODUCT_GST_PERCENT_SQL} as gst_percent,
        pv.is_active as variant_active,
        p.status as product_status,
        pv.deleted_at as variant_deleted,
@@ -199,6 +210,7 @@ export async function loadCartItemsForCoupon(
       unitPrice: Number(row.price),
       categoryId: row.category_id,
       available,
+      gstPercent: row.gst_percent,
     };
   });
 

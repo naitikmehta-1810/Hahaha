@@ -1,0 +1,311 @@
+.gallery {
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* ── Thumbnail rail ── */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 76px;
+  flex-shrink: 0;
+}
+
+.thumb {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 2px solid transparent;
+  background-color: var(--color-surface-muted);
+  box-shadow: 0 0 0 1px var(--color-border);
+  opacity: 0.75;
+  transition: opacity var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.thumb:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.thumbActive {
+  border-color: var(--color-primary);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbPlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: rgba(20, 10, 40, 0.28);
+}
+
+/* Fills under the active thumbnail in step with the reel. */
+.thumbProgress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--color-primary);
+  transform-origin: left center;
+}
+
+/* ── Stage ── */
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface-muted);
+  outline: none;
+  touch-action: pan-y;
+  isolation: isolate;
+}
+
+.stage:focus-visible {
+  box-shadow: 0 0 0 3px var(--color-primary-border);
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: scale(1.04);
+  transition: opacity 700ms ease, transform 900ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  pointer-events: none;
+}
+
+.slideActive {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #0f0a19;
+}
+
+img.media {
+  background: transparent;
+  will-change: transform;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+/* Four slow drifts, alternated so consecutive photos never move the same way. */
+.drift0 {
+  animation-name: driftA;
+}
+.drift1 {
+  animation-name: driftB;
+}
+.drift2 {
+  animation-name: driftC;
+}
+.drift3 {
+  animation-name: driftD;
+}
+
+.driftPaused {
+  animation-play-state: paused;
+}
+
+@keyframes driftA {
+  from { transform: scale(1.02) translate(0, 0); }
+  to { transform: scale(1.12) translate(-2%, -1.5%); }
+}
+@keyframes driftB {
+  from { transform: scale(1.12) translate(2%, 1%); }
+  to { transform: scale(1.02) translate(0, 0); }
+}
+@keyframes driftC {
+  from { transform: scale(1.03) translate(1.5%, -1%); }
+  to { transform: scale(1.13) translate(-1%, 1.5%); }
+}
+@keyframes driftD {
+  from { transform: scale(1.1) translate(-1.5%, 1.5%); }
+  to { transform: scale(1.02) translate(1%, -0.5%); }
+}
+
+.bigPlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: var(--radius-full);
+  transform: translate(-50%, -50%);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-lg);
+  transition: transform var(--transition-fast);
+}
+
+.bigPlay:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-text-main);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity var(--transition-fast);
+}
+
+.arrowPrev {
+  left: 12px;
+}
+
+.arrowNext {
+  right: 12px;
+}
+
+.stage:hover .arrow,
+.arrow:focus-visible {
+  opacity: 1;
+}
+
+/* Bottom HUD: story segments, controls and counter over a soft scrim. */
+.hud {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 40px 14px 12px;
+  background: linear-gradient(to top, rgba(15, 8, 30, 0.42), rgba(15, 8, 30, 0));
+  pointer-events: none;
+}
+
+.segments {
+  display: flex;
+  gap: 4px;
+}
+
+.segment {
+  flex: 1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.segmentVideo {
+  flex: 1.6;
+}
+
+.segmentFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #fff;
+  transform-origin: left center;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  order: -1;
+}
+
+.control {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--color-text-main);
+  box-shadow: var(--shadow-sm);
+  pointer-events: auto;
+}
+
+.counter {
+  margin-right: auto;
+  order: -1;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(15, 8, 30, 0.45);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 700px) {
+  .gallery {
+    flex-direction: column-reverse;
+  }
+
+  .rail {
+    flex-direction: row;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .thumb {
+    width: 60px;
+    height: 60px;
+    flex-shrink: 0;
+  }
+
+  .arrow {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide {
+    transform: none;
+    transition: opacity 200ms linear;
+  }
+
+  img.media {
+    animation: none !important;
+  }
+}

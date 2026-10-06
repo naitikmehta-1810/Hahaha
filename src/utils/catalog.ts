@@ -28,9 +28,13 @@ export type ProductCard = {
   shopName: string;
   shopSlug: string;
   makerName: string | null;
+  /** GST percent; buyers see prices with it included (see priceWithGst). */
+  gstPercent?: number;
 };
 
 export type ProductDetail = ProductCard & {
+  /** Plays first in the product gallery, before the photos. */
+  video?: { url: string; posterUrl: string } | null;
   shortDescription: string | null;
   description: string | null;
   productType: string;

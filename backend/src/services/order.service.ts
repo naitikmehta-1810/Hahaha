@@ -1,8 +1,9 @@
 import type { PoolClient } from "pg";
+import { listOrderDownloads, type DigitalFileView } from "./digital-delivery.service.js";
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
-import { appliedGstPercent, taxForLines } from "./gst.js";
-import { clearCartItems, getUserCartForOrder } from "./cart.service.js";
+import { appliedGstPercent, goodsValueInclGst, taxForLines } from "./gst.js";
+import { clearCartItems, DIGITAL_FILE_READY_SQL, getUserCartForOrder } from "./cart.service.js";
 import { validateCoupon } from "./coupon.service.js";
 import { sameState } from "./pincode.service.js";
 import {
@@ -77,6 +78,8 @@ type CartLineForOrder = {
   product_deleted: Date | null;
   customization_note: string | null;
   is_customizable: boolean;
+  product_type: string;
+  has_digital_file: boolean;
 };
 
 function money(value: string | number) {
@@ -99,11 +102,11 @@ export function isPaymentMethod(value: unknown): value is PaymentMethod {
  * Standard is free at or above the free-shipping threshold and a configured flat rate
  * below it; express is a flat rate regardless of subtotal, matching the checkout UI.
  */
-export function computeShippingAmount(deliveryOption: DeliveryOption, subtotal: number) {
+export function computeShippingAmount(deliveryOption: DeliveryOption, goodsValueInclGst: number) {
   if (deliveryOption === "express") {
     return env.EXPRESS_SHIPPING_AMOUNT;
   }
-  return subtotal >= env.FREE_SHIPPING_THRESHOLD ? 0 : env.STANDARD_SHIPPING_AMOUNT;
+  return goodsValueInclGst >= env.FREE_SHIPPING_THRESHOLD ? 0 : env.STANDARD_SHIPPING_AMOUNT;
 }
 
 /** Tax applies to the discounted subtotal, not the gross subtotal. */
@@ -205,7 +208,9 @@ async function loadCartLines(client: PoolClient, cartId: string) {
        pv.deleted_at as variant_deleted,
        p.deleted_at as product_deleted,
        ci.customization_note,
-       p.is_customizable
+       p.is_customizable,
+       p.product_type,
+       ${DIGITAL_FILE_READY_SQL} as has_digital_file
      from public.cart_items ci
      join public.product_variants pv on pv.id = ci.variant_id
      join public.products p on p.id = pv.product_id
@@ -272,7 +277,8 @@ export async function placeOrder(input: PlaceOrderInput) {
         !line.variant_active ||
         line.product_status !== "active" ||
         Boolean(line.variant_deleted) ||
-        Boolean(line.product_deleted);
+        Boolean(line.product_deleted) ||
+        (line.product_type === "digital" && !line.has_digital_file);
 
       if (archived) {
         failures.push({
@@ -297,6 +303,11 @@ export async function placeOrder(input: PlaceOrderInput) {
           availableQuantity: 0,
           reason: "SELLER_UNAVAILABLE",
         });
+        continue;
+      }
+
+      // A download has no stock to check or reserve.
+      if (line.product_type === "digital") {
         continue;
       }
 
@@ -376,6 +387,7 @@ export async function placeOrder(input: PlaceOrderInput) {
         unitPrice: money(line.price),
         categoryId: line.category_id,
         available: true,
+        gstPercent: line.gst_rate,
       }));
 
       const couponResult = await validateCoupon(codeToValidate, userId, couponItems, subtotal, {
@@ -394,14 +406,36 @@ export async function placeOrder(input: PlaceOrderInput) {
       appliedCouponCode = couponResult.code;
     }
 
-    const shippingAmount = computeShippingAmount(deliveryOption, subtotal);
+    const isDigitalLine = (line: CartLineForOrder) => line.product_type === "digital";
+    const hasPhysical = lines.some((line) => !isDigitalLine(line));
+    const hasDigital = lines.some(isDigitalLine);
+
+    // Downloads are delivered by the platform the moment payment is captured, so
+    // there is no cash to collect on delivery.
+    if (paymentMethod === "cod" && hasDigital) {
+      throw new AppError(
+        400,
+        "COD_NOT_AVAILABLE_FOR_DIGITAL",
+        "Cash on Delivery isn't available for digital products. Please pay online."
+      );
+    }
+
+    // Nothing to ship: no delivery charge and no delivery speed to choose.
+    const orderDeliveryOption: DeliveryOption = hasPhysical ? deliveryOption : "standard";
+    // The free-shipping threshold is measured on the GST-inclusive goods value buyers see.
+    const goodsInclGst = goodsValueInclGst(
+      lines.map((line) => ({ gross: money(line.price) * Number(line.quantity), gstPercent: line.gst_rate }))
+    );
+    const shippingAmount = hasPhysical ? computeShippingAmount(deliveryOption, goodsInclGst) : 0;
     const taxableLines = lines.map((line) => ({
       gross: roundMoney(money(line.price) * Number(line.quantity)),
       gstPercent: line.gst_rate,
     }));
     const { taxAmount, taxRate } = taxForLines(taxableLines, discountAmount);
     const totalAmount = roundMoney(subtotal - discountAmount + shippingAmount + taxAmount);
-    const estimatedDeliveryAt = addDays(new Date(), DELIVERY_ESTIMATE_DAYS[deliveryOption]);
+    const estimatedDeliveryAt = hasPhysical
+      ? addDays(new Date(), DELIVERY_ESTIMATE_DAYS[deliveryOption])
+      : new Date();
 
     if (paymentMethod === "cod" && totalAmount > env.COD_MAX_ORDER_VALUE) {
       throw new AppError(
@@ -418,7 +452,7 @@ export async function placeOrder(input: PlaceOrderInput) {
     // transaction reserved the last unit between our FOR UPDATE check and this
     // update (should not happen in the same tx, but keeps CHECK from surfacing as 500).
     for (const line of lines) {
-      if (backorderedVariantIds.has(line.variant_id)) {
+      if (backorderedVariantIds.has(line.variant_id) || isDigitalLine(line)) {
         continue;
       }
       const qty = Number(line.quantity);
@@ -475,7 +509,7 @@ export async function placeOrder(input: PlaceOrderInput) {
         taxAmount,
         taxRate,
         totalAmount,
-        deliveryOption,
+        orderDeliveryOption,
         paymentMethod,
         referrerChannel,
         estimatedDeliveryAt,
@@ -504,11 +538,11 @@ export async function placeOrder(input: PlaceOrderInput) {
            id, order_id, seller_id, variant_id, product_id, product_slug,
            quantity, unit_price, line_total, product_title, product_thumbnail_url,
            variant_option_values, is_backordered, gst_rate, customization_note,
-           created_at, updated_at
+           is_digital, created_at, updated_at
          ) values (
            gen_random_uuid(), $1, $2, $3, $4, $5,
            $6, $7, $8, $9, $10,
-           $11::jsonb, $12, $13, $14, now(), now()
+           $11::jsonb, $12, $13, $14, $15, now(), now()
          )`,
         [
           orderId,
@@ -525,6 +559,7 @@ export async function placeOrder(input: PlaceOrderInput) {
           backorderedVariantIds.has(line.variant_id),
           appliedGstPercent(line.gst_rate),
           customizationNote,
+          isDigitalLine(line),
         ]
       );
     }
@@ -612,6 +647,11 @@ export type OrderItemDetail = {
   canReview: boolean;
   /** Buyer request for a customizable product, snapshotted at checkout. */
   customizationNote: string | null;
+  isDigital: boolean;
+  /** Files the buyer can download now; empty until payment is confirmed. */
+  downloads: DigitalFileView[];
+  /** GST percent charged on this line at checkout (for GST-inclusive display). */
+  gstPercent: number;
 };
 
 export type OrderDetail = {
@@ -639,6 +679,11 @@ export type OrderDetail = {
   canBuyAgain: boolean;
   returnEligible: boolean;
   returnWindowClosesAt: string | null;
+  /** The buyer may cancel now (see cancelOrderForUser for the same rule). */
+  canCancel: boolean;
+  hasDigitalItems: boolean;
+  /** Nothing to ship: no tracking, delivery address or delivery option to show. */
+  isDigitalOnly: boolean;
   shipping: {
     trackingNumber: string | null;
     courierName: string | null;
@@ -845,6 +890,8 @@ export async function getOrderForUser(
     has_review: boolean;
     variant_purchasable: boolean;
     customization_note: string | null;
+    is_digital: boolean;
+    gst_rate: string | null;
   }>(
     `select oi.id,
             oi.seller_id,
@@ -881,7 +928,9 @@ export async function getOrderForUser(
               left join public.inventory inv on inv.variant_id = pv.id
               where pv.id = oi.variant_id
             ), false) as variant_purchasable,
-            oi.customization_note
+            oi.customization_note,
+            oi.is_digital,
+            oi.gst_rate
      from public.order_items oi
      where oi.order_id = $1
      order by oi.created_at asc`,
@@ -906,6 +955,7 @@ export async function getOrderForUser(
     createdAt: new Date(entry.created_at).toISOString(),
   }));
 
+  const downloads = await listOrderDownloads(orderId, row.status);
   const items: OrderItemDetail[] = itemsResult.rows.map((item) => ({
     id: item.id,
     sellerId: item.seller_id,
@@ -921,12 +971,20 @@ export async function getOrderForUser(
     isBackordered: item.is_backordered,
     canReview: row.status === "delivered" && !item.has_review,
     customizationNote: item.customization_note,
+    isDigital: item.is_digital,
+    downloads: item.is_digital ? (downloads.get(item.id) ?? []) : [],
+    gstPercent: appliedGstPercent(item.gst_rate),
   }));
+  const hasDigitalItems = items.some((item) => item.isDigital);
+  const isDigitalOnly = items.length > 0 && items.every((item) => item.isDigital);
 
-  const { returnEligible, returnWindowClosesAt } = computeReturnWindow(
-    row.status,
-    row.delivered_at
-  );
+  const returnWindow = computeReturnWindow(row.status, row.delivered_at);
+  // A download can't be sent back, so an all-digital order is never returnable.
+  const returnEligible = returnWindow.returnEligible && !isDigitalOnly;
+  const { returnWindowClosesAt } = returnWindow;
+  const canCancel =
+    (CANCELLABLE_STATUSES as readonly string[]).includes(row.status) &&
+    (row.status === "pending_payment" || !hasDigitalItems);
 
   return {
     id: row.id,
@@ -956,6 +1014,9 @@ export async function getOrderForUser(
       itemsResult.rows.every((item) => item.variant_purchasable),
     returnEligible,
     returnWindowClosesAt,
+    canCancel,
+    hasDigitalItems,
+    isDigitalOnly,
     shipping: {
       trackingNumber: row.tracking_number,
       courierName: row.courier_name,
@@ -1015,7 +1076,7 @@ export async function releaseReservationsForOrder(client: PoolClient, orderId: s
   const items = await client.query<{ variant_id: string; quantity: number }>(
     `select variant_id, quantity
      from public.order_items
-     where order_id = $1 and is_backordered = false
+     where order_id = $1 and is_backordered = false and is_digital = false
      for update`,
     [orderId]
   );
@@ -1041,7 +1102,7 @@ export async function restoreInventoryForCancelledOrder(client: PoolClient, orde
   const items = await client.query<{ variant_id: string; quantity: number }>(
     `select variant_id, quantity
      from public.order_items
-     where order_id = $1 and is_backordered = false
+     where order_id = $1 and is_backordered = false and is_digital = false
      for update`,
     [orderId]
   );
@@ -1061,6 +1122,7 @@ export async function restoreInventoryForCancelledOrder(client: PoolClient, orde
 }
 
 const CANCELLABLE_STATUSES = ["pending_payment", "paid", "processing", "accepted"] as const;
+const PAID_STATUSES = ["paid", "processing", "accepted", "shipped", "out_for_delivery", "delivered"] as const;
 
 export async function cancelOrderForUser(
   userId: string,
@@ -1092,6 +1154,22 @@ export async function cancelOrderForUser(
     }
 
     const status = order.status as OrderStatus;
+    // Downloads are released the moment payment is captured, so a paid order
+    // with one cannot be cancelled for a full refund (checked before the
+    // shipping messages below, which would wrongly suggest a return).
+    if ((PAID_STATUSES as readonly string[]).includes(status)) {
+      const digital = await client.query(
+        `select 1 from public.order_items where order_id = $1 and is_digital limit 1`,
+        [orderId]
+      );
+      if (digital.rows[0]) {
+        throw new AppError(
+          409,
+          "DIGITAL_ORDER_NOT_CANCELLABLE",
+          "Orders with digital downloads can't be cancelled after payment, because the files are delivered instantly. Contact support if something is wrong with your order."
+        );
+      }
+    }
     if (!(CANCELLABLE_STATUSES as readonly string[]).includes(status)) {
       if (
         status === "shipped" ||

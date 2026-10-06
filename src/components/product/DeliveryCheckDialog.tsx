@@ -16,6 +16,8 @@ type Props = {
   productSlug: string;
   shopName: string;
   sellerState: string;
+  /** A download: the state rule still applies (GST), but nothing is "delivered". */
+  isDigital?: boolean;
   initialPincode: string;
   initialResult: Deliverability | null;
   /** What the buyer was doing, e.g. "Add to cart". Null when only checking. */
@@ -34,6 +36,7 @@ export default function DeliveryCheckDialog({
   productSlug,
   shopName,
   sellerState,
+  isDigital = false,
   initialPincode,
   initialResult,
   actionLabel,
@@ -99,15 +102,24 @@ export default function DeliveryCheckDialog({
             <MapPin size={18} />
           </span>
           <h2 id="delivery-check-title" className={styles.title}>
-            Check delivery
+            {isDigital ? "Check availability" : "Check delivery"}
           </h2>
           <button type="button" className={styles.close} aria-label="Close" onClick={onClose}>
             <X size={18} />
           </button>
         </div>
         <p className={styles.lead}>
-          {shopName} delivers only within <strong>{sellerState}</strong>. Enter the PIN code
-          you want this delivered to.
+          {isDigital ? (
+            <>
+              {shopName} can sell only to buyers in <strong>{sellerState}</strong>. Enter your
+              billing PIN code.
+            </>
+          ) : (
+            <>
+              {shopName} delivers only within <strong>{sellerState}</strong>. Enter the PIN code
+              you want this delivered to.
+            </>
+          )}
         </p>
 
         <form className={styles.form} onSubmit={(e) => void check(e)} noValidate>
@@ -144,7 +156,7 @@ export default function DeliveryCheckDialog({
             <p className={`${styles.result} ${styles.ok}`}>
               <CheckCircle2 size={18} aria-hidden="true" />
               <span>
-                Delivers to <strong>{shown.pincode}</strong>
+                {isDigital ? "Available for" : "Delivers to"} <strong>{shown.pincode}</strong>
                 {placeLabel(shown) ? ` · ${placeLabel(shown)}` : ""}
               </span>
             </p>
@@ -154,8 +166,9 @@ export default function DeliveryCheckDialog({
             <p className={`${styles.result} ${styles.blocked}`}>
               <XCircle size={18} aria-hidden="true" />
               <span>
-                Can&apos;t deliver to <strong>{shown.pincode}</strong>
-                {shown.state ? ` in ${shown.state}` : ""}. {shown.shopName} ships only within{" "}
+                {isDigital ? "Not available for" : "Can’t deliver to"} <strong>{shown.pincode}</strong>
+                {shown.state ? ` in ${shown.state}` : ""}. {shown.shopName}{" "}
+                {isDigital ? "can sell only within" : "ships only within"}{" "}
                 {shown.sellerState ?? sellerState}, so this item can&apos;t be added to your cart
                 for this address. Try another PIN code.
               </span>
@@ -167,7 +180,7 @@ export default function DeliveryCheckDialog({
               <MapPin size={18} aria-hidden="true" />
               <span>
                 We couldn&apos;t confirm where {shown.pincode} is right now. You can continue;
-                checkout will confirm delivery against your address.
+                checkout will confirm against your address.
               </span>
             </p>
           ) : null}

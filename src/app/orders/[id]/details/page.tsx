@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { formatInr, inclusiveLineTotal, orderTotalsInclGst } from "@/utils/gst";
+import DownloadList from "@/components/orders/DownloadList";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -45,6 +47,20 @@ function formatOptions(values: Record<string, unknown>) {
     .filter(([, v]) => v != null && String(v).length > 0)
     .map(([, v]) => String(v))
     .join(" · ");
+}
+
+const METHOD_LABELS: Record<string, string> = {
+  cod: "Cash on Delivery",
+  upi: "UPI",
+  card: "Card",
+  netbanking: "Net banking",
+  wallet: "Wallet",
+};
+
+/** "Pay online" orders record Razorpay's method at capture; until then it is open. */
+function paymentMethodLabel(method: string | null, paidAt: string | null) {
+  if (method) return METHOD_LABELS[method] ?? method;
+  return paidAt ? "Online" : "Pending";
 }
 
 export default function OrderDetailsPage() {
@@ -155,6 +171,7 @@ export default function OrderDetailsPage() {
 
   const address = order.shippingAddress;
   const mapsUrl = mapsUrlFromAddress(address);
+  const orderTotals = orderTotalsInclGst(order);
   const returnClosed = order.returnWindowClosesAt
     ? formatOrderDate(order.returnWindowClosesAt)
     : null;
@@ -202,7 +219,8 @@ export default function OrderDetailsPage() {
               Download Invoice
             </Button>
           )}
-          {["pending_payment", "paid", "processing", "accepted"].includes(order.status) ? (
+          {(order.canCancel ??
+            ["pending_payment", "paid", "processing", "accepted"].includes(order.status)) ? (
             <Button
               variant="outline"
               disabled={cancelBusy}
@@ -258,14 +276,33 @@ export default function OrderDetailsPage() {
                 <div className={styles.itemBody}>
                   <p className={styles.itemTitle}>{item.productTitle}</p>
                   <div className={styles.itemMeta}>
-                    {formatOptions(item.variantOptionValues) || "Standard"}
-                    {" · "}Qty: {item.quantity}
-                    {item.isBackordered ? " · Backordered" : ""}
+                    {item.isDigital ? (
+                      "Digital download"
+                    ) : (
+                      <>
+                        {formatOptions(item.variantOptionValues) || "Standard"}
+                        {" · "}Qty: {item.quantity}
+                        {item.isBackordered ? " · Backordered" : ""}
+                      </>
+                    )}
                   </div>
+                  {item.isDigital ? (
+                    item.downloads && item.downloads.length > 0 ? (
+                      <div className={styles.itemDownloads}>
+                        <DownloadList orderId={order.id} orderItemId={item.id} files={item.downloads} />
+                      </div>
+                    ) : (
+                      <p className={styles.itemMeta}>
+                        {order.status === "pending_payment"
+                          ? "Your files unlock as soon as payment is confirmed."
+                          : "Files aren't available for this order."}
+                      </p>
+                    )
+                  ) : null}
                 </div>
                 <div className={styles.itemActions}>
                   <span className={styles.itemPrice}>
-                    ₹{item.lineTotal.toLocaleString("en-IN")}
+                    {formatInr(inclusiveLineTotal(item.lineTotal, item.gstPercent))}
                   </span>
                   {item.canReview ? (
                     <Button
@@ -332,19 +369,28 @@ export default function OrderDetailsPage() {
                 <Package size={36} color="var(--color-primary)" />
                 <strong>
                   {order.deliveredAt
-                    ? `Delivered on ${formatOrderDateTime(order.deliveredAt)}`
+                    ? order.isDigitalOnly
+                      ? `Downloads ready since ${formatOrderDateTime(order.deliveredAt)}`
+                      : `Delivered on ${formatOrderDateTime(order.deliveredAt)}`
                     : order.status === "pending_payment"
                       ? "Awaiting payment"
                       : `Status: ${formatOrderStatusLabel(order.status)}`}
                 </strong>
-                <Link href={`/orders/${order.id}`}>
-                  <Button variant="primary">Track Order</Button>
-                </Link>
+                {order.isDigitalOnly ? null : (
+                  <Link href={`/orders/${order.id}`}>
+                    <Button variant="primary">Track Order</Button>
+                  </Link>
+                )}
               </div>
             </div>
           </div>
 
-          {order.returnWindowClosesAt ? (
+          {order.isDigitalOnly ? (
+            <p className={styles.sidebarMuted}>
+              Digital downloads are delivered instantly, so they can&apos;t be returned. If a file
+              is faulty, contact support and we&apos;ll sort it out.
+            </p>
+          ) : order.returnWindowClosesAt ? (
             <div
               className={`${styles.returnBanner} ${
                 order.returnEligible ? styles.returnBannerEligible : ""
@@ -405,7 +451,8 @@ export default function OrderDetailsPage() {
         <aside className={styles.sidebar}>
           <div className={styles.card}>
             <h3 className={styles.cardTitle}>
-              <MapPin size={16} className={styles.cardTitleIcon} /> Shipping Address
+              <MapPin size={16} className={styles.cardTitleIcon} />{" "}
+              {order.isDigitalOnly ? "Billing Address" : "Shipping Address"}
             </h3>
             <div className={styles.sidebarBlock}>
               <p>
@@ -436,25 +483,35 @@ export default function OrderDetailsPage() {
               <FileText size={16} className={styles.cardTitleIcon} /> Order Summary
             </h3>
             <div className={styles.row}>
-              <span>Subtotal</span>
-              <span>₹{order.subtotal.toLocaleString("en-IN")}</span>
+              <span>Items (incl. GST)</span>
+              <span>{formatInr(orderTotals.itemsInclGst)}</span>
             </div>
-            <div className={styles.row}>
-              <span>Shipping</span>
-              <span className={order.shippingAmount === 0 ? styles.freeText : undefined}>
-                {order.shippingAmount === 0
-                  ? "Free"
-                  : `₹${order.shippingAmount.toLocaleString("en-IN")}`}
-              </span>
-            </div>
-            <div className={styles.row}>
-              <span>GST ({Number((order.taxRate * 100).toFixed(2))}%)</span>
-              <span>₹{order.taxAmount.toLocaleString("en-IN")}</span>
-            </div>
+            {orderTotals.discountInclGst > 0 ? (
+              <div className={styles.row}>
+                <span>Discount{order.couponCode ? ` (${order.couponCode})` : ""}</span>
+                <span>−{formatInr(orderTotals.discountInclGst)}</span>
+              </div>
+            ) : null}
+            {order.isDigitalOnly ? null : (
+              <div className={styles.row}>
+                <span>Shipping</span>
+                <span className={order.shippingAmount === 0 ? styles.freeText : undefined}>
+                  {order.shippingAmount === 0
+                    ? "Free"
+                    : `₹${order.shippingAmount.toLocaleString("en-IN")}`}
+                </span>
+              </div>
+            )}
             <div className={styles.rowBold}>
               <span>Total</span>
-              <span>₹{order.totalAmount.toLocaleString("en-IN")}</span>
+              <span>{formatInr(order.totalAmount)}</span>
             </div>
+            {orderTotals.gstIncluded > 0 ? (
+              <div className={styles.row}>
+                <span>Includes GST</span>
+                <span>{formatInr(orderTotals.gstIncluded)}</span>
+              </div>
+            ) : null}
           </div>
 
           <div className={styles.card}>
@@ -463,7 +520,7 @@ export default function OrderDetailsPage() {
             </h3>
             <div className={styles.paymentRow}>
               <span className={styles.paymentLabel}>Payment Method</span>
-              <span>{order.payment.method || "Pending"}</span>
+              <span>{paymentMethodLabel(order.payment.method, order.payment.paidAt)}</span>
             </div>
             <div className={styles.paymentRow}>
               <span className={styles.paymentLabel}>Transaction ID</span>

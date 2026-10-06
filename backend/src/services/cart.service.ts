@@ -5,7 +5,7 @@ import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
 import { baseCookieOptions } from "../utils/cookie-options.js";
 import { loadCartItemsForCoupon, validateCoupon } from "./coupon.service.js";
-import { appliedGstPercent } from "./gst.js";
+import { appliedGstPercent, goodsValueInclGst } from "./gst.js";
 import { AppError } from "../utils/errors.js";
 import { RETENTION } from "./maintenance.service.js";
 
@@ -42,6 +42,8 @@ export type CartLineView = {
   gstPercent: number;
   lineTotal: number;
   customizationNote: string | null;
+  /** Download, not a parcel: no shipping, no COD, one copy. */
+  isDigital: boolean;
 };
 
 export type CartView = {
@@ -224,7 +226,15 @@ export type VariantSellability = {
   /** products.continue_selling_when_out_of_stock — a real backorder mode. */
   allowBackorder: boolean;
   isCustomizable: boolean;
+  /** A download: one copy per cart, nothing to ship. */
+  isDigital: boolean;
 };
+
+/** A digital product can only be sold once it has a file to deliver. */
+export const DIGITAL_FILE_READY_SQL = `exists (
+  select 1 from public.product_digital_files f
+  where f.product_id = p.id and f.removed_at is null
+)`;
 
 const CUSTOMIZATION_NOTE_MAX = 400;
 
@@ -253,6 +263,8 @@ async function assertVariantSellable(
     is_customizable: boolean;
     is_vacation_mode: boolean;
     seller_status: string;
+    product_type: string;
+    has_digital_file: boolean;
   }>(
     `select pv.is_active,
             p.status,
@@ -260,6 +272,8 @@ async function assertVariantSellable(
             p.deleted_at as product_deleted_at,
             p.continue_selling_when_out_of_stock,
             p.is_customizable,
+            p.product_type,
+            ${DIGITAL_FILE_READY_SQL} as has_digital_file,
             s.is_vacation_mode,
             s.status as seller_status
      from public.product_variants pv
@@ -284,9 +298,15 @@ async function assertVariantSellable(
     );
   }
 
+  const isDigital = row.product_type === "digital";
+  if (isDigital && !row.has_digital_file) {
+    throw new AppError(409, "VARIANT_UNAVAILABLE", "This download isn't available yet");
+  }
+
   return {
     allowBackorder: row.continue_selling_when_out_of_stock,
     isCustomizable: row.is_customizable,
+    isDigital,
   };
 }
 
@@ -312,7 +332,10 @@ export async function addItem(
   const client = await pool.connect();
   try {
     await client.query("begin");
-    const { allowBackorder, isCustomizable } = await assertVariantSellable(client, variantId);
+    const { allowBackorder, isCustomizable, isDigital } = await assertVariantSellable(
+      client,
+      variantId
+    );
     const note = isCustomizable ? normalizeCustomizationNote(customizationNote) : null;
     if (isCustomizable && !note) {
       throw new AppError(
@@ -346,11 +369,12 @@ export async function addItem(
     }
 
     if (existing.rows[0]) {
+      // A second "add" of a download keeps the single copy already in the cart.
       await client.query(
         `update public.cart_items
-         set quantity = quantity + $1, updated_at = now()
+         set quantity = case when $3 then 1 else quantity + $1 end, updated_at = now()
          where id = $2`,
-        [quantity, existing.rows[0].id]
+        [quantity, existing.rows[0].id, isDigital]
       );
     } else {
       const priceRow = await client.query<{ price: string }>(
@@ -361,7 +385,7 @@ export async function addItem(
         `insert into public.cart_items
            (id, cart_id, variant_id, quantity, unit_price_snapshot, customization_note, created_at, updated_at)
          values (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now())`,
-        [cart.id, variantId, quantity, priceRow.rows[0]?.price ?? null, note]
+        [cart.id, variantId, isDigital ? 1 : quantity, priceRow.rows[0]?.price ?? null, note]
       );
     }
 
@@ -397,7 +421,8 @@ export async function updateItemQuantity(cart: CartRow, itemId: string, quantity
     }
 
     const variantId = item.rows[0].variant_id;
-    const { allowBackorder } = await assertVariantSellable(client, variantId);
+    const { allowBackorder, isDigital } = await assertVariantSellable(client, variantId);
+    if (isDigital) quantity = 1;
 
     if (!allowBackorder && quantity > item.rows[0].quantity) {
       const stock = await lockInventoryAvailable(client, variantId);
@@ -462,6 +487,8 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
       variant_active: boolean;
       product_status: string;
       allow_backorder: boolean;
+      product_type: string;
+      has_digital_file: boolean;
       is_vacation_mode: boolean;
       seller_status: string;
       variant_deleted: Date | null;
@@ -492,6 +519,8 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
        pv.is_active as variant_active,
        p.status as product_status,
        p.continue_selling_when_out_of_stock as allow_backorder,
+       p.product_type,
+       ${DIGITAL_FILE_READY_SQL} as has_digital_file,
        s.is_vacation_mode,
        s.status as seller_status,
        coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
@@ -515,11 +544,13 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
     const availableStock = Number(row.available_stock);
     const allowBackorder = Boolean(row.allow_backorder);
 
+    const isDigital = row.product_type === "digital";
     const archived =
       !row.variant_active ||
       row.product_status !== "active" ||
       Boolean(row.variant_deleted) ||
-      Boolean(row.product_deleted);
+      Boolean(row.product_deleted) ||
+      (isDigital && !row.has_digital_file);
     const sellerUnavailable = row.is_vacation_mode || row.seller_status !== "active";
     const outOfStock = !allowBackorder && availableStock < 1;
 
@@ -554,12 +585,19 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
       gstPercent: appliedGstPercent(row.gst_rate),
       lineTotal: available ? unitPrice * quantity : 0,
       customizationNote: row.customization_note,
+      isDigital,
     };
   });
 
   const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
   const unavailableCount = items.filter((item) => !item.available).length;
   const threshold = env.FREE_SHIPPING_THRESHOLD;
+  // Buyers see GST-inclusive prices, so free shipping is measured the same way.
+  const goodsInclGst = goodsValueInclGst(
+    items
+      .filter((item) => item.available)
+      .map((item) => ({ gross: item.lineTotal, gstPercent: item.gstPercent }))
+  );
 
   let discountAmount = 0;
   if (cart.coupon_code) {
@@ -586,8 +624,8 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
     subtotal,
     unavailableCount,
     freeShippingThreshold: threshold,
-    freeShippingRemaining: Math.max(threshold - subtotal, 0),
-    qualifiesForFreeShipping: subtotal >= threshold,
+    freeShippingRemaining: Math.max(Math.round((threshold - goodsInclGst) * 100) / 100, 0),
+    qualifiesForFreeShipping: goodsInclGst >= threshold,
   };
 }
 
@@ -624,7 +662,11 @@ export async function mergeGuestCartIntoUserCart(
 
     for (const line of guestItems.rows) {
       const stock = await lockInventoryAvailable(client, line.variant_id);
-      const sellable = await client.query<{ ok: boolean; allow_backorder: boolean }>(
+      const sellable = await client.query<{
+        ok: boolean;
+        allow_backorder: boolean;
+        is_digital: boolean;
+      }>(
         `select (
             pv.is_active
             and p.status = 'active'
@@ -632,8 +674,10 @@ export async function mergeGuestCartIntoUserCart(
             and p.deleted_at is null
             and s.status = 'active'
             and s.is_vacation_mode = false
+            and (p.product_type <> 'digital' or ${DIGITAL_FILE_READY_SQL})
           ) as ok,
-          p.continue_selling_when_out_of_stock as allow_backorder
+          p.continue_selling_when_out_of_stock as allow_backorder,
+          p.product_type = 'digital' as is_digital
          from public.product_variants pv
          join public.products p on p.id = pv.product_id
          join public.sellers s on s.id = p.seller_id
@@ -672,7 +716,11 @@ export async function mergeGuestCartIntoUserCart(
       const room = stock.available - heldByOtherNotes;
       // Clamp to stock so the merge never silently creates an over-quantity line,
       // except for backorderable products which have no ceiling.
-      const merged = allowBackorder ? requested : Math.min(requested, Math.max(0, room));
+      const merged = sellable.rows[0]?.is_digital
+        ? 1
+        : allowBackorder
+          ? requested
+          : Math.min(requested, Math.max(0, room));
       if (merged < 1) {
         continue;
       }

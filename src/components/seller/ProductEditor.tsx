@@ -15,6 +15,15 @@ import { fetchMySeller } from "@/utils/seller";
 import ui from "@/components/console/console.module.css";
 import styles from "@/app/seller/seller.module.css";
 import { optimizedImage } from "@/utils/media";
+import {
+  DigitalFilesField,
+  VideoField,
+  digitalFilesPayload,
+  existingFileEntries,
+  videoPayload,
+  type DigitalFileEntry,
+  type VideoState,
+} from "./ProductMediaFields";
 
 type Collection = { id: string; name: string; slug: string };
 
@@ -47,6 +56,8 @@ type SellerProductDetail = {
   customizationLabel: string | null;
   processingDays?: number;
   processingDaysMax?: number | null;
+  video?: { url: string; posterUrl: string } | null;
+  digitalFiles?: Array<{ id: string; fileName: string; bytes: number }>;
 };
 
 const MAX_IMAGES = 8;
@@ -143,6 +154,13 @@ export default function ProductEditor({ productId }: { productId?: string }) {
   const [loading, setLoading] = useState(isEdit);
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [video, setVideo] = useState<VideoState>({ kind: "none" });
+  const [hadVideo, setHadVideo] = useState(false);
+  const [files, setFiles] = useState<DigitalFileEntry[]>([]);
+  const [videoBusy, setVideoBusy] = useState(false);
+  const [filesBusy, setFilesBusy] = useState(false);
+  const mediaBusy = videoBusy || filesBusy;
+  const isDigital = form.productType === "digital";
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -212,6 +230,9 @@ export default function ProductEditor({ productId }: { productId?: string }) {
         imageUrls: p.imageUrls ?? [],
       });
       setSelectedCollections(p.collectionIds ?? []);
+      setVideo(p.video ? { kind: "existing", url: p.video.url, posterUrl: p.video.posterUrl } : { kind: "none" });
+      setHadVideo(Boolean(p.video));
+      setFiles(existingFileEntries(p.digitalFiles));
       setLoading(false);
     })();
   }, [authStatus, isAuthenticated, isEdit, productId, router]);
@@ -308,13 +329,27 @@ export default function ProductEditor({ productId }: { productId?: string }) {
     }
     const shipMin = Number(form.processingDays);
     const shipMax = Number(form.processingDaysMax);
-    if (!Number.isInteger(shipMin) || shipMin < 0 || shipMin > 60) {
+    if (!isDigital && (!Number.isInteger(shipMin) || shipMin < 0 || shipMin > 60)) {
       setError("Earliest shipping day must be a whole number from 0 to 60.");
       return;
     }
-    if (!Number.isInteger(shipMax) || shipMax < shipMin || shipMax > 90) {
+    if (!isDigital && (!Number.isInteger(shipMax) || shipMax < shipMin || shipMax > 90)) {
       setError("Latest shipping day must be a whole number, no earlier than the earliest.");
       return;
+    }
+    if (mediaBusy) {
+      setError("Wait for uploads to finish before saving.");
+      return;
+    }
+    if (isDigital) {
+      if (files.some((entry) => entry.kind === "failed")) {
+        setError("Some files didn't upload. Retry or remove them before saving.");
+        return;
+      }
+      if (status === "active" && digitalFilesPayload(files).length === 0) {
+        setError("Add at least one file buyers will download before publishing.");
+        return;
+      }
     }
     setBusy(true);
 
@@ -367,6 +402,8 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       tags,
       imageUrls,
       collectionIds: selectedCollections,
+      video: videoPayload(video, hadVideo),
+      digitalFiles: isDigital ? digitalFilesPayload(files) : undefined,
     };
 
     const result = await apiRequest<{ product: { id: string; slug?: string } }>(
@@ -411,11 +448,19 @@ export default function ProductEditor({ productId }: { productId?: string }) {
         }
         actions={
           <>
-            <Button variant="secondary" disabled={busy || uploading} onClick={() => void submit("draft")}>
+            <Button
+              variant="secondary"
+              disabled={busy || uploading || mediaBusy}
+              onClick={() => void submit("draft")}
+            >
               Save as draft
             </Button>
-            <Button variant="primary" disabled={busy || uploading} onClick={() => void submit("active")}>
-              {busy ? "Saving…" : isEdit ? "Save & publish" : "Publish product"}
+            <Button
+              variant="primary"
+              disabled={busy || uploading || mediaBusy}
+              onClick={() => void submit("active")}
+            >
+              {busy ? "Saving…" : mediaBusy ? "Uploading…" : isEdit ? "Save & publish" : "Publish product"}
             </Button>
           </>
         }
@@ -529,6 +574,11 @@ export default function ProductEditor({ productId }: { productId?: string }) {
                       </label>
                     ))}
                   </div>
+                  {isDigital ? (
+                    <span className={ui.fieldHint}>
+                      Buyers download files you upload below. No shipping, and online payment only.
+                    </span>
+                  ) : null}
                 </fieldset>
               </div>
             </div>
@@ -540,7 +590,7 @@ export default function ProductEditor({ productId }: { productId?: string }) {
               <div className={ui.formGrid3}>
                 <div className={ui.field}>
                   <label htmlFor="product-price">
-                    Price (₹) <span className={styles.req}>*</span>
+                    Price before GST (₹) <span className={styles.req}>*</span>
                   </label>
                   <input
                     id="product-price"
@@ -549,6 +599,9 @@ export default function ProductEditor({ productId }: { productId?: string }) {
                     placeholder="0"
                     onChange={(e) => update("price", e.target.value)}
                   />
+                  <span className={ui.fieldHint}>
+                    Buyers see the price with the category&apos;s GST added (18% unless the category sets another rate).
+                  </span>
                 </div>
                 <div className={ui.field}>
                   <label htmlFor="product-compare">Compare-at price (₹)</label>
@@ -574,6 +627,8 @@ export default function ProductEditor({ productId }: { productId?: string }) {
                   <label htmlFor="product-sku">SKU</label>
                   <input id="product-sku" value={form.sku} onChange={(e) => update("sku", e.target.value)} />
                 </div>
+                {isDigital ? null : (
+                  <>
                 <div className={ui.field}>
                   <label htmlFor="product-stock">
                     Stock quantity <span className={styles.req}>*</span>
@@ -594,17 +649,27 @@ export default function ProductEditor({ productId }: { productId?: string }) {
                     onChange={(e) => update("lowStockAlert", e.target.value)}
                   />
                 </div>
+                  </>
+                )}
               </div>
-              <label className={styles.checkLabel}>
-                <input
-                  type="checkbox"
-                  checked={form.continueSelling}
-                  onChange={(e) => update("continueSelling", e.target.checked)}
-                />
-                Keep selling when out of stock
-              </label>
+              {isDigital ? (
+                <span className={ui.fieldHint}>Digital products never run out of stock.</span>
+              ) : (
+                <label className={styles.checkLabel}>
+                  <input
+                    type="checkbox"
+                    checked={form.continueSelling}
+                    onChange={(e) => update("continueSelling", e.target.checked)}
+                  />
+                  Keep selling when out of stock
+                </label>
+              )}
             </div>
           </section>
+
+          {isDigital ? (
+            <DigitalFilesField value={files} onChange={setFiles} onBusyChange={setFilesBusy} />
+          ) : null}
 
           {form.productType === "physical" ? (
             <section className={ui.card}>
@@ -669,6 +734,7 @@ export default function ProductEditor({ productId }: { productId?: string }) {
             </section>
           ) : null}
 
+          {isDigital ? null : (
           <section className={ui.card}>
             <h2 className={styles.sectionTitle}>Dispatch time</h2>
             <p className={styles.sectionHint}>
@@ -701,6 +767,7 @@ export default function ProductEditor({ productId }: { productId?: string }) {
               </div>
             </div>
           </section>
+          )}
         </div>
 
         <div className={ui.stack}>
@@ -793,6 +860,8 @@ export default function ProductEditor({ productId }: { productId?: string }) {
               />
             </div>
           </section>
+
+          <VideoField value={video} onChange={setVideo} onBusyChange={setVideoBusy} />
 
           <section className={ui.card}>
             <h2 className={styles.sectionTitle}>Customization</h2>

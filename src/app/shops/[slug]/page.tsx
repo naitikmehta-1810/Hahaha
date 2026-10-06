@@ -521,6 +521,7 @@ function ShopStorefrontInner() {
                           <ProductCard.Title>{product.title}</ProductCard.Title>
                           <ProductCard.Price
                             amount={product.price}
+                    gstPercent={product.gstPercent}
                             originalAmount={product.compareAtPrice ?? undefined}
                             discountPercentage={product.discountPercent ?? undefined}
                           />

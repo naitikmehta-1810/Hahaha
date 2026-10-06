@@ -1,0 +1,72 @@
+.page {
+  display: grid;
+  place-items: center;
+  min-height: 60vh;
+  padding: 48px var(--page-gutter);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(460px, 100%);
+  padding: 36px 28px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-card);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.iconError {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-ink);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.3;
+  color: var(--color-text-main);
+}
+
+.text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.small {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.small a {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.spin {
+  color: var(--color-primary);
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

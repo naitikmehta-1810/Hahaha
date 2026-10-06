@@ -1,6 +1,7 @@
 "use client";
 
 import React, { Suspense, useEffect, useState } from "react";
+import { formatInr, priceWithGst } from "@/utils/gst";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -24,6 +25,7 @@ import {
   Trash2,
   User,
   X,
+  Download,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
@@ -51,10 +53,12 @@ import Notice, { type NoticeTone } from "@/components/ui/Notice/Notice";
 import StatusPill from "@/components/ui/StatusPill/StatusPill";
 import Sidebar from "@/components/layout/Sidebar/Sidebar";
 import MyReviews from "@/components/reviews/MyReviews";
+import AccountDownloads from "@/components/orders/AccountDownloads";
 
 type TabKey =
   | "dashboard"
   | "orders"
+  | "downloads"
   | "wishlist"
   | "reviews"
   | "addresses"
@@ -66,6 +70,7 @@ type TabKey =
 const TABS: Array<{ key: TabKey; label: string; Icon: typeof User }> = [
   { key: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { key: "orders", label: "Orders", Icon: ShoppingBag },
+  { key: "downloads", label: "Downloads", Icon: Download },
   { key: "wishlist", label: "Wishlist", Icon: Heart },
   { key: "reviews", label: "Reviews", Icon: Star },
   { key: "addresses", label: "Addresses", Icon: MapPin },
@@ -78,6 +83,7 @@ const TABS: Array<{ key: TabKey; label: string; Icon: typeof User }> = [
 const TAB_TITLES: Record<TabKey, { title: string; description: string }> = {
   dashboard: { title: "My account", description: "" },
   orders: { title: "Your orders", description: "Track, review and manage everything you’ve ordered." },
+  downloads: { title: "Downloads", description: "Digital products you’ve bought, ready any time." },
   wishlist: { title: "Wishlist", description: "Pieces you’ve saved for later." },
   reviews: { title: "Reviews", description: "Ratings you’ve shared with makers." },
   addresses: { title: "Addresses", description: "Where we deliver your orders." },
@@ -600,7 +606,7 @@ function AccountPageInner() {
             </span>
           </div>
           <div className={styles.orderMeta}>
-            <span className={styles.orderPrice}>₹{order.price.toLocaleString("en-IN")}</span>
+            <span className={styles.orderPrice}>{formatInr(order.price)}</span>
             <StatusPill status={order.statusKey}>{order.status}</StatusPill>
           </div>
         </Link>
@@ -832,6 +838,12 @@ function AccountPageInner() {
             </section>
           ) : null}
 
+          {activeTab === "downloads" ? (
+            <section className={styles.panel}>
+              <AccountDownloads />
+            </section>
+          ) : null}
+
           {activeTab === "wishlist" ? (
             <section className={styles.panel}>
               {wishlistItems.length === 0 ? (
@@ -861,7 +873,7 @@ function AccountPageInner() {
                         </span>
                       </Link>
                       <div className={styles.orderMeta}>
-                        <span className={styles.orderPrice}>₹{item.price.toLocaleString("en-IN")}</span>
+                        <span className={styles.orderPrice}>{formatInr(priceWithGst(item.price, item.gstPercent))}</span>
                         <button
                           type="button"
                           className={styles.textDanger}

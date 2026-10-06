@@ -21,6 +21,15 @@ const accountRouter = Router();
 
 accountRouter.use(requireAuth);
 
+/** Digital products the buyer has bought, with their files (see Downloads tab). */
+accountRouter.get(
+  "/downloads",
+  asyncHandler(async (req, res) => {
+    const { listAccountDownloads } = await import("../services/digital-delivery.service.js");
+    res.json({ downloads: await listAccountDownloads(req.user!.id) });
+  })
+);
+
 accountRouter.get(
   "/notifications",
   asyncHandler(async (req, res) => {

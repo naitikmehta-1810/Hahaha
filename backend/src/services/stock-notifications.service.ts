@@ -32,6 +32,7 @@ export async function maybeEnqueueLowStockAlerts(
      join public.users u on u.id = s.user_id
      where oi.order_id = $1
        and oi.is_backordered = false
+       and oi.is_digital = false
        and i.quantity_on_hand <= i.low_stock_threshold
      order by i.variant_id`,
     [orderId]
