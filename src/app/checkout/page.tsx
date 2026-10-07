@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -25,12 +25,14 @@ import { redirectToLogin } from "@/utils/api-client";
 import {
   type AddressRecord,
   type CartItem,
+  type DeliveryOptionQuote,
+  type ShippingQuote,
   type StockFailure,
   createAddress,
   fetchAddresses,
   fetchOrderDetail,
+  fetchShippingQuote,
   getCachedDiscountAmount,
-  getCachedFreeShipping,
   getCart,
   placeOrder,
   refreshCart,
@@ -86,9 +88,14 @@ const STEPS = [
 type PaymentMethod = "online" | "cod";
 type DeliveryOption = "standard" | "express";
 
-const EXPRESS_SHIPPING = 249;
-const STANDARD_SHIPPING_BELOW_THRESHOLD = 49;
 const COD_MAX_ORDER_VALUE = 5000;
+/** Order errors that mean the delivery quote is stale and must be fetched again. */
+const QUOTE_ERROR_CODES = new Set([
+  "SHIPPING_RATE_CHANGED",
+  "CART_CHANGED",
+  "EXPRESS_UNAVAILABLE",
+  "PINCODE_NOT_SERVICEABLE",
+]);
 const PAID_OR_LATER = new Set([
   "paid",
   "processing",
@@ -100,6 +107,35 @@ const PAID_OR_LATER = new Set([
 
 function normalizePayment(raw: string | null): PaymentMethod {
   return raw === "cod" || raw === "cash" || raw === "cash_on_delivery" ? "cod" : "online";
+}
+
+const etaFormat = new Intl.DateTimeFormat("en-IN", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+});
+
+/** "Arrives by Tue, 14 Oct" or "Arrives Sat, 11 Oct – Tue, 14 Oct". */
+function arrivalLabel(option: DeliveryOptionQuote) {
+  const from = etaFormat.format(new Date(option.etaFrom));
+  const to = etaFormat.format(new Date(option.etaTo));
+  return from === to ? `Arrives by ${to}` : `Arrives ${from} – ${to}`;
+}
+
+function daysLabel(option: DeliveryOptionQuote) {
+  return option.minDays === option.maxDays
+    ? `${option.maxDays} days`
+    : `${option.minDays}–${option.maxDays} days`;
+}
+
+function errorCode(error: unknown): string | null {
+  const data =
+    error && typeof error === "object" && "errorData" in error
+      ? (error as { errorData?: unknown }).errorData
+      : null;
+  return data && typeof data === "object" && "code" in data
+    ? String((data as { code?: unknown }).code)
+    : null;
 }
 
 export default function CheckoutPage() {
@@ -135,8 +171,15 @@ function CheckoutInner() {
     phase: "confirming" | "paid" | "timeout" | "retry";
     razorpayOrderId?: string;
   } | null>(null);
-  const [freeShipping, setFreeShipping] = useState(getCachedFreeShipping());
   const [discountAmount, setDiscountAmount] = useState(0);
+  // A quote result remembers the inputs it was fetched for (its key).
+  const [quoteResult, setQuoteResult] = useState<{
+    key: string;
+    quote: ShippingQuote | null;
+    error: string | null;
+  } | null>(null);
+  const [quoteNonce, setQuoteNonce] = useState(0);
+  const quoteSeq = useRef(0);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -153,7 +196,6 @@ function CheckoutInner() {
     setCartLoading(true);
     await refreshCart();
     setCartItems(getCart());
-    setFreeShipping(getCachedFreeShipping());
     setDiscountAmount(getCachedDiscountAmount());
     setCartLoading(false);
   }, []);
@@ -202,21 +244,70 @@ function CheckoutInner() {
     [cartItems]
   );
 
-  // Buyers see GST-inclusive prices; free shipping is measured on that value too.
   const itemsInclGst = totalsInclGst(availableItems, 0, 0).itemsInclGst;
   const hasDigital = availableItems.some((item) => item.isDigital);
   // Downloads don't ship: an all-digital order has no delivery step or charge.
   const hasPhysical = availableItems.some((item) => !item.isDigital);
-  const qualifiesFree =
-    freeShipping.qualifies || itemsInclGst >= freeShipping.threshold || freeShipping.remaining <= 0;
+  const hasNonReturnable = availableItems.some((item) => !item.isDigital && item.isReturnable === false);
 
-  const shippingAmount = !hasPhysical
-    ? 0
-    : deliveryOption === "express"
-      ? EXPRESS_SHIPPING
-      : qualifiesFree
-        ? 0
-        : STANDARD_SHIPPING_BELOW_THRESHOLD;
+  // Delivery is priced live per address. Which address (saved, or a typed PIN),
+  // whether it's COD (couriers charge extra), and the cart contents all change it.
+  const quoteTarget = useMemo(() => {
+    if (!useNewAddress && selectedAddressId) return { addressId: selectedAddressId };
+    const pin = form.pinCode.replace(/\s/g, "");
+    return /^[1-9]\d{5}$/.test(pin) ? { pincode: pin } : null;
+  }, [useNewAddress, selectedAddressId, form.pinCode]);
+  // Goods alone over the COD limit rule it out before any quote is needed.
+  const goodsOverCodLimit =
+    totalsInclGst(availableItems, discountAmount, 0).total > COD_MAX_ORDER_VALUE;
+  const quoteCod = paymentMethod === "cod" && !hasDigital && !goodsOverCodLimit;
+  const cartSignature = availableItems.map((item) => `${item.id}:${item.qty}`).join(",");
+  const wantedQuoteKey =
+    hasPhysical && quoteTarget
+      ? `${JSON.stringify(quoteTarget)}|${quoteCod ? "cod" : "online"}|${cartSignature}|${quoteNonce}`
+      : null;
+
+  useEffect(() => {
+    const seq = ++quoteSeq.current; // also drops any response still in flight
+    if (!wantedQuoteKey || !quoteTarget) return;
+    // A typed PIN waits for the buyer to stop typing; a saved address goes now.
+    const delay = "pincode" in quoteTarget ? 350 : 0;
+    const timer = setTimeout(() => {
+      void fetchShippingQuote(quoteTarget, quoteCod ? "cod" : "online").then((result) => {
+        if (seq !== quoteSeq.current) return;
+        setQuoteResult({ key: wantedQuoteKey, quote: result.quote, error: result.error });
+        // COD over the limit (couriers add a COD fee, so this can only be known
+        // now) switches the choice to online, which re-prices without the fee.
+        if (quoteCod && result.quote) {
+          const option =
+            deliveryOption === "express" && result.quote.express
+              ? result.quote.express
+              : result.quote.standard;
+          const codTotal = totalsInclGst(availableItems, discountAmount, option?.amount ?? 0).total;
+          if (codTotal > COD_MAX_ORDER_VALUE) setPaymentMethod("online");
+        }
+      });
+    }, delay);
+    return () => clearTimeout(timer);
+    // wantedQuoteKey covers every input the quote depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantedQuoteKey]);
+
+  // Only a quote for exactly the current inputs may price the order.
+  const currentQuote = wantedQuoteKey && quoteResult?.key === wantedQuoteKey ? quoteResult : null;
+  const quoteLoading = Boolean(wantedQuoteKey) && !currentQuote;
+  const quoteError = currentQuote?.error ?? null;
+  const liveQuote = currentQuote?.quote ?? null;
+  const expressAvailable = Boolean(liveQuote?.express);
+  const chosenDelivery: DeliveryOption =
+    deliveryOption === "express" && expressAvailable ? "express" : "standard";
+  const deliveryQuote = liveQuote
+    ? chosenDelivery === "express"
+      ? liveQuote.express
+      : liveQuote.standard
+    : null;
+  const shippingReady = !hasPhysical || Boolean(deliveryQuote);
+  const shippingAmount = hasPhysical ? (deliveryQuote?.amount ?? 0) : 0;
 
   const { discountInclGst, gstIncluded, total } = totalsInclGst(
     availableItems,
@@ -224,7 +315,7 @@ function CheckoutInner() {
     shippingAmount
   );
   const savedOnShipping =
-    hasPhysical && deliveryOption === "standard" && qualifiesFree ? EXPRESS_SHIPPING : 0;
+    hasPhysical && chosenDelivery === "standard" ? (deliveryQuote?.savedAmount ?? 0) : 0;
   const codBlockedReason = hasDigital
     ? "Not available for digital products"
     : total > COD_MAX_ORDER_VALUE
@@ -232,6 +323,12 @@ function CheckoutInner() {
       : null;
   // A COD choice made before a download was added falls back to paying online.
   const effectivePayment: PaymentMethod = paymentMethod === "cod" && codBlockedReason ? "online" : paymentMethod;
+
+  const shippingStatusText = quoteLoading
+    ? "Calculating…"
+    : quoteError
+      ? "Unavailable"
+      : "Enter PIN code";
 
   const updateField = (key: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -257,6 +354,15 @@ function CheckoutInner() {
       const ok = validateShipping();
       if (ok !== true) {
         setStatus(ok);
+        return;
+      }
+      if (hasPhysical && !shippingReady) {
+        setStatus(
+          quoteError ??
+            (quoteTarget
+              ? "Still calculating delivery charges for this address…"
+              : "Enter a valid 6-digit PIN code to see delivery charges.")
+        );
         return;
       }
     }
@@ -292,6 +398,8 @@ function CheckoutInner() {
       });
       setAddresses((prev) => [created, ...prev]);
       setSelectedAddressId(created.id);
+      // A retry after a failed order must reuse this address, not save it twice.
+      setUseNewAddress(false);
       return created.id;
     }
 
@@ -401,13 +509,20 @@ function CheckoutInner() {
       return;
     }
 
+    if (hasPhysical && (!shippingReady || liveQuote?.cod !== (effectivePayment === "cod"))) {
+      setStatus("Delivery charges are still being calculated. Try again in a moment.");
+      return;
+    }
+
     setPlacing(true);
     try {
       const addressId = await resolveAddressId();
       const result = await placeOrder(addressId, {
-        deliveryOption: hasPhysical ? deliveryOption : "standard",
+        deliveryOption: hasPhysical ? chosenDelivery : "standard",
         // Online orders record the method Razorpay actually used, at capture.
         paymentMethod: effectivePayment === "cod" ? "cod" : null,
+        // The server refuses the order if the live charge moved since this was shown.
+        expectedShippingAmount: hasPhysical ? shippingAmount : 0,
       });
       const orderNumber =
         result.order.orderNumber || result.payment.receipt || result.order.id.slice(0, 8);
@@ -457,6 +572,12 @@ function CheckoutInner() {
         );
         await loadCart();
         setStep(1);
+      } else if (QUOTE_ERROR_CODES.has(errorCode(error) ?? "")) {
+        // Re-price and let the buyer see the new charge before trying again.
+        setStatus(error instanceof Error ? error.message : "Delivery charges changed.");
+        await loadCart();
+        setQuoteNonce((n) => n + 1);
+        if (errorCode(error) === "PINCODE_NOT_SERVICEABLE") setStep(0);
       } else {
         setStatus(error instanceof Error ? error.message : "Could not place order.");
       }
@@ -733,50 +854,74 @@ function CheckoutInner() {
               <h3 className={`${styles.cardTitle} ${styles.cardTitleSpaced}`}>
                 Delivery Options
               </h3>
-              <div className={styles.deliveryList}>
-                <label
-                  className={`${styles.deliveryOption} ${
-                    deliveryOption === "standard" ? styles.deliveryOptionActive : ""
-                  }`}
-                >
-                  <span className={styles.deliveryLeft}>
-                    <input
-                      type="radio"
-                      checked={deliveryOption === "standard"}
-                      onChange={() => setDeliveryOption("standard")}
-                    />
-                    <span>
-                      <span className={styles.deliveryName}>Standard Delivery</span>
-                      <span className={styles.deliveryMeta}>5–7 business days</span>
-                    </span>
-                  </span>
-                  <span
-                    className={`${styles.deliveryPrice} ${
-                      qualifiesFree ? styles.freePrice : ""
+              {liveQuote?.standard ? (
+                <div className={styles.deliveryList}>
+                  <label
+                    className={`${styles.deliveryOption} ${
+                      chosenDelivery === "standard" ? styles.deliveryOptionActive : ""
                     }`}
                   >
-                    {qualifiesFree ? "Free" : `₹${STANDARD_SHIPPING_BELOW_THRESHOLD}`}
-                  </span>
-                </label>
-                <label
-                  className={`${styles.deliveryOption} ${
-                    deliveryOption === "express" ? styles.deliveryOptionActive : ""
-                  }`}
-                >
-                  <span className={styles.deliveryLeft}>
-                    <input
-                      type="radio"
-                      checked={deliveryOption === "express"}
-                      onChange={() => setDeliveryOption("express")}
-                    />
-                    <span>
-                      <span className={styles.deliveryName}>Express Delivery</span>
-                      <span className={styles.deliveryMeta}>2–3 business days</span>
+                    <span className={styles.deliveryLeft}>
+                      <input
+                        type="radio"
+                        checked={chosenDelivery === "standard"}
+                        onChange={() => setDeliveryOption("standard")}
+                      />
+                      <span>
+                        <span className={styles.deliveryName}>Standard Delivery</span>
+                        <span className={styles.deliveryMeta}>
+                          {arrivalLabel(liveQuote.standard)} · {daysLabel(liveQuote.standard)}
+                        </span>
+                      </span>
                     </span>
-                  </span>
-                  <span className={styles.deliveryPrice}>₹{EXPRESS_SHIPPING}</span>
-                </label>
-              </div>
+                    <span
+                      className={`${styles.deliveryPrice} ${
+                        liveQuote.standard.amount === 0 ? styles.freePrice : ""
+                      }`}
+                    >
+                      {liveQuote.standard.amount === 0 ? "Free" : formatInr(liveQuote.standard.amount)}
+                    </span>
+                  </label>
+                  {liveQuote.express ? (
+                    <label
+                      className={`${styles.deliveryOption} ${
+                        chosenDelivery === "express" ? styles.deliveryOptionActive : ""
+                      }`}
+                    >
+                      <span className={styles.deliveryLeft}>
+                        <input
+                          type="radio"
+                          checked={chosenDelivery === "express"}
+                          onChange={() => setDeliveryOption("express")}
+                        />
+                        <span>
+                          <span className={styles.deliveryName}>Express Delivery</span>
+                          <span className={styles.deliveryMeta}>
+                            {arrivalLabel(liveQuote.express)} · {daysLabel(liveQuote.express)}
+                          </span>
+                        </span>
+                      </span>
+                      <span className={styles.deliveryPrice}>{formatInr(liveQuote.express.amount)}</span>
+                    </label>
+                  ) : null}
+                </div>
+              ) : (
+                <p className={styles.cardSub} role="status" aria-live="polite">
+                  {quoteLoading
+                    ? "Checking couriers and delivery dates for your PIN code…"
+                    : quoteError
+                      ? quoteError
+                      : "Enter your PIN code to see delivery charges and dates."}
+                  {quoteError ? (
+                    <>
+                      {" "}
+                      <Button variant="ghost" size="sm" onClick={() => setQuoteNonce((n) => n + 1)}>
+                        Try again
+                      </Button>
+                    </>
+                  ) : null}
+                </p>
+              )}
               </>
               ) : null}
 
@@ -814,6 +959,7 @@ function CheckoutInner() {
                         <div className={styles.summaryItemMeta}>
                           {item.subtitle} · Qty: {item.qty}
                           {item.customizationNote ? ` · ${item.customizationNote}` : ""}
+                          {!item.isDigital && item.isReturnable === false ? " · No returns" : ""}
                         </div>
                       </div>
                       <div className={styles.summaryItemPrice}>
@@ -895,7 +1041,7 @@ function CheckoutInner() {
                 ) : (
                   <Button
                     variant="primary"
-                    disabled={placing || availableItems.length === 0}
+                    disabled={placing || availableItems.length === 0 || !shippingReady}
                     onClick={() => void handlePlaceOrder()}
                   >
                     <Lock size={14} /> {placing ? "Placing Order…" : "Place Order"}
@@ -949,9 +1095,19 @@ function CheckoutInner() {
             {hasPhysical ? (
               <div className={styles.row}>
                 <span>Shipping</span>
-                <span className={shippingAmount === 0 ? styles.freePrice : undefined}>
-                  {shippingAmount === 0 ? "Free" : formatInr(shippingAmount)}
-                </span>
+                {shippingReady ? (
+                  <span className={shippingAmount === 0 ? styles.freePrice : undefined}>
+                    {shippingAmount === 0 ? "Free" : formatInr(shippingAmount)}
+                  </span>
+                ) : (
+                  <span>{shippingStatusText}</span>
+                )}
+              </div>
+            ) : null}
+            {deliveryQuote ? (
+              <div className={styles.row}>
+                <span>Delivery</span>
+                <span>{arrivalLabel(deliveryQuote).replace("Arrives ", "")}</span>
               </div>
             ) : null}
             <div className={styles.rowBold}>
@@ -967,7 +1123,7 @@ function CheckoutInner() {
             {savedOnShipping > 0 ? (
               <div className={styles.savingsBanner}>
                 <Tag size={14} />
-                Yay! You saved ₹{savedOnShipping} on shipping.
+                Yay! You saved {formatInr(savedOnShipping)} on shipping.
               </div>
             ) : null}
 
@@ -978,7 +1134,7 @@ function CheckoutInner() {
                     variant="primary"
                     fullWidth
                     size="lg"
-                    disabled={placing || availableItems.length === 0}
+                    disabled={placing || availableItems.length === 0 || !shippingReady}
                     onClick={() => void handlePlaceOrder()}
                   >
                     <Lock size={14} /> {placing ? "Placing Order…" : "Place Order"}
@@ -1008,7 +1164,9 @@ function CheckoutInner() {
               <RotateCcw size={18} className={styles.propIcon} />
               <div>
                 <div className={styles.propTitle}>Easy Returns</div>
-                <div className={styles.propDesc}>Within 7 days</div>
+                <div className={styles.propDesc}>
+                  {hasNonReturnable ? "Within 7 days, on eligible items" : "Within 7 days"}
+                </div>
               </div>
             </div>
           </>

@@ -2,10 +2,16 @@ import type { PoolClient } from "pg";
 import { listOrderDownloads, type DigitalFileView } from "./digital-delivery.service.js";
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
-import { appliedGstPercent, goodsValueInclGst, taxForLines } from "./gst.js";
+import { appliedGstPercent, gstFractionFromPercent, taxForLines } from "./gst.js";
 import { clearCartItems, DIGITAL_FILE_READY_SQL, getUserCartForOrder } from "./cart.service.js";
 import { validateCoupon } from "./coupon.service.js";
 import { sameState } from "./pincode.service.js";
+import {
+  loadCartQuoteLines,
+  quoteFingerprint,
+  quoteShipping,
+  type ShippingQuote,
+} from "./shipping-quote.service.js";
 import {
   ORDER_TRACKING_STAGES,
   recordInitialStatus,
@@ -47,12 +53,6 @@ const PAYMENT_METHODS: readonly PaymentMethod[] = [
   "cod",
 ];
 
-/** Matches the checkout radio copy: Standard 5-7 days, Express 2-3 days. */
-const DELIVERY_ESTIMATE_DAYS: Record<DeliveryOption, number> = {
-  standard: 7,
-  express: 3,
-};
-
 type CartLineForOrder = {
   cart_item_id: string;
   variant_id: string;
@@ -80,6 +80,7 @@ type CartLineForOrder = {
   is_customizable: boolean;
   product_type: string;
   has_digital_file: boolean;
+  is_returnable: boolean;
 };
 
 function money(value: string | number) {
@@ -98,15 +99,35 @@ export function isPaymentMethod(value: unknown): value is PaymentMethod {
   return typeof value === "string" && PAYMENT_METHODS.includes(value as PaymentMethod);
 }
 
-/**
- * Standard is free at or above the free-shipping threshold and a configured flat rate
- * below it; express is a flat rate regardless of subtotal, matching the checkout UI.
- */
-export function computeShippingAmount(deliveryOption: DeliveryOption, goodsValueInclGst: number) {
-  if (deliveryOption === "express") {
-    return env.EXPRESS_SHIPPING_AMOUNT;
-  }
-  return goodsValueInclGst >= env.FREE_SHIPPING_THRESHOLD ? 0 : env.STANDARD_SHIPPING_AMOUNT;
+/** Per-seller courier choice stored on the order and read back when booking. */
+export type StoredShippingQuote = {
+  deliveryOption: DeliveryOption;
+  deliveryPincode: string;
+  cod: boolean;
+  estimated: boolean;
+  sellers: Array<{
+    sellerId: string;
+    courierCompanyId: number | null;
+    courierName: string | null;
+    cost: number;
+    charge: number;
+    transitDays: number;
+    source: "shiprocket" | "fallback";
+  }>;
+};
+
+function storedQuote(quote: ShippingQuote, deliveryOption: DeliveryOption): StoredShippingQuote {
+  return {
+    deliveryOption,
+    deliveryPincode: quote.deliveryPincode,
+    cod: quote.cod,
+    estimated: quote.estimated,
+    sellers: quote.sellers.map((seller) => {
+      const choice =
+        deliveryOption === "express" ? (seller.express ?? seller.standard) : seller.standard;
+      return { sellerId: seller.sellerId, ...choice };
+    }),
+  };
 }
 
 /** Tax applies to the discounted subtotal, not the gross subtotal. */
@@ -210,7 +231,8 @@ async function loadCartLines(client: PoolClient, cartId: string) {
        ci.customization_note,
        p.is_customizable,
        p.product_type,
-       ${DIGITAL_FILE_READY_SQL} as has_digital_file
+       ${DIGITAL_FILE_READY_SQL} as has_digital_file,
+       p.is_returnable
      from public.cart_items ci
      join public.product_variants pv on pv.id = ci.variant_id
      join public.products p on p.id = pv.product_id
@@ -233,7 +255,39 @@ export type PlaceOrderInput = {
   paymentMethod?: PaymentMethod | null;
   /** Attribution for seller "Sales by Channel": website | marketplace | social | other */
   referrerChannel?: "website" | "marketplace" | "social" | "other";
+  /**
+   * The delivery charge the buyer was shown. When it no longer matches the live
+   * quote the order is refused, so a buyer is never charged a different amount.
+   */
+  expectedShippingAmount?: number | null;
 };
+
+/**
+ * Prices delivery before the order transaction opens: a courier API call must
+ * never run while cart and inventory rows are locked. The fingerprint lets the
+ * transaction confirm it is ordering exactly what was quoted.
+ */
+async function quoteBeforeCheckout(
+  userId: string,
+  addressId: string,
+  cod: boolean
+): Promise<{ quote: ShippingQuote; fingerprint: string; pincode: string } | null> {
+  const cart = await pool.query<{ id: string }>(
+    `select id from public.carts where user_id = $1 and deleted_at is null limit 1`,
+    [userId]
+  );
+  const address = await pool.query<{ postal_code: string }>(
+    `select postal_code from public.addresses
+     where id = $1 and user_id = $2 and deleted_at is null`,
+    [addressId, userId]
+  );
+  // Missing cart or address: the transaction raises the proper error.
+  if (!cart.rows[0] || !address.rows[0]) return null;
+  const pincode = String(address.rows[0].postal_code).replace(/\s/g, "");
+  const lines = await loadCartQuoteLines(cart.rows[0].id);
+  const quote = await quoteShipping({ lines, deliveryPincode: pincode, cod });
+  return { quote, fingerprint: quoteFingerprint(lines), pincode };
+}
 
 /**
  * Place an order in a single transaction.
@@ -250,7 +304,10 @@ export async function placeOrder(input: PlaceOrderInput) {
     couponCode = null,
     paymentMethod = null,
     referrerChannel = "website",
+    expectedShippingAmount = null,
   } = input;
+
+  const preQuote = await quoteBeforeCheckout(userId, addressId, paymentMethod === "cod");
 
   const client = await pool.connect();
 
@@ -420,22 +477,59 @@ export async function placeOrder(input: PlaceOrderInput) {
       );
     }
 
-    // Nothing to ship: no delivery charge and no delivery speed to choose.
-    const orderDeliveryOption: DeliveryOption = hasPhysical ? deliveryOption : "standard";
-    // The free-shipping threshold is measured on the GST-inclusive goods value buyers see.
-    const goodsInclGst = goodsValueInclGst(
-      lines.map((line) => ({ gross: money(line.price) * Number(line.quantity), gstPercent: line.gst_rate }))
+    // The quote was taken before the transaction; make sure it priced exactly
+    // these lines to this address, otherwise ask the buyer to review again.
+    const lockedFingerprint = quoteFingerprint(
+      lines.map((line) => ({ variantId: line.variant_id, quantity: Number(line.quantity) }))
     );
-    const shippingAmount = hasPhysical ? computeShippingAmount(deliveryOption, goodsInclGst) : 0;
+    const quotedPincode = shippingAddress.postalCode.replace(/\s/g, "");
+    if (
+      !preQuote ||
+      preQuote.fingerprint !== lockedFingerprint ||
+      preQuote.pincode !== quotedPincode
+    ) {
+      throw new AppError(
+        409,
+        "CART_CHANGED",
+        "Your cart or address changed while placing the order. Please review your order and try again."
+      );
+    }
+    const quote = preQuote.quote;
+
+    // Nothing to ship: no delivery charge and no delivery speed to choose.
+    const wantsExpress = hasPhysical && deliveryOption === "express";
+    if (wantsExpress && !quote.express) {
+      throw new AppError(
+        409,
+        "EXPRESS_UNAVAILABLE",
+        "Express delivery isn't available for this address. Choose standard delivery."
+      );
+    }
+    const orderDeliveryOption: DeliveryOption = wantsExpress ? "express" : "standard";
+    const deliveryQuote = !hasPhysical
+      ? null
+      : orderDeliveryOption === "express"
+        ? quote.express
+        : quote.standard;
+    const shippingAmount = deliveryQuote?.amount ?? 0;
+    if (
+      expectedShippingAmount != null &&
+      Math.abs(roundMoney(expectedShippingAmount) - shippingAmount) >= 0.5
+    ) {
+      throw new AppError(
+        409,
+        "SHIPPING_RATE_CHANGED",
+        `The delivery charge for this address is now ${shippingAmount === 0 ? "free" : `₹${shippingAmount.toLocaleString("en-IN")}`}. Please review and place the order again.`,
+        { shippingAmount, deliveryOption: orderDeliveryOption }
+      );
+    }
     const taxableLines = lines.map((line) => ({
       gross: roundMoney(money(line.price) * Number(line.quantity)),
       gstPercent: line.gst_rate,
     }));
     const { taxAmount, taxRate } = taxForLines(taxableLines, discountAmount);
     const totalAmount = roundMoney(subtotal - discountAmount + shippingAmount + taxAmount);
-    const estimatedDeliveryAt = hasPhysical
-      ? addDays(new Date(), DELIVERY_ESTIMATE_DAYS[deliveryOption])
-      : new Date();
+    const estimatedDeliveryAt = deliveryQuote ? new Date(deliveryQuote.etaTo) : new Date();
 
     if (paymentMethod === "cod" && totalAmount > env.COD_MAX_ORDER_VALUE) {
       throw new AppError(
@@ -490,12 +584,12 @@ export async function placeOrder(input: PlaceOrderInput) {
          id, user_id, status, shipping_address, coupon_id, coupon_code,
          subtotal, discount_amount, shipping_amount, tax_amount, tax_rate, total_amount,
          delivery_option, payment_method, referrer_channel, estimated_delivery_at, placed_at,
-         created_at, updated_at
+         shipping_quote, shipping_cost, created_at, updated_at
        ) values (
          gen_random_uuid(), $1, 'pending_payment', $2::jsonb, $3, $4,
          $5, $6, $7, $8, $9, $10,
          $11, $12, $13, $14, now(),
-         now(), now()
+         $15::jsonb, $16, now(), now()
        )
        returning id, order_number`,
       [
@@ -513,6 +607,8 @@ export async function placeOrder(input: PlaceOrderInput) {
         paymentMethod,
         referrerChannel,
         estimatedDeliveryAt,
+        deliveryQuote ? JSON.stringify(storedQuote(quote, orderDeliveryOption)) : null,
+        deliveryQuote?.cost ?? null,
       ]
     );
 
@@ -538,11 +634,11 @@ export async function placeOrder(input: PlaceOrderInput) {
            id, order_id, seller_id, variant_id, product_id, product_slug,
            quantity, unit_price, line_total, product_title, product_thumbnail_url,
            variant_option_values, is_backordered, gst_rate, customization_note,
-           is_digital, created_at, updated_at
+           is_digital, is_returnable, created_at, updated_at
          ) values (
            gen_random_uuid(), $1, $2, $3, $4, $5,
            $6, $7, $8, $9, $10,
-           $11::jsonb, $12, $13, $14, $15, now(), now()
+           $11::jsonb, $12, $13, $14, $15, $16, now(), now()
          )`,
         [
           orderId,
@@ -560,6 +656,8 @@ export async function placeOrder(input: PlaceOrderInput) {
           appliedGstPercent(line.gst_rate),
           customizationNote,
           isDigitalLine(line),
+          // A download can't be sent back, whatever the listing says.
+          line.is_returnable && !isDigitalLine(line),
         ]
       );
     }
@@ -652,6 +750,8 @@ export type OrderItemDetail = {
   downloads: DigitalFileView[];
   /** GST percent charged on this line at checkout (for GST-inclusive display). */
   gstPercent: number;
+  /** The listing allowed returns when this was bought (snapshot). */
+  isReturnable: boolean;
 };
 
 export type OrderDetail = {
@@ -679,6 +779,8 @@ export type OrderDetail = {
   canBuyAgain: boolean;
   returnEligible: boolean;
   returnWindowClosesAt: string | null;
+  /** False when every line was sold as non-returnable (or is a download). */
+  hasReturnableItems: boolean;
   /** The buyer may cancel now (see cancelOrderForUser for the same rule). */
   canCancel: boolean;
   hasDigitalItems: boolean;
@@ -799,6 +901,65 @@ export function computeReturnWindow(status: string, deliveredAt: Date | null) {
   };
 }
 
+export type ReturnRefund = {
+  refundAmount: number;
+  /** Lines left out of the refund: sold with no returns, or downloads. */
+  excludedItemCount: number;
+};
+
+/**
+ * What approving a return refunds. When every line was returnable it is the
+ * whole order, delivery included (unchanged). Otherwise only the returnable
+ * lines are refunded, at what the buyer paid for them: their share of any
+ * coupon taken off, GST added back. Delivery and no-returns lines stay paid.
+ */
+export async function returnRefundAmounts(orderIds: string[]) {
+  const amounts = new Map<string, ReturnRefund>();
+  if (orderIds.length === 0) return amounts;
+  const result = await pool.query<{
+    id: string;
+    total_amount: string;
+    subtotal: string;
+    discount_amount: string;
+    excluded_count: number;
+    lines: Array<{ lineTotal: number | string; gst: number | string | null }>;
+  }>(
+    `select o.id, o.total_amount::text, o.subtotal::text, o.discount_amount::text,
+            (count(*) filter (where not oi.is_returnable or oi.is_digital))::int as excluded_count,
+            coalesce(
+              json_agg(json_build_object('lineTotal', oi.line_total, 'gst', oi.gst_rate))
+                filter (where oi.is_returnable and not oi.is_digital),
+              '[]'::json
+            ) as lines
+     from public.orders o
+     join public.order_items oi on oi.order_id = o.id
+     where o.id = any($1::uuid[])
+     group by o.id`,
+    [orderIds]
+  );
+  for (const row of result.rows) {
+    const excluded = Number(row.excluded_count);
+    if (excluded === 0) {
+      amounts.set(row.id, { refundAmount: money(row.total_amount), excludedItemCount: 0 });
+      continue;
+    }
+    const subtotal = money(row.subtotal);
+    const discount = Math.min(Math.max(money(row.discount_amount), 0), subtotal);
+    let refund = 0;
+    for (const line of row.lines) {
+      const gross = money(line.lineTotal);
+      const share = subtotal > 0 ? roundMoney((discount * gross) / subtotal) : 0;
+      const taxable = Math.max(roundMoney(gross - share), 0);
+      refund += roundMoney(taxable + roundMoney(taxable * gstFractionFromPercent(line.gst)));
+    }
+    amounts.set(row.id, {
+      refundAmount: Math.min(roundMoney(refund), money(row.total_amount)),
+      excludedItemCount: excluded,
+    });
+  }
+  return amounts;
+}
+
 function buildTrackingStages(
   timeline: OrderTimelineEntry[],
   currentStatus: string
@@ -892,6 +1053,7 @@ export async function getOrderForUser(
     customization_note: string | null;
     is_digital: boolean;
     gst_rate: string | null;
+    is_returnable: boolean;
   }>(
     `select oi.id,
             oi.seller_id,
@@ -930,7 +1092,8 @@ export async function getOrderForUser(
             ), false) as variant_purchasable,
             oi.customization_note,
             oi.is_digital,
-            oi.gst_rate
+            oi.gst_rate,
+            oi.is_returnable
      from public.order_items oi
      where oi.order_id = $1
      order by oi.created_at asc`,
@@ -974,13 +1137,16 @@ export async function getOrderForUser(
     isDigital: item.is_digital,
     downloads: item.is_digital ? (downloads.get(item.id) ?? []) : [],
     gstPercent: appliedGstPercent(item.gst_rate),
+    isReturnable: item.is_returnable && !item.is_digital,
   }));
   const hasDigitalItems = items.some((item) => item.isDigital);
   const isDigitalOnly = items.length > 0 && items.every((item) => item.isDigital);
 
   const returnWindow = computeReturnWindow(row.status, row.delivered_at);
-  // A download can't be sent back, so an all-digital order is never returnable.
-  const returnEligible = returnWindow.returnEligible && !isDigitalOnly;
+  // Only lines sold as returnable can go back; downloads never can. An order
+  // with nothing returnable on it has no return option at all.
+  const hasReturnableItems = items.some((item) => item.isReturnable);
+  const returnEligible = returnWindow.returnEligible && hasReturnableItems;
   const { returnWindowClosesAt } = returnWindow;
   const canCancel =
     (CANCELLABLE_STATUSES as readonly string[]).includes(row.status) &&
@@ -1014,6 +1180,7 @@ export async function getOrderForUser(
       itemsResult.rows.every((item) => item.variant_purchasable),
     returnEligible,
     returnWindowClosesAt,
+    hasReturnableItems,
     canCancel,
     hasDigitalItems,
     isDigitalOnly,

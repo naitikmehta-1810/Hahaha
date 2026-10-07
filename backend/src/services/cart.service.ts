@@ -44,6 +44,8 @@ export type CartLineView = {
   customizationNote: string | null;
   /** Download, not a parcel: no shipping, no COD, one copy. */
   isDigital: boolean;
+  /** False when the seller sells this item with no returns. */
+  isReturnable: boolean;
 };
 
 export type CartView = {
@@ -495,6 +497,7 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
       product_deleted: Date | null;
       gst_rate: string | null;
       customization_note: string | null;
+      is_returnable: boolean;
     }
   >(
     `select
@@ -526,7 +529,8 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
        coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
        ci.customization_note,
        pv.deleted_at as variant_deleted,
-       p.deleted_at as product_deleted
+       p.deleted_at as product_deleted,
+       p.is_returnable
      from public.cart_items ci
      join public.product_variants pv on pv.id = ci.variant_id
      join public.products p on p.id = pv.product_id
@@ -586,6 +590,7 @@ export async function getCartView(cart: CartRow): Promise<CartView> {
       lineTotal: available ? unitPrice * quantity : 0,
       customizationNote: row.customization_note,
       isDigital,
+      isReturnable: row.is_returnable && !isDigital,
     };
   });
 

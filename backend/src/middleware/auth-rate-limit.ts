@@ -83,6 +83,21 @@ export const checkoutLimiter = rateLimit({
   ...withStore("checkout"),
 });
 
+/**
+ * Delivery quotes call Shiprocket on a cache miss. Checkout re-quotes when the
+ * address, payment method or cart changes, so this leaves plenty of headroom.
+ */
+export const shippingQuoteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: env.NODE_ENV === "production" ? 30 : 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many delivery checks. Wait a minute and try again." },
+  ...perVisitor,
+  ...failOpen,
+  ...withStore("shipquote"),
+});
+
 /** Public catalog / search / suggest — soft abuse brake. */
 export const publicReadLimiter = rateLimit({
   windowMs: 60 * 1000,

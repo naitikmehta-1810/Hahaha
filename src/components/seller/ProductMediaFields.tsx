@@ -10,6 +10,20 @@ import styles from "./ProductMediaFields.module.css";
 
 /* ── Video ──────────────────────────────────────────────────────────────── */
 
+/** Formats Cloudinary takes in; every upload is served back as H.264 MP4. */
+const VIDEO_EXTENSIONS = ["mp4", "mov", "m4v", "webm", "mkv", "avi", "3gp"];
+const VIDEO_ACCEPT = ["video/*", ...VIDEO_EXTENSIONS.map((ext) => `.${ext}`)].join(",");
+
+/**
+ * Browsers often report no type, or application/octet-stream, for .mov files
+ * (Windows has no QuickTime type registered), so the extension decides too.
+ */
+function isVideoFile(file: File) {
+  if (file.type.startsWith("video/")) return true;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return VIDEO_EXTENSIONS.includes(ext);
+}
+
 export type VideoState =
   | { kind: "none" }
   | { kind: "existing"; url: string; posterUrl: string }
@@ -35,6 +49,8 @@ export function VideoField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Chrome and Firefox can't play HEVC .mov files locally; the saved MP4 plays everywhere.
+  const [previewFailed, setPreviewFailed] = useState(false);
 
   // Revoke object URLs the preview created once they are replaced.
   const previewUrl = value.kind === "uploading" || value.kind === "new" ? value.previewUrl : null;
@@ -46,10 +62,14 @@ export function VideoField({
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const start = async (file: File) => {
-    if (!file.type.startsWith("video/")) {
-      onChange({ kind: "error", message: `"${file.name}" isn't a video file.` });
+    if (!isVideoFile(file)) {
+      onChange({
+        kind: "error",
+        message: `"${file.name}" isn't a video file. Use MP4, MOV, M4V or WebM.`,
+      });
       return;
     }
+    setPreviewFailed(false);
     const preview = URL.createObjectURL(file);
     const controller = new AbortController();
     abortRef.current = controller;
@@ -95,7 +115,14 @@ export function VideoField({
             muted
             playsInline
             preload="metadata"
+            onError={() => setPreviewFailed(true)}
           />
+          {previewFailed && value.kind === "new" ? (
+            <p className={sellerStyles.sectionHint} role="status">
+              Uploaded. This browser can&apos;t preview this format, but buyers will see it as an
+              MP4 once you save.
+            </p>
+          ) : null}
           <div className={styles.videoActions}>
             <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
               Replace
@@ -127,7 +154,7 @@ export function VideoField({
         <div className={sellerStyles.dropZone}>
           <Film size={24} aria-hidden="true" />
           <p>Add a short video</p>
-          <span>MP4, MOV or WebM</span>
+          <span>MP4, MOV, M4V or WebM</span>
           <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
             Choose video
           </Button>
@@ -143,7 +170,7 @@ export function VideoField({
       <input
         ref={inputRef}
         type="file"
-        accept="video/*"
+        accept={VIDEO_ACCEPT}
         hidden
         onChange={(e) => {
           const file = e.target.files?.[0];

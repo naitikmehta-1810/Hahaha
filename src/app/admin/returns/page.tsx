@@ -17,6 +17,9 @@ type ReturnRequest = {
   reason: string;
   status: string;
   totalAmount: number;
+  /** What approving refunds; lower than the total when items were sold with no returns. */
+  refundAmount?: number;
+  excludedItemCount?: number;
   createdAt: string;
 };
 
@@ -87,7 +90,7 @@ export default function AdminReturnsPage() {
                 <th>Reason</th>
                 <th>Status</th>
                 <th>Requested</th>
-                <th className={ui.num}>Amount</th>
+                <th className={ui.num}>Refund</th>
                 <th className={ui.num}>Decision</th>
               </tr>
             </thead>
@@ -100,7 +103,15 @@ export default function AdminReturnsPage() {
                     <StatusPill status={r.status} />
                   </td>
                   <td className={ui.nowrap}>{formatDate(r.createdAt)}</td>
-                  <td className={`${ui.num} ${ui.cellPrimary}`}>{rupees(r.totalAmount)}</td>
+                  <td className={`${ui.num} ${ui.cellPrimary}`}>
+                    {rupees(r.refundAmount ?? r.totalAmount)}
+                    {r.excludedItemCount ? (
+                      <div className={ui.muted}>
+                        of {rupees(r.totalAmount)} · {r.excludedItemCount} no-returns item
+                        {r.excludedItemCount === 1 ? "" : "s"} excluded
+                      </div>
+                    ) : null}
+                  </td>
                   <td>
                     {r.status === "requested" ? (
                       <div className={ui.rowActions}>

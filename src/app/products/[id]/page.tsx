@@ -17,6 +17,8 @@ import {
   Store,
   PackageX,
   MapPin,
+  RotateCcw,
+  Ban,
 } from "lucide-react";
 import styles from "./product-details.module.css";
 import Button, { ButtonLink } from "@/components/ui/Button/Button";
@@ -45,6 +47,7 @@ import DeliveryCheckDialog from "@/components/product/DeliveryCheckDialog";
 import MediaGallery from "@/components/product/MediaGallery";
 import {
   checkDeliverability,
+  deliveryWindowLabel,
   placeLabel,
   savedPincode,
   type Deliverability,
@@ -90,8 +93,14 @@ export default function ProductDetailsPage() {
       setLoading(false);
       setDelivery(null);
       const pincode = savedPincode();
-      if (result.product?.seller.sellingScope === "state" && pincode) {
-        void checkDeliverability(result.product.slug, pincode).then((check) => {
+      // State-only shops need the PIN for the cart rule; physical items use it
+      // for the delivery date.
+      const loaded = result.product;
+      const wantsPincode =
+        loaded != null &&
+        (loaded.seller.sellingScope === "state" || loaded.productType !== "digital");
+      if (loaded && wantsPincode && pincode) {
+        void checkDeliverability(loaded.slug, pincode).then((check) => {
           if (!cancelled && check.data) setDelivery(check.data);
         });
       }
@@ -408,7 +417,15 @@ export default function ProductDetailsPage() {
                 {delivery?.deliverable === true ? (
                   <>
                     {isDigital ? "Available for" : "Delivers to"} <strong>{delivery.pincode}</strong>
-                    {placeLabel(delivery) ? ` · ${placeLabel(delivery)}` : ""}.{" "}
+                    {placeLabel(delivery) ? ` · ${placeLabel(delivery)}` : ""}
+                    {!isDigital && delivery.estimate
+                      ? ` · ${deliveryWindowLabel(delivery.estimate)}`
+                      : ""}
+                    .{" "}
+                  </>
+                ) : delivery?.deliverable === false && delivery.courierUnavailable ? (
+                  <>
+                    No courier delivers to <strong>{delivery.pincode}</strong> right now.{" "}
                   </>
                 ) : delivery?.deliverable === false ? (
                   <>
@@ -434,7 +451,65 @@ export default function ProductDetailsPage() {
             </div>
           ) : null}
 
-          {deliveryDialog && stateOnlySeller ? (
+          {!stateOnlySeller && !isDigital ? (
+            <div
+              className={`${styles.deliveryNote} ${
+                delivery?.deliverable === false
+                  ? styles.deliveryNoteBlocked
+                  : delivery?.estimate
+                    ? styles.deliveryNoteOk
+                    : ""
+              }`}
+            >
+              <MapPin size={15} aria-hidden="true" />
+              <span>
+                {delivery?.deliverable === false ? (
+                  <>
+                    No courier delivers to <strong>{delivery.pincode}</strong> right now.{" "}
+                  </>
+                ) : delivery?.estimate ? (
+                  <>
+                    {deliveryWindowLabel(delivery.estimate)} to <strong>{delivery.pincode}</strong>
+                    .{" "}
+                  </>
+                ) : delivery ? (
+                  <>
+                    Delivers to <strong>{delivery.pincode}</strong>.{" "}
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  className={styles.deliveryNoteLink}
+                  onClick={() => setDeliveryDialog({ action: null })}
+                >
+                  {delivery ? "Change PIN code" : "Check delivery date for your PIN code"}
+                </button>
+              </span>
+            </div>
+          ) : null}
+
+          {!isDigital ? (
+            <div className={styles.deliveryNote}>
+              {product.isReturnable === false ? (
+                <>
+                  <Ban size={15} aria-hidden="true" />
+                  <span>
+                    <strong>No returns</strong> on this item. The seller doesn&apos;t accept
+                    returns for it.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <RotateCcw size={15} aria-hidden="true" />
+                  <span>
+                    {product.returnWindowDays ?? 7}-day returns after delivery.
+                  </span>
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {deliveryDialog && (stateOnlySeller || !isDigital) ? (
             <DeliveryCheckDialog
               productSlug={product.slug}
               shopName={product.shopName}

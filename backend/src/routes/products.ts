@@ -13,6 +13,8 @@ import { subscribeStockNotification } from "../services/stock-notifications.serv
 import { publicReadLimiter } from "../middleware/auth-rate-limit.js";
 import { resolveViewerRegion } from "../services/viewer-region.service.js";
 import { normalizePincode, resolvePincode, sameState } from "../services/pincode.service.js";
+import { quoteProductDelivery } from "../services/shipping-quote.service.js";
+import { shippingQuoteLimiter } from "../middleware/auth-rate-limit.js";
 
 const productsRouter = Router();
 
@@ -152,12 +154,15 @@ productsRouter.post(
 );
 
 /**
- * Can this product be delivered to a PIN code? Mirrors the checkout rule: a
- * state-only shop delivers only inside its selling state. `deliverable: null`
- * means the PIN's state could not be determined right now.
+ * Can this product be delivered to a PIN code, and by when? Mirrors checkout:
+ * a state-only shop delivers only inside its selling state, and a PIN no
+ * courier serves can't be delivered to. `deliverable: null` means the PIN's
+ * state could not be determined right now. `estimate` is null when no date
+ * could be worked out (downloads, or the rate lookup failed).
  */
 productsRouter.get(
   "/:slug/deliverability",
+  shippingQuoteLimiter,
   asyncHandler(async (req, res) => {
     const pincode = normalizePincode(req.query.pincode);
     const slug = String(req.params.slug);
@@ -186,6 +191,24 @@ productsRouter.get(
     if (!stateOnly) deliverable = true;
     else if (!place) deliverable = null;
     else deliverable = Boolean(seller.selling_state) && sameState(place.state, seller.selling_state);
+
+    let estimate: { minDays: number; maxDays: number; etaFrom: string; etaTo: string } | null = null;
+    let courierUnavailable = false;
+    if (deliverable !== false) {
+      const delivery = await quoteProductDelivery(slug, pincode);
+      if (delivery?.serviceable === false) {
+        deliverable = false;
+        courierUnavailable = true;
+      } else if (delivery) {
+        estimate = {
+          minDays: delivery.minDays,
+          maxDays: delivery.maxDays,
+          etaFrom: delivery.etaFrom,
+          etaTo: delivery.etaTo,
+        };
+      }
+    }
+
     res.json({
       pincode,
       state: place?.state ?? null,
@@ -193,6 +216,9 @@ productsRouter.get(
       deliverable,
       sellerState: stateOnly ? seller.selling_state : null,
       shopName: seller.shop_name,
+      /** No courier serves this PIN (as opposed to the shop's state rule). */
+      courierUnavailable,
+      estimate,
     });
   })
 );

@@ -12,6 +12,17 @@
 - [ ] Shop Setup → Shipping: save name, phone, address1, city, state, 6-digit pincode
 - [ ] Shiprocket panel pickup location nickname matches `pickupLocationName` or shop name
 
+## Live delivery charges
+
+- [ ] Migrated: `070_live_shipping_and_returnable`
+- [ ] Every seller has a 6-digit pickup PIN in Shop Setup (sellers without one are quoted the fallback rate; API log: `seller has no pickup PIN code`)
+- [ ] Checkout below ₹499 shows a real rate and an "Arrives …" date per option; it matches Shiprocket panel → Tools → Rate Calculator for the same pickup/delivery PIN and weight
+- [ ] Switching to Cash on Delivery re-prices (COD fee included)
+- [ ] Book one order, then compare the wallet debit with `orders.shipping_cost`. If the debit is higher (e.g. GST on freight), set `SHIPPING_RATE_MARKUP_PERCENT` (18 for GST) and/or `SHIPPING_HANDLING_FEE`
+- [ ] AWB is booked with the courier stored in `orders.shipping_quote` (API log: `[shiprocket] serviceability … courierId`)
+- [ ] No `[shipping-quote] live rate failed; using fallback rate` lines in normal operation
+- [ ] `npx tsx scripts/live-shipping-proof.mts` passes against the API
+
 ## Order → ship → track
 
 - [ ] Place prepaid or COD order → status becomes `processing`, shipment row `pending`, **no fake AWB**

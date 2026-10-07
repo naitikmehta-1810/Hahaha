@@ -781,6 +781,7 @@ const PRODUCT_FIELD_LABELS: Record<string, string> = {
   widthCm: "Width",
   heightCm: "Height",
   useVolumetric: "Volumetric shipping",
+  isReturnable: "Returns",
   tags: "Tags",
   imageUrls: "Images",
   collectionIds: "Collections",
@@ -865,6 +866,11 @@ const productCreateSchema = z.object({
    * are booked on dead weight alone, so L/W/H are only needed when this is on.
    */
   useVolumetric: z.boolean().optional(),
+  /**
+   * False marks the listing "No returns": buyers see it before buying and can't
+   * request a return for it. Omitted keeps the current setting (true on create).
+   */
+  isReturnable: z.boolean().optional(),
   status: z.enum(["draft", "active"]).default("draft"),
   tags: z
     .array(
@@ -998,13 +1004,14 @@ sellerRouter.get(
       processing_days_max: number | null;
       use_volumetric: boolean;
       video_public_id: string | null;
+      is_returnable: boolean;
     }>(
       `select id, title, slug, short_description, description, category_id, subcategory_id,
               product_type, base_price::text, compare_at_price::text, cost_price::text,
               status, tags, weight::text, weight_unit, length_cm::text, width_cm::text,
               height_cm::text, continue_selling_when_out_of_stock,
               is_customizable, customization_label, processing_days, processing_days_max,
-              use_volumetric, video_public_id
+              use_volumetric, video_public_id, is_returnable
        from public.products
        where id = $1`,
       [productId]
@@ -1074,6 +1081,7 @@ sellerRouter.get(
         widthCm: row.width_cm != null ? Number(row.width_cm) : null,
         heightCm: row.height_cm != null ? Number(row.height_cm) : null,
         useVolumetric: row.use_volumetric,
+        isReturnable: row.is_returnable,
         status: row.status,
         isCustomizable: row.is_customizable,
         customizationLabel: row.customization_label,
@@ -1138,6 +1146,8 @@ function normalizeForProductType<T extends Partial<ProductCreateInput>>(data: T,
     continueSellingWhenOutOfStock: true,
     processingDays: 0,
     processingDaysMax: 0,
+    // A download can't be sent back once it has been delivered.
+    isReturnable: false,
   };
 }
 
@@ -1295,11 +1305,12 @@ async function createProductRecord(
           weight, weight_unit, length_cm, width_cm, height_cm,
           continue_selling_when_out_of_stock, is_customizable, customization_label,
           processing_days, processing_days_max, use_volumetric, external_source, external_id,
-          created_at, updated_at)
+          is_returnable, created_at, updated_at)
        values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7,
                $8, $9, $10, $11, $12, $13, $14,
                $15, $16, $17, $18, $19,
-               $20, $21, $22, coalesce($23, 2), $24, $25, $26, $27, now(), now())
+               $20, $21, $22, coalesce($23, 2), $24, $25, $26, $27,
+               $28, now(), now())
        returning id, slug`,
       [
         sellerId,
@@ -1329,6 +1340,7 @@ async function createProductRecord(
         data.useVolumetric ?? false,
         external?.source ?? null,
         external?.id ?? null,
+        data.isReturnable ?? true,
       ]
     );
 
@@ -1808,6 +1820,7 @@ sellerRouter.patch(
            processing_days = coalesce($22, processing_days),
            processing_days_max = case when $23::boolean then $24 else processing_days_max end,
            use_volumetric = coalesce($25, use_volumetric),
+           is_returnable = coalesce($26, is_returnable),
            updated_at = now()
          where id = $1`,
         [
@@ -1843,6 +1856,7 @@ sellerRouter.patch(
           data.processingDaysMax !== undefined,
           data.processingDaysMax ?? null,
           data.useVolumetric ?? null,
+          data.isReturnable ?? null,
         ]
       );
 

@@ -186,6 +186,8 @@ export const placeOrderSchema = z.object({
   paymentMethod: z.enum(["card", "upi", "netbanking", "wallet", "cod"]).optional().nullable(),
   couponCode: z.string().trim().min(1).optional().nullable(),
   referrerChannel: z.enum(["website", "marketplace", "social", "other"]).default("website"),
+  /** Delivery charge shown to the buyer; a mismatch with the live quote refuses the order. */
+  expectedShippingAmount: z.number().nonnegative().max(100000).optional().nullable(),
 });
 
 ordersRouter.post(
@@ -206,6 +208,7 @@ ordersRouter.post(
       paymentMethod: parsed.data.paymentMethod ?? null,
       couponCode: parsed.data.couponCode ?? null,
       referrerChannel: parsed.data.referrerChannel,
+      expectedShippingAmount: parsed.data.expectedShippingAmount ?? null,
     });
     res.status(201).json(result);
   })

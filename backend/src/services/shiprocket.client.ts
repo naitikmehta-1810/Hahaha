@@ -2,6 +2,8 @@ import { env } from "../config/env.js";
 import { AppError } from "../utils/errors.js";
 
 const BASE = "https://apiv2.shiprocket.in/v1/external";
+/** Every call gets a deadline so a hung Shiprocket can't hold a checkout request open. */
+const DEFAULT_TIMEOUT_MS = 20_000;
 
 type TokenCache = { token: string; expiresAt: number };
 let tokenCache: TokenCache | null = null;
@@ -42,6 +44,7 @@ async function login(): Promise<string> {
   ensureCreds();
   const res = await fetch(`${BASE}/auth/login`, {
     method: "POST",
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email: env.SHIPROCKET_EMAIL,
@@ -76,11 +79,13 @@ export async function getShiprocketToken(force = false): Promise<string> {
 
 async function srFetch<T>(
   path: string,
-  init: RequestInit & { retryAuth?: boolean } = {}
+  init: RequestInit & { retryAuth?: boolean; timeoutMs?: number } = {}
 ): Promise<T> {
   const token = await getShiprocketToken();
+  const { retryAuth, timeoutMs = DEFAULT_TIMEOUT_MS, ...requestInit } = init;
   const res = await fetch(`${BASE}${path}`, {
-    ...init,
+    ...requestInit,
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
@@ -88,7 +93,7 @@ async function srFetch<T>(
     },
   });
 
-  if (res.status === 401 && init.retryAuth !== false) {
+  if (res.status === 401 && retryAuth !== false) {
     await getShiprocketToken(true);
     return srFetch<T>(path, { ...init, retryAuth: false });
   }
@@ -252,8 +257,13 @@ export type AssignAwbResult = {
 export type ServiceableCourier = {
   courier_company_id: number;
   courier_name: string;
-  rate?: number;
-  estimated_delivery_days?: string;
+  /** Total charge for this parcel, COD charges included when cod=1. */
+  rate?: number | string;
+  estimated_delivery_days?: string | number;
+  /** Expected delivery date, e.g. "Oct 14, 2026". */
+  etd?: string;
+  /** 1 when the courier is disabled on the account. */
+  blocked?: number;
 };
 
 export async function getServiceableCouriers(opts: {
@@ -261,6 +271,12 @@ export async function getServiceableCouriers(opts: {
   deliveryPostcode: string;
   weight: number;
   cod?: boolean;
+  /** Parcel box in cm; lets the rate include volumetric weight. */
+  length?: number;
+  breadth?: number;
+  height?: number;
+  declaredValue?: number;
+  timeoutMs?: number;
 }) {
   const qs = new URLSearchParams({
     pickup_postcode: opts.pickupPostcode,
@@ -268,13 +284,21 @@ export async function getServiceableCouriers(opts: {
     weight: String(Math.max(0.1, opts.weight)),
     cod: opts.cod ? "1" : "0",
   });
+  if (opts.length && opts.breadth && opts.height) {
+    qs.set("length", String(Math.max(1, Math.ceil(opts.length))));
+    qs.set("breadth", String(Math.max(1, Math.ceil(opts.breadth))));
+    qs.set("height", String(Math.max(1, Math.ceil(opts.height))));
+  }
+  if (opts.declaredValue != null && opts.declaredValue > 0) {
+    qs.set("declared_value", String(Math.round(opts.declaredValue)));
+  }
   return srFetch<{
     data?: {
       available_courier_companies?: ServiceableCourier[];
       recommended_courier_company_id?: number;
     };
     message?: string;
-  }>(`/courier/serviceability/?${qs.toString()}`, { method: "GET" });
+  }>(`/courier/serviceability/?${qs.toString()}`, { method: "GET", timeoutMs: opts.timeoutMs });
 }
 
 export async function assignAwb(shipmentId: number, courierId?: number) {

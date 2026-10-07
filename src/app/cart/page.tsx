@@ -164,9 +164,11 @@ export default function CartPage() {
   const hasPhysical = availableItems.some((item) => !item.isDigital);
   // Free shipping is measured on the GST-inclusive item value buyers see.
   const itemsInclGst = totalsInclGst(availableItems, 0, 0).itemsInclGst;
-  const shipping =
-    !hasPhysical || freeShipping.qualifies || itemsInclGst >= freeShipping.threshold ? 0 : 49;
-  const { discountInclGst, gstIncluded, total } = totalsInclGst(availableItems, discountAmount, shipping);
+  // Below the free-shipping threshold the charge depends on the address and the
+  // parcel, so it's priced live at checkout and left out of this total.
+  const freeDelivery =
+    hasPhysical && (freeShipping.qualifies || itemsInclGst >= freeShipping.threshold);
+  const { discountInclGst, gstIncluded, total } = totalsInclGst(availableItems, discountAmount, 0);
 
   const handleProceedToCheckout = () => {
     setStatus(null);
@@ -350,13 +352,13 @@ export default function CartPage() {
                 {hasPhysical ? (
                   <div className={styles.row}>
                     <dt>Shipping</dt>
-                    <dd className={shipping === 0 ? styles.positive : ""}>
-                      {shipping === 0 ? "Free" : formatInr(shipping)}
+                    <dd className={freeDelivery ? styles.positive : ""}>
+                      {freeDelivery ? "Free" : "Calculated at checkout"}
                     </dd>
                   </div>
                 ) : null}
                 <div className={styles.rowBold}>
-                  <dt>Total</dt>
+                  <dt>{hasPhysical && !freeDelivery ? "Total (before shipping)" : "Total"}</dt>
                   <dd>{formatInr(total)}</dd>
                 </div>
                 {gstIncluded > 0 ? (

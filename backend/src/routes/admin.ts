@@ -6,6 +6,7 @@ import { requireAdmin } from "../middleware/requireAdmin.js";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
 import { refundPayment } from "../services/payment.service.js";
+import { returnRefundAmounts } from "../services/order.service.js";
 import { transition } from "../services/order-state-machine.js";
 import { env } from "../config/env.js";
 import { invalidateCatalogCaches } from "../services/catalog-cache.js";
@@ -397,17 +398,26 @@ adminRouter.get(
        order by r.created_at desc
        limit 100`
     );
+    const refunds = await returnRefundAmounts([
+      ...new Set(result.rows.map((row) => String(row.order_id))),
+    ]);
     res.json({
-      returnRequests: result.rows.map((row) => ({
-        id: row.id,
-        orderId: row.order_id,
-        orderNumber: row.order_number,
-        userId: row.user_id,
-        reason: row.reason,
-        status: row.status,
-        totalAmount: Number(row.total_amount),
-        createdAt: row.created_at,
-      })),
+      returnRequests: result.rows.map((row) => {
+        const refund = refunds.get(String(row.order_id));
+        return {
+          id: row.id,
+          orderId: row.order_id,
+          orderNumber: row.order_number,
+          userId: row.user_id,
+          reason: row.reason,
+          status: row.status,
+          totalAmount: Number(row.total_amount),
+          /** What approving refunds: no-returns lines and downloads stay paid. */
+          refundAmount: refund?.refundAmount ?? Number(row.total_amount),
+          excludedItemCount: refund?.excludedItemCount ?? 0,
+          createdAt: row.created_at,
+        };
+      }),
     });
   })
 );
@@ -465,7 +475,20 @@ adminRouter.post(
       throw new AppError(409, "ALREADY_REFUNDED", "Order already has a processed refund");
     }
 
-    await refundPayment(row.order_id, Number(row.total_amount), "return_approved");
+    const refund = (await returnRefundAmounts([row.order_id])).get(row.order_id);
+    const refundAmount = refund?.refundAmount ?? Number(row.total_amount);
+    if (refundAmount <= 0) {
+      throw new AppError(
+        409,
+        "NOTHING_TO_REFUND",
+        "Every item on this order was sold with no returns. Reject the request instead."
+      );
+    }
+    await refundPayment(
+      row.order_id,
+      refundAmount,
+      refund && refund.excludedItemCount > 0 ? "return_approved_partial" : "return_approved"
+    );
     await pool.query(
       `update public.return_requests set status = 'approved', updated_at = now() where id = $1`,
       [row.id]

@@ -56,16 +56,29 @@ const envSchema = z.object({
   PG_STATEMENT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(15_000),
   /** Minutes a pending_payment order may hold inventory before auto-cancel. */
   RESERVATION_TIMEOUT_MINUTES: z.coerce.number().int().positive().default(20),
-  /** Free standard delivery once the cart subtotal reaches this amount. */
+  /**
+   * Standard delivery is free once the GST-inclusive goods value reaches this amount;
+   * the marketplace absorbs the courier charge. Below it, buyers pay the live
+   * Shiprocket rate. Express is always charged at its live rate.
+   */
   FREE_SHIPPING_THRESHOLD: z.coerce.number().nonnegative().default(499),
   /**
-   * Standard delivery charge applied only below FREE_SHIPPING_THRESHOLD. The designs
-   * never show a paid standard rate (the checkout radio always reads "Free"), so this
-   * default is an assumption — see the flagged-assumptions list.
+   * Fallback rates, used only when a live Shiprocket rate can't be had: stub mode,
+   * a seller without a pickup PIN code, or Shiprocket being down. Standard is
+   * charged per started 0.5 kg; express is max(EXPRESS_SHIPPING_AMOUNT, 2 × standard).
+   * Kept on the high side of real courier rates so an outage never sells at a loss.
    */
-  STANDARD_SHIPPING_AMOUNT: z.coerce.number().nonnegative().default(49),
-  /** "Express Delivery 2-3 business days ₹249" — flat, regardless of subtotal. */
+  STANDARD_SHIPPING_AMOUNT: z.coerce.number().nonnegative().default(70),
   EXPRESS_SHIPPING_AMOUNT: z.coerce.number().nonnegative().default(249),
+  /**
+   * Added on top of every live courier rate before it is charged: a percentage
+   * (e.g. 18 if your Shiprocket wallet is debited rate + GST) and a flat fee per
+   * parcel for packaging. Both default to 0 (charge the quoted rate as is).
+   */
+  SHIPPING_RATE_MARKUP_PERCENT: z.coerce.number().min(0).max(100).default(0),
+  SHIPPING_HANDLING_FEE: z.coerce.number().nonnegative().default(0),
+  /** How long a live Shiprocket rate is reused for the same route and parcel. */
+  SHIPPING_QUOTE_CACHE_SECONDS: z.coerce.number().int().positive().default(6 * 60 * 60),
   /** Checkout breaks out "Tax (18%)" as its own line. Stored per-order for history. */
   TAX_RATE: z.coerce.number().min(0).max(1).default(0.18),
   /** Easy Returns Within 7 days — drives returnWindowClosesAt on order details. */

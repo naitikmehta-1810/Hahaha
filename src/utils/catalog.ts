@@ -47,6 +47,9 @@ export type ProductDetail = ProductCard & {
   subcategoryId: string | null;
   gstPercent: number;
   isCustomizable: boolean;
+  /** False: sold with no returns. Older cached payloads omit it (treat as returnable). */
+  isReturnable?: boolean;
+  returnWindowDays?: number;
   customizationLabel: string | null;
   breadcrumb: Array<{ id: string; name: string; slug: string }>;
   images: Array<{ id: string; url: string; altText: string | null; isThumbnail: boolean }>;

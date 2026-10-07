@@ -283,6 +283,7 @@ export default function OrderDetailsPage() {
                         {formatOptions(item.variantOptionValues) || "Standard"}
                         {" · "}Qty: {item.quantity}
                         {item.isBackordered ? " · Backordered" : ""}
+                        {item.isReturnable === false ? " · No returns" : ""}
                       </>
                     )}
                   </div>
@@ -390,6 +391,11 @@ export default function OrderDetailsPage() {
               Digital downloads are delivered instantly, so they can&apos;t be returned. If a file
               is faulty, contact support and we&apos;ll sort it out.
             </p>
+          ) : order.hasReturnableItems === false ? (
+            <p className={styles.sidebarMuted}>
+              The items in this order were sold with no returns. If something arrived damaged or
+              wrong, contact support and we&apos;ll sort it out.
+            </p>
           ) : order.returnWindowClosesAt ? (
             <div
               className={`${styles.returnBanner} ${
@@ -400,6 +406,9 @@ export default function OrderDetailsPage() {
                 {order.returnEligible ? (
                   <>
                     Return window open until <strong>{returnClosed}</strong>.
+                    {order.items.some((item) => !item.isDigital && item.isReturnable === false)
+                      ? " Items marked “No returns” can't be sent back."
+                      : ""}
                   </>
                 ) : (
                   <>

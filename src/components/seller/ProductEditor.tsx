@@ -48,6 +48,7 @@ type SellerProductDetail = {
   widthCm: number | null;
   heightCm: number | null;
   useVolumetric?: boolean;
+  isReturnable?: boolean;
   status: "active" | "draft" | string;
   tags: string[];
   imageUrls: string[];
@@ -98,6 +99,7 @@ const EMPTY_FORM = {
   widthCm: "",
   heightCm: "",
   useVolumetric: false,
+  isReturnable: true,
   processingDays: "2",
   processingDaysMax: "3",
   isCustomizable: false,
@@ -221,6 +223,7 @@ export default function ProductEditor({ productId }: { productId?: string }) {
         widthCm: p.widthCm != null ? String(p.widthCm) : "",
         heightCm: p.heightCm != null ? String(p.heightCm) : "",
         useVolumetric: Boolean(p.useVolumetric),
+        isReturnable: p.isReturnable !== false,
         processingDays: String(p.processingDays ?? 2),
         processingDaysMax: String(p.processingDaysMax ?? (p.processingDays ?? 2) + 1),
         isCustomizable: Boolean(p.isCustomizable),
@@ -396,6 +399,8 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       widthCm,
       heightCm,
       useVolumetric,
+      // Downloads are never returnable; the API enforces this too.
+      isReturnable: isDigital ? false : form.isReturnable,
       status,
       isCustomizable: form.isCustomizable,
       customizationLabel: form.isCustomizable ? form.customizationLabel.trim() || null : null,
@@ -888,6 +893,25 @@ export default function ProductEditor({ productId }: { productId?: string }) {
               <p className={styles.hintBelow}>Leave this off for products that ship exactly as listed.</p>
             )}
           </section>
+
+          {isDigital ? null : (
+            <section className={ui.card}>
+              <h2 className={styles.sectionTitle}>Returns</h2>
+              <label className={styles.checkLabel}>
+                <input
+                  type="checkbox"
+                  checked={!form.isReturnable}
+                  onChange={(e) => update("isReturnable", !e.target.checked)}
+                />
+                No returns on this product
+              </label>
+              <p className={styles.hintBelow}>
+                {form.isReturnable
+                  ? "Buyers can request a return within 7 days of delivery. Turn this on for personalised, perishable or hygiene items."
+                  : "Buyers see “No returns” on the product page and at checkout, and can't request a return for it."}
+              </p>
+            </section>
+          )}
 
           <section className={ui.card}>
             <h2 className={styles.sectionTitle}>Organisation</h2>

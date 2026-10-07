@@ -8,6 +8,10 @@ export type Deliverability = {
   deliverable: boolean | null;
   sellerState: string | null;
   shopName: string;
+  /** No courier serves this PIN code (rather than the shop's state rule). */
+  courierUnavailable?: boolean;
+  /** Expected delivery window for one unit; null when it couldn't be worked out. */
+  estimate?: { minDays: number; maxDays: number; etaFrom: string; etaTo: string } | null;
 };
 
 const PINCODE_KEY = "stuffsy-pincode";
@@ -37,6 +41,15 @@ export function checkDeliverability(productSlug: string, pincode: string) {
     `/api/products/${encodeURIComponent(productSlug)}/deliverability?pincode=${encodeURIComponent(pincode)}`,
     { skipRefresh: true }
   );
+}
+
+const etaFormat = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short" });
+
+/** "Delivery by Tue, 14 Oct" or "Delivery Sat, 11 Oct – Tue, 14 Oct". */
+export function deliveryWindowLabel(estimate: NonNullable<Deliverability["estimate"]>) {
+  const from = etaFormat.format(new Date(estimate.etaFrom));
+  const to = etaFormat.format(new Date(estimate.etaTo));
+  return from === to ? `Delivery by ${to}` : `Delivery ${from} – ${to}`;
 }
 
 /** "Bangalore, Karnataka" or just the state when India Post had no district. */

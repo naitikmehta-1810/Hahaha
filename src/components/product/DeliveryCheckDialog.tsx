@@ -5,6 +5,7 @@ import { CheckCircle2, MapPin, X, XCircle } from "lucide-react";
 import Button from "@/components/ui/Button/Button";
 import {
   checkDeliverability,
+  deliveryWindowLabel,
   isValidPincode,
   placeLabel,
   rememberPincode,
@@ -15,7 +16,8 @@ import styles from "./DeliveryCheckDialog.module.css";
 type Props = {
   productSlug: string;
   shopName: string;
-  sellerState: string;
+  /** Set for a shop that delivers only inside its state; null for pan-India shops. */
+  sellerState: string | null;
   /** A download: the state rule still applies (GST), but nothing is "delivered". */
   isDigital?: boolean;
   initialPincode: string;
@@ -29,8 +31,9 @@ type Props = {
 };
 
 /**
- * Asks for a PIN code before a state-only shop's item goes into the cart, and
- * keeps it out when the shop cannot deliver there. Mount it only while open.
+ * Asks for a PIN code and shows whether, and by when, the item can be
+ * delivered there. For a state-only shop it also gates adding to the cart.
+ * Mount it only while open.
  */
 export default function DeliveryCheckDialog({
   productSlug,
@@ -109,7 +112,9 @@ export default function DeliveryCheckDialog({
           </button>
         </div>
         <p className={styles.lead}>
-          {isDigital ? (
+          {!sellerState ? (
+            <>Enter the PIN code you want this delivered to, to see when it will arrive.</>
+          ) : isDigital ? (
             <>
               {shopName} can sell only to buyers in <strong>{sellerState}</strong>. Enter your
               billing PIN code.
@@ -158,6 +163,12 @@ export default function DeliveryCheckDialog({
               <span>
                 {isDigital ? "Available for" : "Delivers to"} <strong>{shown.pincode}</strong>
                 {placeLabel(shown) ? ` · ${placeLabel(shown)}` : ""}
+                {!isDigital && shown.estimate ? (
+                  <>
+                    <br />
+                    {deliveryWindowLabel(shown.estimate)}, if ordered today.
+                  </>
+                ) : null}
               </span>
             </p>
           ) : null}
@@ -165,13 +176,20 @@ export default function DeliveryCheckDialog({
           {shown?.deliverable === false ? (
             <p className={`${styles.result} ${styles.blocked}`}>
               <XCircle size={18} aria-hidden="true" />
-              <span>
-                {isDigital ? "Not available for" : "Can’t deliver to"} <strong>{shown.pincode}</strong>
-                {shown.state ? ` in ${shown.state}` : ""}. {shown.shopName}{" "}
-                {isDigital ? "can sell only within" : "ships only within"}{" "}
-                {shown.sellerState ?? sellerState}, so this item can&apos;t be added to your cart
-                for this address. Try another PIN code.
-              </span>
+              {shown.courierUnavailable ? (
+                <span>
+                  Can&apos;t deliver to <strong>{shown.pincode}</strong> right now: no courier
+                  serves this PIN code from {shown.shopName}. Try another PIN code.
+                </span>
+              ) : (
+                <span>
+                  {isDigital ? "Not available for" : "Can’t deliver to"} <strong>{shown.pincode}</strong>
+                  {shown.state ? ` in ${shown.state}` : ""}. {shown.shopName}{" "}
+                  {isDigital ? "can sell only within" : "ships only within"}{" "}
+                  {shown.sellerState ?? sellerState}, so this item can&apos;t be added to your cart
+                  for this address. Try another PIN code.
+                </span>
+              )}
             </p>
           ) : null}
 

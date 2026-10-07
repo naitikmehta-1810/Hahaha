@@ -1,4 +1,5 @@
 import { pool } from "../config/db.js";
+import { env } from "../config/env.js";
 import { productVideoPosterUrl, productVideoUrl } from "./media.service.js";
 import { appliedGstPercent, PRODUCT_GST_PERCENT_SQL, PRODUCT_PRICE_INCL_GST_SQL } from "./gst.js";
 import {
@@ -396,6 +397,10 @@ export type ProductDetail = ProductCard & {
   /** Percent added at checkout. Missing category rate is 18. */
   gstPercent: number;
   isCustomizable: boolean;
+  /** False when the seller sells this item with no returns. */
+  isReturnable: boolean;
+  /** Days a returnable item can be sent back after delivery. */
+  returnWindowDays: number;
   customizationLabel: string | null;
   /** Shown first in the gallery, before the photos. */
   video: { url: string; posterUrl: string } | null;
@@ -479,6 +484,7 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
       is_customizable: boolean;
       customization_label: string | null;
       video_public_id: string | null;
+      is_returnable: boolean;
     }
   >(
     `select
@@ -486,7 +492,7 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
        p.review_count, p.is_bestseller, p.maker_name, p.seller_id,
        p.short_description, p.description, p.product_type, p.specs,
        p.processing_days, p.processing_days_max, p.tags, p.category_id, p.subcategory_id,
-       p.is_customizable, p.customization_label, p.video_public_id,
+       p.is_customizable, p.customization_label, p.video_public_id, p.is_returnable,
        s.shop_name, s.shop_slug, s.logo_url, s.badge,
        s.selling_scope, s.selling_state,
        coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
@@ -574,6 +580,8 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
     subcategoryId: row.subcategory_id,
     gstPercent: appliedGstPercent(row.gst_rate),
     isCustomizable: row.is_customizable,
+    isReturnable: row.is_returnable && row.product_type !== "digital",
+    returnWindowDays: env.RETURN_WINDOW_DAYS,
     customizationLabel: row.customization_label,
     breadcrumb,
     images: imagesResult.rows.map((image) => ({

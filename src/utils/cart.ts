@@ -17,6 +17,8 @@ export interface CartItem {
   customizationNote?: string | null;
   /** A download: one copy, no shipping, no Cash on Delivery. */
   isDigital?: boolean;
+  /** False when the seller sells this item with no returns. */
+  isReturnable?: boolean;
 }
 
 type ApiCartLine = {
@@ -33,6 +35,7 @@ type ApiCartLine = {
   gstPercent?: number;
   customizationNote?: string | null;
   isDigital?: boolean;
+  isReturnable?: boolean;
 };
 
 type ApiCart = {
@@ -91,6 +94,7 @@ function mapApiCart(cart: ApiCart): CartItem[] {
     gstPercent: Number(line.gstPercent ?? 18),
     customizationNote: line.customizationNote ?? null,
     isDigital: Boolean(line.isDigital),
+    isReturnable: line.isReturnable !== false,
   }));
 }
 
@@ -293,6 +297,8 @@ export async function placeOrder(
     deliveryOption?: "standard" | "express";
     paymentMethod?: "card" | "upi" | "netbanking" | "wallet" | "cod" | null;
     referrerChannel?: "website" | "marketplace" | "social" | "other";
+    /** The delivery charge the buyer saw; the server refuses the order if it changed. */
+    expectedShippingAmount?: number | null;
   }
 ) {
   let referrerChannel = options?.referrerChannel;
@@ -316,6 +322,7 @@ export async function placeOrder(
       deliveryOption: options?.deliveryOption ?? "standard",
       paymentMethod: options?.paymentMethod ?? undefined,
       referrerChannel: referrerChannel ?? "website",
+      expectedShippingAmount: options?.expectedShippingAmount ?? undefined,
     },
   });
 
@@ -459,6 +466,8 @@ export type OrderDetail = {
     gstPercent?: number;
     /** Files the buyer can download now (empty until payment is confirmed). */
     downloads?: Array<{ id: string; fileName: string; bytes: number; contentType: string | null }>;
+    /** False when the item was sold with no returns. */
+    isReturnable?: boolean;
   }>;
   timeline: Array<{ status: string; note: string | null; createdAt: string }>;
   trackingStages: Array<{
@@ -471,6 +480,8 @@ export type OrderDetail = {
   canBuyAgain: boolean;
   returnEligible: boolean;
   returnWindowClosesAt: string | null;
+  /** False when nothing on the order can be returned. */
+  hasReturnableItems?: boolean;
   /** Server-side rule (paid orders with downloads can't be cancelled). */
   canCancel?: boolean;
   hasDigitalItems?: boolean;
@@ -683,4 +694,41 @@ export function mapsUrlFromAddress(
   ].filter(Boolean);
   if (parts.length === 0) return null;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts.join(", "))}`;
+}
+
+export type DeliveryOptionQuote = {
+  amount: number;
+  /** What free delivery saved the buyer (0 when not free). */
+  savedAmount: number;
+  minDays: number;
+  maxDays: number;
+  etaFrom: string;
+  etaTo: string;
+};
+
+export type ShippingQuote = {
+  deliveryPincode: string;
+  cod: boolean;
+  hasPhysical: boolean;
+  freeShippingThreshold: number;
+  freeShippingApplied: boolean;
+  /** A live courier rate wasn't available, so a standard rate was used. */
+  estimated: boolean;
+  standard: DeliveryOptionQuote | null;
+  /** Null when no courier gets it there faster than standard. */
+  express: DeliveryOptionQuote | null;
+};
+
+/** Live delivery charges and dates for the cart to a saved address or a typed PIN code. */
+export async function fetchShippingQuote(
+  target: { addressId: string } | { pincode: string },
+  paymentMethod: "online" | "cod"
+) {
+  const result = await apiRequest<{ quote: ShippingQuote }>("POST", "/api/cart/shipping-quote", {
+    body: { ...target, paymentMethod },
+  });
+  if (result.error || !result.data) {
+    return { quote: null, error: result.error ?? "Could not calculate delivery charges." };
+  }
+  return { quote: result.data.quote, error: null };
 }
