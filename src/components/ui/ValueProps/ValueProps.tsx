@@ -2,7 +2,7 @@ import React from "react";
 import { Download, Headphones, Mail, RotateCcw, ShieldCheck, Truck } from "lucide-react";
 import styles from "./ValueProps.module.css";
 
-const PROPS = [
+export const VALUE_PROPS = [
   { Icon: Truck, title: "Free shipping", desc: "On orders over ₹499" },
   { Icon: RotateCcw, title: "Easy returns", desc: "Within 7 days" },
   { Icon: ShieldCheck, title: "Secure payments", desc: "100% protected" },
@@ -13,8 +13,8 @@ const PROPS = [
 const DIGITAL_PROPS = [
   { Icon: Download, title: "Instant download", desc: "Right after payment" },
   { Icon: Mail, title: "Also sent by email", desc: "Plus your order page" },
-  PROPS[2],
-  PROPS[3],
+  VALUE_PROPS[2],
+  VALUE_PROPS[3],
 ];
 
 type ValuePropsProps = {
@@ -39,7 +39,7 @@ export default function ValueProps({
       className={`${styles.strip} ${styles[variant]} ${compact ? styles.compact : ""} ${className}`}
       aria-label="Why shop with Stuffsy"
     >
-      {(digital ? DIGITAL_PROPS : PROPS).map(({ Icon, title, desc }) => (
+      {(digital ? DIGITAL_PROPS : VALUE_PROPS).map(({ Icon, title, desc }) => (
         <li key={title} className={styles.item}>
           <span className={styles.icon} aria-hidden="true">
             <Icon size={20} />
