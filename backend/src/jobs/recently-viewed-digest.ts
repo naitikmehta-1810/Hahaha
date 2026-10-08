@@ -15,7 +15,7 @@ async function sendDigests() {
      where v.user_id is not null
        and v.created_at > now() - interval '7 days'
        and u.email is not null
-       and u.deleted_at is null
+       and u.status = 'active'
        and not exists (
          select 1 from public.orders o
          where o.user_id = u.id and o.created_at > now() - interval '3 days'

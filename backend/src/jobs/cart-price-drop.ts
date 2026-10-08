@@ -30,7 +30,7 @@ async function scanPriceDrops() {
        and ci.unit_price_snapshot is not null
        and pv.price < ci.unit_price_snapshot
        and u.email is not null
-       and u.deleted_at is null`
+       and u.status = 'active'`
   );
 
   const byUser = new Map<
