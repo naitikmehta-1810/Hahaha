@@ -195,6 +195,23 @@ function formatInr(amount: number | undefined | null) {
   return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * Link targets: only web and mail links. Anything else (javascript:, data:,
+ * a malformed value) is replaced by the storefront, so a bad payload can't
+ * turn an email button into script.
+ */
+function safeHref(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (/^mailto:/i.test(raw)) return raw;
+  try {
+    const url = new URL(raw);
+    if (url.protocol === "https:" || url.protocol === "http:") return url.toString();
+  } catch {
+    /* fall through */
+  }
+  return siteUrl("/");
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -257,7 +274,7 @@ function button(href: string, label: string, variant: "primary" | "secondary" = 
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0;">
       <tr>
         <td align="center" bgcolor="${primary ? C.primary : C.white}" style="border-radius:10px;${primary ? "" : `border:1px solid ${C.border};`}">
-          <a href="${escapeHtml(href)}" target="_blank" style="display:inline-block;padding:13px 26px;font-family:${FONT};font-size:15px;font-weight:700;line-height:1.2;color:${primary ? C.white : C.ink};text-decoration:none;border-radius:10px;">${escapeHtml(label)}</a>
+          <a href="${escapeHtml(safeHref(href))}" target="_blank" style="display:inline-block;padding:13px 26px;font-family:${FONT};font-size:15px;font-weight:700;line-height:1.2;color:${primary ? C.white : C.ink};text-decoration:none;border-radius:10px;">${escapeHtml(label)}</a>
         </td>
       </tr>
     </table>`;
@@ -266,7 +283,7 @@ function button(href: string, label: string, variant: "primary" | "secondary" = 
 function actions(primary?: { href?: string | null; label: string }, secondary?: { href?: string | null; label: string }) {
   if (!primary?.href) return "";
   const second = secondary?.href
-    ? `<p style="margin:14px 0 0;font-family:${FONT};font-size:14px;color:${C.muted};">or <a href="${escapeHtml(secondary.href)}" style="color:${C.primary};font-weight:600;text-decoration:none;">${escapeHtml(secondary.label)}</a></p>`
+    ? `<p style="margin:14px 0 0;font-family:${FONT};font-size:14px;color:${C.muted};">or <a href="${escapeHtml(safeHref(secondary.href))}" style="color:${C.primary};font-weight:600;text-decoration:none;">${escapeHtml(secondary.label)}</a></p>`
     : "";
   return `<div style="margin:28px 0 4px;">${button(primary.href, primary.label)}${second}</div>`;
 }
@@ -455,7 +472,7 @@ function deliveryPanel(order: OrderEmailPayload, opts: { showMethod?: boolean } 
 function linkFallback(url: string, ttl: string) {
   return `
     <p style="margin:24px 0 6px;font-family:${FONT};font-size:13px;color:${C.muted};">Button not working? Paste this link into your browser:</p>
-    <p style="margin:0 0 20px;font-family:${FONT};font-size:13px;line-height:1.5;word-break:break-all;"><a href="${escapeHtml(url)}" style="color:${C.primary};text-decoration:none;">${escapeHtml(url)}</a></p>
+    <p style="margin:0 0 20px;font-family:${FONT};font-size:13px;line-height:1.5;word-break:break-all;"><a href="${escapeHtml(safeHref(url))}" style="color:${C.primary};text-decoration:none;">${escapeHtml(url)}</a></p>
     <p style="margin:0;font-family:${FONT};font-size:13px;color:${C.muted};">This link expires in ${ttl}.</p>`;
 }
 
@@ -478,7 +495,7 @@ type LayoutOptions = {
 function layout(opts: LayoutOptions) {
   const year = new Date().getFullYear();
   const footerLink = (href: string, label: string) =>
-    `<a href="${escapeHtml(href)}" style="color:${C.muted};text-decoration:underline;">${label}</a>`;
+    `<a href="${escapeHtml(safeHref(href))}" style="color:${C.muted};text-decoration:underline;">${label}</a>`;
   const reason = opts.marketing
     ? `You’re receiving this because you have a Stuffsy account. ${footerLink(siteUrl("/account?tab=notifications"), "Manage email preferences")}.`
     : "You’re receiving this email because of activity on your Stuffsy account.";
@@ -869,7 +886,7 @@ export function renderCartPriceDrop(payload: CartPriceDropPayload): RenderedEmai
       const border = index < payload.items.length - 1 ? `border-bottom:1px solid ${C.border};` : "";
       return `<tr>
         <td valign="top" style="padding:14px 12px 14px 0;${border}">
-          <a href="${escapeHtml(item.url)}" style="font-family:${FONT};font-size:14px;font-weight:600;line-height:1.4;color:${C.ink};text-decoration:none;">${escapeHtml(item.title)}</a>
+          <a href="${escapeHtml(safeHref(item.url))}" style="font-family:${FONT};font-size:14px;font-weight:600;line-height:1.4;color:${C.ink};text-decoration:none;">${escapeHtml(item.title)}</a>
           ${saved > 0 ? `<div style="margin-top:6px;"><span style="display:inline-block;background:${C.successBg};color:${C.success};border-radius:999px;padding:3px 9px;font-family:${FONT};font-size:12px;font-weight:700;">Save ${formatInr(saved)}</span></div>` : ""}
         </td>
         <td valign="top" align="right" style="padding:14px 0;${border}white-space:nowrap;">
@@ -910,7 +927,7 @@ export function renderCartPriceDrop(payload: CartPriceDropPayload): RenderedEmai
 export function renderRecentlyViewedDigest(payload: RecentlyViewedDigestPayload): RenderedEmail {
   const items = payload.items.slice(0, 6);
   const card = (item: (typeof items)[number]) => `<td class="stack" width="50%" valign="top" style="padding:0 6px 16px;">
-      <a href="${escapeHtml(item.url)}" style="text-decoration:none;">
+      <a href="${escapeHtml(safeHref(item.url))}" style="text-decoration:none;">
         ${
           item.imageUrl
             ? `<img src="${escapeHtml(squareImage(item.imageUrl, 244))}" alt="" width="244" height="244" style="display:block;width:100%;max-width:244px;height:auto;border-radius:12px;border:1px solid ${C.border};"/>`
@@ -1132,7 +1149,7 @@ export function renderDigitalDelivery(payload: DigitalDeliveryPayload): Rendered
               ${escapeHtml(file.fileName)}${size ? `<span style="color:${C.muted};"> · ${escapeHtml(size)}</span>` : ""}
             </td>
             <td align="right" style="padding:10px 0 10px 12px;border-top:1px solid ${C.border};white-space:nowrap;">
-              <a href="${escapeHtml(file.url)}" target="_blank" style="font-family:${FONT};font-size:14px;font-weight:700;color:${C.primary};text-decoration:none;">Download</a>
+              <a href="${escapeHtml(safeHref(file.url))}" target="_blank" style="font-family:${FONT};font-size:14px;font-weight:700;color:${C.primary};text-decoration:none;">Download</a>
             </td>
           </tr>`;
         })

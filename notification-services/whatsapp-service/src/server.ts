@@ -47,7 +47,7 @@ worker.on("ready", () => {
 });
 
 worker.on("completed", (job, result) => {
-  console.log(`[whatsapp] completed job=${job.name} id=${job.id}`, result);
+  console.log(`[whatsapp] completed job=${job.name} id=${job.id} outcome=${(result as { outcome?: string })?.outcome ?? "?"}`);
 });
 
 worker.on("failed", (job, err) => {
@@ -70,11 +70,21 @@ worker.on("error", (err) => {
   }
 });
 
+let shuttingDown = false;
 async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log("[whatsapp] shutting down…");
-  await worker.close();
-  process.exit(0);
+  // A stuck gateway call must not block the deploy forever.
+  const force = setTimeout(() => process.exit(1), 25_000);
+  force.unref();
+  try {
+    await worker.close();
+    if (env.SENTRY_DSN) await Sentry.flush(2000);
+  } finally {
+    process.exit(0);
+  }
 }
 
-process.on("SIGINT", () => void shutdown());
-process.on("SIGTERM", () => void shutdown());
+process.once("SIGINT", () => void shutdown());
+process.once("SIGTERM", () => void shutdown());

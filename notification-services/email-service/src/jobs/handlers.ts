@@ -1,4 +1,4 @@
-import type { Job } from "bullmq";
+import { UnrecoverableError, type Job } from "bullmq";
 import { env } from "../config/env.js";
 import {
   renderAbandonedCart,
@@ -28,7 +28,7 @@ import {
   type OrderEmailPayload,
   type RecentlyViewedDigestPayload,
 } from "../templates/index.js";
-import { sendMail } from "../utils/mailer.js";
+import { sendMail as deliver, type SendMailInput } from "../utils/mailer.js";
 
 export const EMAIL_JOB_NAMES = [
   "order-confirmation",
@@ -52,10 +52,41 @@ export const EMAIL_JOB_NAMES = [
 
 export type EmailJobName = (typeof EMAIL_JOB_NAMES)[number];
 
+/**
+ * Promotional mail. These carry List-Unsubscribe, which Gmail and Yahoo
+ * require from bulk senders and which keeps them out of spam folders.
+ */
+const MARKETING_JOBS = new Set<EmailJobName>([
+  "abandoned-cart",
+  "coupon-offer",
+  "cart-price-drop",
+  "recently-viewed-digest",
+]);
+
+function listUnsubscribeHeaders(): Record<string, string> {
+  const prefs = `${env.FRONTEND_URL.replace(/\/$/, "")}/account?tab=notifications`;
+  return {
+    "List-Unsubscribe": `<mailto:${env.SUPPORT_EMAIL}?subject=unsubscribe>, <${prefs}>`,
+  };
+}
+
+/** Malformed payloads can't succeed on retry, so they fail once, permanently. */
+function invalid(message: string): never {
+  throw new UnrecoverableError(message);
+}
+
+/** Tokens are base64url from the backend; anything else is a corrupt job. */
+function assertToken(token: unknown) {
+  if (typeof token !== "string" || !/^[A-Za-z0-9_-]{16,200}$/.test(token)) {
+    invalid("auth email job has a malformed token");
+  }
+  return token;
+}
+
 function asOrder(data: unknown): OrderEmailPayload {
   const payload = data as OrderEmailPayload;
   if (!payload?.to) {
-    throw new Error("Order email job requires to");
+    invalid("Order email job requires to");
   }
   if (!payload.orderNumber) {
     payload.orderNumber = String(payload.orderId ?? "ORDER");
@@ -66,6 +97,13 @@ function asOrder(data: unknown): OrderEmailPayload {
 export async function processEmailJob(job: Job) {
   const name = job.name as EmailJobName;
   console.log(`[email] processing job=${name} id=${job.id}`);
+
+  const sendMail = (input: SendMailInput) =>
+    deliver({
+      ...input,
+      idempotencyKey: `${job.queueName}-${job.name}-${job.id}`,
+      headers: MARKETING_JOBS.has(name) ? { ...listUnsubscribeHeaders(), ...input.headers } : input.headers,
+    });
 
   switch (name) {
     case "order-confirmation": {
@@ -101,11 +139,7 @@ export async function processEmailJob(job: Job) {
     case "invoice-ready": {
       const order = asOrder(job.data);
       const rendered = renderInvoiceReady(order);
-      const attachments =
-        order.invoiceUrl && !order.invoiceUrl.startsWith("http")
-          ? undefined
-          : undefined;
-      // Prefer linking the hosted PDF; Phase 6 may also attach a buffer via job.data.pdfAttachment.
+      // The hosted PDF is linked; a job may also carry the PDF itself.
       const pdf = (job.data as { pdfAttachment?: { filename: string; contentBase64: string } })
         .pdfAttachment;
       return sendMail({
@@ -119,13 +153,13 @@ export async function processEmailJob(job: Job) {
                 contentType: "application/pdf",
               },
             ]
-          : attachments,
+          : undefined,
       });
     }
     case "digital-delivery": {
       const payload = job.data as DigitalDeliveryPayload;
       if (!payload?.to || !payload.orderNumber || !Array.isArray(payload.products)) {
-        throw new Error("digital-delivery requires to, orderNumber and products[]");
+        invalid("digital-delivery requires to, orderNumber and products[]");
       }
       const rendered = renderDigitalDelivery(payload);
       return sendMail({ to: payload.to, ...rendered });
@@ -133,7 +167,7 @@ export async function processEmailJob(job: Job) {
     case "abandoned-cart": {
       const payload = job.data as AbandonedCartPayload;
       if (!payload?.to || !Array.isArray(payload.items)) {
-        throw new Error("abandoned-cart requires to and items[]");
+        invalid("abandoned-cart requires to and items[]");
       }
       const rendered = renderAbandonedCart(payload);
       return sendMail({ to: payload.to, ...rendered });
@@ -141,7 +175,7 @@ export async function processEmailJob(job: Job) {
     case "coupon-offer": {
       const payload = job.data as CouponOfferPayload;
       if (!payload?.to || !payload?.couponCode) {
-        throw new Error("coupon-offer requires to and couponCode");
+        invalid("coupon-offer requires to and couponCode");
       }
       const rendered = renderCouponOffer(payload);
       return sendMail({ to: payload.to, ...rendered });
@@ -149,7 +183,7 @@ export async function processEmailJob(job: Job) {
     case "cart-price-drop": {
       const payload = job.data as CartPriceDropPayload;
       if (!payload?.to || !Array.isArray(payload.items)) {
-        throw new Error("cart-price-drop requires to and items[]");
+        invalid("cart-price-drop requires to and items[]");
       }
       const rendered = renderCartPriceDrop(payload);
       return sendMail({ to: payload.to, ...rendered });
@@ -157,37 +191,32 @@ export async function processEmailJob(job: Job) {
     case "recently-viewed-digest": {
       const payload = job.data as RecentlyViewedDigestPayload;
       if (!payload?.to || !Array.isArray(payload.items)) {
-        throw new Error("recently-viewed-digest requires to and items[]");
+        invalid("recently-viewed-digest requires to and items[]");
       }
       const rendered = renderRecentlyViewedDigest(payload);
       return sendMail({ to: payload.to, ...rendered });
     }
     case "email-verification": {
       const payload = job.data as AuthEmailPayload;
-      if (!payload?.to || !payload?.token) {
-        throw new Error("email-verification requires to and token");
-      }
-      const verifyUrl =
-        payload.verifyUrl ||
-        `${env.FRONTEND_URL}/verify-email?token=${encodeURIComponent(payload.token)}`;
+      if (!payload?.to) invalid("email-verification requires to");
+      const token = assertToken(payload.token);
+      // Always our own site: a link in a security email must never point elsewhere.
+      const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${encodeURIComponent(token)}`;
       const rendered = renderEmailVerification({ ...payload, verifyUrl });
       return sendMail({ to: payload.to, ...rendered });
     }
     case "password-reset": {
       const payload = job.data as AuthEmailPayload;
-      if (!payload?.to || !payload?.token) {
-        throw new Error("password-reset requires to and token");
-      }
-      const resetUrl =
-        payload.resetUrl ||
-        `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(payload.token)}`;
+      if (!payload?.to) invalid("password-reset requires to");
+      const token = assertToken(payload.token);
+      const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`;
       const rendered = renderPasswordReset({ ...payload, resetUrl });
       return sendMail({ to: payload.to, ...rendered });
     }
     case "low-stock-alert": {
       const payload = job.data as LowStockAlertPayload;
       if (!payload?.to || !payload?.productTitle) {
-        throw new Error("low-stock-alert requires to and productTitle");
+        invalid("low-stock-alert requires to and productTitle");
       }
       const rendered = renderLowStockAlert(payload);
       return sendMail({ to: payload.to, ...rendered });
@@ -195,7 +224,7 @@ export async function processEmailJob(job: Job) {
     case "back-in-stock": {
       const payload = job.data as BackInStockPayload;
       if (!payload?.to || !payload?.productTitle) {
-        throw new Error("back-in-stock requires to and productTitle");
+        invalid("back-in-stock requires to and productTitle");
       }
       const rendered = renderBackInStock(payload);
       return sendMail({ to: payload.to, ...rendered });
@@ -206,6 +235,6 @@ export async function processEmailJob(job: Job) {
       return sendMail({ to: order.to, ...rendered });
     }
     default:
-      throw new Error(`Unknown email job name: ${String(name)}`);
+      invalid(`Unknown email job name: ${String(name)}`);
   }
 }

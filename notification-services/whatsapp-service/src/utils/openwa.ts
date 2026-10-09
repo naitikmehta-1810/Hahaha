@@ -1,3 +1,4 @@
+import { UnrecoverableError } from "bullmq";
 import { env, isOpenWaConfigured } from "../config/env.js";
 
 export type OpenWaSendResult =
@@ -6,8 +7,24 @@ export type OpenWaSendResult =
   | { outcome: "skipped_no_existing_chat" }
   | { outcome: "rate_limited"; retryAfterMs: number };
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+const GATEWAY_TIMEOUT_MS = 15_000;
+
+/**
+ * open-wa addresses people as "<country code><number>@c.us". The backend
+ * stores Indian mobiles as 10 digits, so "9876543210", "+91 98765 43210" and
+ * "09876543210" all become "919876543210@c.us". Returns null for anything
+ * that isn't a plausible phone number.
+ */
+export function toChatId(raw: string): string | null {
+  const value = raw.trim();
+  if (/^\d{6,15}@(c|g)\.us$/.test(value)) return value;
+  let digits = value.replace(/[\s().-]/g, "");
+  if (!/^\+?\d+$/.test(digits)) return null;
+  digits = digits.replace(/^\+/, "");
+  if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.length === 10 && /^[6-9]/.test(digits)) digits = `91${digits}`;
+  if (digits.length < 11 || digits.length > 15) return null;
+  return `${digits}@c.us`;
 }
 
 function parseRetryAfterMs(headers: Headers): number | null {
@@ -58,34 +75,40 @@ export async function sendWhatsAppMessage(opts: {
     return { outcome: "skipped_unconfigured" };
   }
 
+  const chatId = toChatId(opts.to);
+  if (!chatId) {
+    throw new UnrecoverableError(`Not a valid WhatsApp number: ${JSON.stringify(opts.to).slice(0, 40)}`);
+  }
+
   const base = env.OPENWA_BASE_URL!.replace(/\/$/, "");
   const url = `${base}/api/sendText`;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": env.OPENWA_API_KEY!,
-    },
-    body: JSON.stringify({
-      to: opts.to,
-      chatId: opts.to,
-      message: opts.message,
-      text: opts.message,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": env.OPENWA_API_KEY!,
+      },
+      body: JSON.stringify({
+        to: chatId,
+        chatId,
+        message: opts.message,
+        text: opts.message,
+      }),
+      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+    });
+  } catch (error) {
+    // Gateway down or slow: transient, retried with backoff.
+    throw new Error(`open-wa request failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
-  const rateDelay = parseRetryAfterMs(response.headers);
-  if (response.status === 429 || (rateDelay != null && response.status >= 400)) {
-    const retryAfterMs = rateDelay ?? 2000;
-    console.warn(`[whatsapp] rate limited; delaying ${retryAfterMs}ms`);
-    await sleep(retryAfterMs);
-    if (response.status === 429) {
-      return { outcome: "rate_limited", retryAfterMs };
-    }
-  } else if (rateDelay != null && rateDelay > 0 && response.ok) {
-    // Soft throttle when remaining quota headers indicate pressure.
-    await sleep(Math.min(rateDelay, 2000));
+  // The job is re-queued with this delay instead of the worker sleeping on it.
+  if (response.status === 429) {
+    const retryAfterMs = Math.min(parseRetryAfterMs(response.headers) ?? 5_000, 10 * 60_000);
+    console.warn(`[whatsapp] rate limited; retrying in ${retryAfterMs}ms`);
+    return { outcome: "rate_limited", retryAfterMs };
   }
 
   let bodyText = "";
@@ -113,9 +136,12 @@ export async function sendWhatsAppMessage(opts: {
   }
 
   if (!response.ok) {
-    throw new Error(
-      `open-wa gateway ${response.status}: ${bodyText.slice(0, 500) || response.statusText}`
-    );
+    const detail = `open-wa gateway ${response.status}: ${bodyText.slice(0, 500) || response.statusText}`;
+    // Bad request / auth / unknown number: the same request will fail again.
+    if (response.status >= 400 && response.status < 500 && response.status !== 408) {
+      throw new UnrecoverableError(detail);
+    }
+    throw new Error(detail);
   }
 
   return {

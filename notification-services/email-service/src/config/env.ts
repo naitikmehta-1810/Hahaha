@@ -22,6 +22,10 @@ const envSchema = z.object({
   /** Absolute logo URL; defaults to the mark served by the storefront. */
   EMAIL_LOGO_URL: z.string().url().optional(),
   SENTRY_DSN: z.string().url().optional(),
+  /** Emails rendered and sent in parallel by this worker. */
+  EMAIL_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(4),
+  /** Sends per second across the worker; Resend allows 2/s by default. */
+  EMAIL_RATE_PER_SECOND: z.coerce.number().int().min(1).max(100).default(2),
 });
 
 export const env = envSchema.parse(process.env);
