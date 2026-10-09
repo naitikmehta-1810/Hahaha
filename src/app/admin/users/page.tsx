@@ -9,6 +9,13 @@ import { apiRequest } from "@/utils/api-client";
 import { formatDate } from "@/utils/format";
 import ui from "@/components/console/console.module.css";
 import styles from "../admin.module.css";
+import {
+  emailProblem,
+  newPasswordProblem,
+  PASSWORD_HINT,
+  personNameProblem,
+  phoneProblem,
+} from "@/utils/validation";
 
 type AdminUser = {
   id: string;
@@ -52,8 +59,18 @@ export default function AdminUsersPage() {
 
   async function createUser(event: FormEvent) {
     event.preventDefault();
-    setSaving(true);
     setNotice(null);
+    const problem =
+      personNameProblem(fullName) ??
+      emailProblem(email) ??
+      phoneProblem(phoneNumber) ??
+      newPasswordProblem(password, { email, fullName });
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setError(null);
+    setSaving(true);
     const result = await apiRequest("POST", "/api/admin/users", {
       body: {
         fullName,
@@ -124,6 +141,8 @@ export default function AdminUsersPage() {
             <input
               type="password"
               minLength={8}
+              maxLength={72}
+              placeholder={PASSWORD_HINT}
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

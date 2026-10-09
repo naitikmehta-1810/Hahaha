@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { paymentLimiter } from "../middleware/auth-rate-limit.js";
 import { env } from "../config/env.js";
 import {
   createPaymentOrder,
@@ -18,6 +19,7 @@ const paymentsRouter = Router();
 paymentsRouter.post(
   "/create-order",
   requireAuth,
+  paymentLimiter,
   asyncHandler(async (req, res) => {
     const parsed = z.object({ orderId: z.string().uuid() }).safeParse(req.body);
     if (!parsed.success) {
@@ -40,9 +42,9 @@ paymentsRouter.post(
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
-        razorpayOrderId: z.string().min(1),
-        razorpayPaymentId: z.string().min(1),
-        signature: z.string().min(1),
+        razorpayOrderId: z.string().min(1).max(100),
+        razorpayPaymentId: z.string().min(1).max(100),
+        signature: z.string().min(1).max(200),
       })
       .safeParse(req.body);
     if (!parsed.success) {

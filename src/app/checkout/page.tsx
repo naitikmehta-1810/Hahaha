@@ -44,6 +44,14 @@ import {
   stubCapturePayment,
 } from "@/utils/payments";
 import { optimizedImage } from "@/utils/media";
+import {
+  emailProblem,
+  normalizeIndianMobile,
+  normalizePincode,
+  personNameProblem,
+  phoneProblem,
+  pincodeProblem,
+} from "@/utils/validation";
 
 const INDIAN_STATES = [
   "Andhra Pradesh",
@@ -336,16 +344,16 @@ function CheckoutInner() {
 
   const validateShipping = () => {
     if (!useNewAddress && selectedAddressId) return true;
-    if (!form.fullName.trim()) return "Full name is required.";
-    if (!form.email.trim()) return "Email is required.";
-    if (!form.phone.trim()) return "Phone is required.";
-    if (!form.address.trim()) return "Address is required.";
-    if (!form.city.trim()) return "City is required.";
-    if (!form.state.trim()) return "State is required.";
-    if (!form.pinCode.trim() || form.pinCode.trim().length < 4) {
-      return "PIN code is required.";
-    }
-    return true;
+    // Same rules the address API applies: couriers need a real mobile and PIN.
+    const problem =
+      personNameProblem(form.fullName) ??
+      emailProblem(form.email) ??
+      phoneProblem(form.phone) ??
+      (form.address.trim().length < 3 ? "Enter the house number and street." : null) ??
+      (!form.city.trim() ? "City is required." : null) ??
+      (!form.state.trim() ? "State is required." : null) ??
+      pincodeProblem(form.pinCode);
+    return problem ?? true;
   };
 
   const goNext = () => {
@@ -387,12 +395,12 @@ function CheckoutInner() {
       const created = await createAddress({
         label: "Home",
         recipientName: form.fullName.trim(),
-        phoneNumber: form.phone.trim(),
+        phoneNumber: normalizeIndianMobile(form.phone) ?? form.phone.trim(),
         line1: form.address.trim(),
         line2: form.apartment.trim() || null,
         city: form.city.trim(),
         state: form.state.trim(),
-        postalCode: form.pinCode.trim(),
+        postalCode: normalizePincode(form.pinCode),
         country: "IN",
         isDefault: addresses.length === 0 || saveAddress,
       });
@@ -407,12 +415,12 @@ function CheckoutInner() {
     const created = await createAddress({
       label: "Checkout",
       recipientName: form.fullName.trim(),
-      phoneNumber: form.phone.trim(),
+      phoneNumber: normalizeIndianMobile(form.phone) ?? form.phone.trim(),
       line1: form.address.trim(),
       line2: form.apartment.trim() || null,
       city: form.city.trim(),
       state: form.state.trim(),
-      postalCode: form.pinCode.trim(),
+      postalCode: normalizePincode(form.pinCode),
       country: "IN",
       isDefault: false,
     });
@@ -785,6 +793,7 @@ function CheckoutInner() {
                     <label htmlFor="phone">Phone</label>
                     <input
                       id="phone"
+                      type="tel" inputMode="tel" autoComplete="tel-national" maxLength={16} placeholder="10-digit mobile number"
                       value={form.phone}
                       onChange={(e) => updateField("phone", e.target.value)}
                     />
@@ -793,6 +802,7 @@ function CheckoutInner() {
                     <label htmlFor="address">Address</label>
                     <input
                       id="address"
+                      autoComplete="address-line1" maxLength={255}
                       value={form.address}
                       onChange={(e) => updateField("address", e.target.value)}
                     />
@@ -801,6 +811,7 @@ function CheckoutInner() {
                     <label htmlFor="apartment">Apartment, suite, etc. (optional)</label>
                     <input
                       id="apartment"
+                      autoComplete="address-line2" maxLength={255}
                       value={form.apartment}
                       onChange={(e) => updateField("apartment", e.target.value)}
                     />
@@ -809,6 +820,7 @@ function CheckoutInner() {
                     <label htmlFor="city">City</label>
                     <input
                       id="city"
+                      autoComplete="address-level2" maxLength={80}
                       value={form.city}
                       onChange={(e) => updateField("city", e.target.value)}
                     />
@@ -831,6 +843,7 @@ function CheckoutInner() {
                     <label htmlFor="pinCode">PIN Code</label>
                     <input
                       id="pinCode"
+                      inputMode="numeric" autoComplete="postal-code" maxLength={7} placeholder="6 digits"
                       value={form.pinCode}
                       onChange={(e) => updateField("pinCode", e.target.value)}
                     />

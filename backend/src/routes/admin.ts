@@ -11,6 +11,49 @@ import { transition } from "../services/order-state-machine.js";
 import { env } from "../config/env.js";
 import { invalidateCatalogCaches } from "../services/catalog-cache.js";
 import { hashPassword } from "../utils/password.js";
+import { revokeAllSessions } from "../services/auth.service.js";
+import {
+  emailSchema,
+  indianMobileSchema,
+  newPasswordSchema,
+  personNameSchema,
+} from "../utils/validation.js";
+
+const couponCodeSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(40)
+  .regex(/^[A-Za-z0-9_-]+$/, "Coupon codes use letters, numbers, - and _ only");
+
+/** Percentage coupons can't exceed 100%; flat ones are capped at a sane amount. */
+function couponValueProblem(type: string | undefined, value: number | undefined) {
+  if (value === undefined) return null;
+  if (type === "percentage" && value > 100) return "A percentage discount can't be more than 100";
+  if (value > 1_000_000) return "Discount value is too large";
+  return null;
+}
+
+/**
+ * Would making `parentId` the parent of `categoryId` create a loop
+ * (A -> B -> A)? The breadcrumb walks parents recursively, so a loop would
+ * spin until the statement timeout on every product page in it.
+ */
+async function wouldCreateCategoryCycle(categoryId: string, parentId: string) {
+  const result = await pool.query<{ found: boolean }>(
+    `with recursive ancestors as (
+       select id, parent_id, 1 as depth from public.categories where id = $1
+       union all
+       select c.id, c.parent_id, a.depth + 1
+       from public.categories c
+       join ancestors a on c.id = a.parent_id
+       where a.depth < 50
+     )
+     select exists (select 1 from ancestors where id = $2) as found`,
+    [parentId, categoryId]
+  );
+  return Boolean(result.rows[0]?.found);
+}
 
 const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
@@ -83,10 +126,10 @@ adminRouter.post(
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
-        fullName: z.string().trim().min(2).max(80),
-        email: z.string().trim().email().max(160),
-        phoneNumber: z.string().trim().min(10).max(20),
-        password: z.string().min(8).max(72),
+        fullName: personNameSchema,
+        email: emailSchema,
+        phoneNumber: indianMobileSchema,
+        password: newPasswordSchema,
         role: z.enum(["customer", "admin"]).default("customer"),
         shopName: z.string().trim().min(2).max(50).optional(),
         sellingState: z.string().trim().max(80).optional(),
@@ -149,7 +192,7 @@ adminRouter.post(
             parsed.data.shopName,
             slug,
             parsed.data.fullName,
-            parsed.data.phoneNumber.replace(/\D/g, "").slice(-10),
+            parsed.data.phoneNumber,
             ["general"],
             parsed.data.sellingState || null,
             parsed.data.sellingCity || null,
@@ -198,6 +241,19 @@ adminRouter.patch(
     if (String(req.params.id) === req.user!.id) {
       throw new AppError(400, "CANNOT_CHANGE_SELF", "You can't change your own admin account here.");
     }
+    if (parsed.data.role === "customer" || parsed.data.status === "blocked") {
+      // Never leave the marketplace without an admin.
+      const admins = await pool.query<{ c: string }>(
+        `select count(*)::text as c from public.users where role = 'admin' and status = 'active' and id <> $1`,
+        [String(req.params.id)]
+      );
+      const target = await pool.query<{ role: string }>(`select role from public.users where id = $1`, [
+        String(req.params.id),
+      ]);
+      if (target.rows[0]?.role === "admin" && Number(admins.rows[0]?.c ?? 0) === 0) {
+        throw new AppError(409, "LAST_ADMIN", "This is the last active admin account.");
+      }
+    }
     const updated = await pool.query(
       `update public.users
        set role = coalesce($2, role),
@@ -210,6 +266,11 @@ adminRouter.patch(
     if (!updated.rows[0]) {
       res.status(404).json({ message: "User not found" });
       return;
+    }
+    // Blocking takes effect now: refresh fails at once, and the short-lived
+    // access token is the most a blocked user keeps (15 minutes at most).
+    if (parsed.data.status === "blocked") {
+      await revokeAllSessions(updated.rows[0].id);
     }
     res.json({
       user: {
@@ -433,36 +494,42 @@ adminRouter.post(
       return;
     }
 
-    const request = await pool.query<{
-      id: string;
-      order_id: string;
-      status: string;
-      total_amount: string;
-    }>(
-      `select r.id, r.order_id, r.status, o.total_amount
-       from public.return_requests r
-       join public.orders o on o.id = r.order_id
-       where r.id = $1`,
-      [String(req.params.id)]
+    // Claim the request atomically: two admins (or a double click) can't both
+    // decide it, which for an approval would mean two refunds.
+    const claimed = await pool.query<{ id: string; order_id: string; total_amount: string }>(
+      `update public.return_requests r
+       set status = $2, updated_at = now()
+       from public.orders o
+       where r.id = $1 and r.status = 'requested' and o.id = r.order_id
+       returning r.id, r.order_id, o.total_amount`,
+      [String(req.params.id), parsed.data.decision]
     );
-    const row = request.rows[0];
+    const row = claimed.rows[0];
     if (!row) {
-      res.status(404).json({ message: "Return request not found" });
-      return;
-    }
-    if (row.status !== "requested") {
-      res.status(409).json({ message: `Return request is already ${row.status}` });
+      const existing = await pool.query<{ status: string }>(
+        `select status from public.return_requests where id = $1`,
+        [String(req.params.id)]
+      );
+      if (!existing.rows[0]) {
+        res.status(404).json({ message: "Return request not found" });
+        return;
+      }
+      res.status(409).json({ message: `Return request is already ${existing.rows[0].status}` });
       return;
     }
 
     if (parsed.data.decision === "rejected") {
-      await pool.query(
-        `update public.return_requests set status = 'rejected', updated_at = now() where id = $1`,
-        [row.id]
-      );
       res.json({ returnRequest: { id: row.id, status: "rejected" } });
       return;
     }
+
+    /** Puts the request back to "requested" when the refund can't go through. */
+    const releaseClaim = () =>
+      pool.query(
+        `update public.return_requests set status = 'requested', updated_at = now()
+         where id = $1 and status = 'approved'`,
+        [row.id]
+      );
 
     const refunded = await pool.query(
       `select 1 from public.refunds rf
@@ -472,27 +539,30 @@ adminRouter.post(
       [row.order_id]
     );
     if (refunded.rows.length > 0) {
+      await releaseClaim();
       throw new AppError(409, "ALREADY_REFUNDED", "Order already has a processed refund");
     }
 
     const refund = (await returnRefundAmounts([row.order_id])).get(row.order_id);
     const refundAmount = refund?.refundAmount ?? Number(row.total_amount);
     if (refundAmount <= 0) {
+      await releaseClaim();
       throw new AppError(
         409,
         "NOTHING_TO_REFUND",
         "Every item on this order was sold with no returns. Reject the request instead."
       );
     }
-    await refundPayment(
-      row.order_id,
-      refundAmount,
-      refund && refund.excludedItemCount > 0 ? "return_approved_partial" : "return_approved"
-    );
-    await pool.query(
-      `update public.return_requests set status = 'approved', updated_at = now() where id = $1`,
-      [row.id]
-    );
+    try {
+      await refundPayment(
+        row.order_id,
+        refundAmount,
+        refund && refund.excludedItemCount > 0 ? "return_approved_partial" : "return_approved"
+      );
+    } catch (error) {
+      await releaseClaim();
+      throw error;
+    }
 
     try {
       await transition(row.order_id, "returned", {
@@ -530,11 +600,11 @@ adminRouter.post(
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
-        code: z.string().trim().min(2).max(40),
+        code: couponCodeSchema,
         type: z.enum(["percentage", "flat"]),
         value: z.number().positive(),
-        minOrderValue: z.number().nonnegative().optional().nullable(),
-        usageLimitPerUser: z.number().int().positive().default(1),
+        minOrderValue: z.number().nonnegative().max(10_000_000).optional().nullable(),
+        usageLimitPerUser: z.number().int().positive().max(1000).default(1),
         startsAt: z.string().datetime().optional(),
         expiresAt: z.string().datetime(),
       })
@@ -544,6 +614,15 @@ adminRouter.post(
       return;
     }
     const data = parsed.data;
+    const valueProblem = couponValueProblem(data.type, data.value);
+    if (valueProblem) {
+      res.status(400).json({ message: valueProblem });
+      return;
+    }
+    if (new Date(data.expiresAt) <= new Date(data.startsAt ?? Date.now())) {
+      res.status(400).json({ message: "The coupon must expire after it starts" });
+      return;
+    }
     const inserted = await pool.query(
       `insert into public.coupons
          (id, code, type, value, min_order_value, usage_limit_per_user, starts_at, expires_at,
@@ -570,11 +649,11 @@ adminRouter.patch(
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
-        code: z.string().trim().min(2).max(40).optional(),
+        code: couponCodeSchema.optional(),
         type: z.enum(["percentage", "flat"]).optional(),
         value: z.number().positive().optional(),
-        minOrderValue: z.number().nonnegative().optional().nullable(),
-        usageLimitPerUser: z.number().int().positive().optional(),
+        minOrderValue: z.number().nonnegative().max(10_000_000).optional().nullable(),
+        usageLimitPerUser: z.number().int().positive().max(1000).optional(),
         startsAt: z.string().datetime().optional().nullable(),
         expiresAt: z.string().datetime().optional(),
         isActive: z.boolean().optional(),
@@ -585,6 +664,20 @@ adminRouter.patch(
       return;
     }
     const data = parsed.data;
+    if (data.value !== undefined || data.type !== undefined) {
+      const current = await pool.query<{ type: string; value: string }>(
+        `select type, value::text from public.coupons where id = $1 and deleted_at is null`,
+        [String(req.params.id)]
+      );
+      const valueProblem = couponValueProblem(
+        data.type ?? current.rows[0]?.type,
+        data.value ?? Number(current.rows[0]?.value)
+      );
+      if (valueProblem) {
+        res.status(400).json({ message: valueProblem });
+        return;
+      }
+    }
     const updated = await pool.query(
       `update public.coupons
        set code = coalesce($2, code),
@@ -645,7 +738,7 @@ adminRouter.post(
     const parsed = z
       .object({
         description: z.string().trim().max(500).optional(),
-        toEmail: z.string().email().optional(),
+        toEmail: emailSchema.optional(),
         limit: z.number().int().positive().max(500).default(100),
       })
       .safeParse(req.body ?? {});
@@ -687,7 +780,7 @@ adminRouter.post(
          from public.users u
          left join public.user_notification_prefs p on p.user_id = u.id
          where u.email is not null
-           and u.deleted_at is null
+           and u.status = 'active'
            and coalesce(p.marketing, true) = true
          order by u.created_at desc
          limit $1`,
@@ -795,6 +888,10 @@ adminRouter.patch(
     const data = parsed.data;
     if (data.parentId && data.parentId === String(req.params.id)) {
       res.status(400).json({ message: "A category cannot be its own parent" });
+      return;
+    }
+    if (data.parentId && (await wouldCreateCategoryCycle(String(req.params.id), data.parentId))) {
+      res.status(400).json({ message: "That parent is inside this category. Pick a different parent." });
       return;
     }
     const updated = await pool.query(
@@ -1055,6 +1152,16 @@ adminRouter.patch(
   })
 );
 
+
+/** What buyers search for, and which searches find nothing (catalogue gaps). */
+adminRouter.get(
+  "/search-insights",
+  asyncHandler(async (req, res) => {
+    const days = Number(req.query.days ?? 30);
+    const { searchInsights } = await import("../services/product-stats.service.js");
+    res.json(await searchInsights(Number.isFinite(days) ? days : 30));
+  })
+);
 
 /* ── Storefront images ─────────────────────────────────────────────────── */
 

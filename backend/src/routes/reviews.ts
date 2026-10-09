@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { requireAuth } from "../middleware/requireAuth.js";
-import { reviewWriteLimiter } from "../middleware/auth-rate-limit.js";
+import { publicReadLimiter, reviewWriteLimiter } from "../middleware/auth-rate-limit.js";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
 import { invalidateCatalogCaches } from "../services/catalog-cache.js";
@@ -13,8 +13,10 @@ const createReviewSchema = z.object({
   productId: z.string().uuid(),
   orderItemId: z.string().uuid(),
   rating: z.number().int().min(1).max(5),
-  title: z.string().trim().max(120).optional().nullable(),
-  body: z.string().trim().max(2000).optional().nullable(),
+  // eslint-disable-next-line no-control-regex
+  title: z.string().trim().max(120).regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f]*$/, "Remove unsupported characters").optional().nullable(),
+  // eslint-disable-next-line no-control-regex
+  body: z.string().trim().max(2000).regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f]*$/, "Remove unsupported characters").optional().nullable(),
 });
 
 const REVIEWABLE_ORDER_STATUSES = ["delivered", "returned", "refunded"];
@@ -36,6 +38,7 @@ const listQuerySchema = z.object({
 /** Public, paginated reviews for a product plus the star breakdown. */
 reviewsRouter.get(
   "/",
+  publicReadLimiter,
   asyncHandler(async (req, res) => {
     const parsed = listQuerySchema.safeParse(req.query);
     if (!parsed.success) {

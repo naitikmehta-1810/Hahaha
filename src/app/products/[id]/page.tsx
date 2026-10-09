@@ -31,7 +31,7 @@ import { addToCart } from "@/utils/cart";
 import {
   asSpecLines,
   fetchProductBySlug,
-  fetchProducts,
+  fetchSimilarProducts,
   productHref,
   productImageUrl,
   shopHref,
@@ -52,6 +52,7 @@ import {
   savedPincode,
   type Deliverability,
 } from "@/utils/deliverability";
+import { MAX_LINE_QUANTITY } from "@/utils/validation";
 
 const FALLBACK_IMAGE = FALLBACK_PRODUCT_IMAGE;
 
@@ -118,15 +119,10 @@ export default function ProductDetailsPage() {
             utmMedium: params.get("utm_medium"),
           },
         });
-        void fetchProducts({
-          categoryId: result.product.categoryId,
-          pageSize: 8,
-          sort: "popular",
-        }).then((list) => {
+        // Bought together, viewed together and similar items, scored server-side.
+        void fetchSimilarProducts(result.product.id, 5).then((list) => {
           if (cancelled) return;
-          setRelated(
-            list.products.filter((p) => p.id !== result.product!.id).slice(0, 5)
-          );
+          setRelated(list.products.filter((p) => p.id !== result.product!.id).slice(0, 5));
         });
       }
     });
@@ -168,7 +164,7 @@ export default function ProductDetailsPage() {
 
   const handleQtyChange = (type: "inc" | "dec") => {
     if (type === "dec" && qty > 1) setQty(qty - 1);
-    else if (type === "inc") setQty(qty + 1);
+    else if (type === "inc" && qty < MAX_LINE_QUANTITY) setQty(qty + 1);
   };
 
   const addCurrentVariant = async () => {
@@ -578,7 +574,7 @@ export default function ProductDetailsPage() {
                   className={styles.qtyBtn}
                   aria-label="Increase quantity"
                   onClick={() => handleQtyChange("inc")}
-                  disabled={busy}
+                  disabled={busy || qty >= MAX_LINE_QUANTITY}
                 >
                   <Plus size={16} />
                 </button>

@@ -704,11 +704,20 @@ async function loadInvoiceData(
  * Independent of Cloudinary delivery (which may return 401 on restricted raw assets).
  */
 export async function getInvoicePdfForOrder(orderId: string, userId: string) {
-  const ownership = await pool.query<{ user_id: string }>(
-    `select user_id from public.orders where id = $1`,
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId)) {
+    return null;
+  }
+  const ownership = await pool.query<{ user_id: string; status: string; paid_at: Date | null }>(
+    `select user_id, status, paid_at from public.orders where id = $1`,
     [orderId]
   );
-  if (!ownership.rows[0] || ownership.rows[0].user_id !== userId) {
+  const order = ownership.rows[0];
+  if (!order || order.user_id !== userId) {
+    return null;
+  }
+  // A tax invoice exists only for a sale: never for an unpaid or abandoned
+  // order. Generating one would also consume a number from the GST series.
+  if (order.status === "pending_payment" || (order.status === "cancelled" && !order.paid_at)) {
     return null;
   }
 

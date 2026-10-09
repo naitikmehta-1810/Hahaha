@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { pool, withTransaction } from "../config/db.js";
 import { comparePassword, hashPassword } from "../utils/password.js";
 import { generateOpaqueToken, hashToken } from "../utils/token-hash.js";
@@ -6,50 +7,74 @@ import { signAccessToken } from "../utils/jwt.js";
 import type { AuthUser, UserRecord, UserRole } from "../types.js";
 import { toAuthUser } from "../types.js";
 import { AppError } from "../utils/errors.js";
+import { normalizeIndianMobile } from "../utils/validation.js";
 
 const USER_COLUMNS = `id, full_name, email, phone_number, role, status, email_verified_at, to_char(date_of_birth, 'YYYY-MM-DD') as date_of_birth, gender, avatar_url, created_at, updated_at`;
 
+/** Same columns, qualified for queries that join `users u`. */
+const USER_COLUMNS_U = `u.id, u.full_name, u.email, u.phone_number, u.role, u.status, u.email_verified_at, to_char(u.date_of_birth, 'YYYY-MM-DD') as date_of_birth, u.gender, u.avatar_url, u.created_at, u.updated_at`;
+
+/**
+ * Effective role and shop flag in the same round trip as the user row:
+ * - admin: users.role = admin (never overridden)
+ * - seller: an active, non-deleted sellers row
+ * - otherwise customer (including pending/suspended seller applications)
+ */
+const SELLER_FLAGS_SQL = `
+  exists (
+    select 1 from public.sellers s
+    where s.user_id = u.id and s.status = 'active' and s.deleted_at is null
+  ) as is_active_seller,
+  exists (
+    select 1 from public.sellers s
+    where s.user_id = u.id and s.deleted_at is null
+  ) as has_seller_profile`;
+
+type UserWithFlags = UserRecord & { is_active_seller: boolean; has_seller_profile: boolean };
+
+function effectiveRole(accountRole: string, isActiveSeller: boolean): UserRole {
+  if (accountRole === "admin") return "admin";
+  return isActiveSeller ? "seller" : "customer";
+}
+
+function toAuthUserWithFlags(row: UserWithFlags): AuthUser {
+  const user = toAuthUser(row);
+  user.role = effectiveRole(row.role, row.is_active_seller);
+  user.isSeller = row.has_seller_profile;
+  return user;
+}
+
+/** Blocked accounts can't sign in, refresh, or link a social login. */
+export function assertAccountUsable(status: string) {
+  if (status === "blocked") {
+    throw new AppError(
+      403,
+      "ACCOUNT_BLOCKED",
+      "This account has been suspended. Contact support if you think this is a mistake."
+    );
+  }
+}
+
 /**
  * Effective role for JWT claims (requireRole reads this claim, not the DB).
- *
- * - admin: users.role = admin (never overridden)
- * - seller: only if there is an active, non-deleted sellers row for this user
- * - otherwise customer (including pending/suspended seller applications)
- *
  * Recomputed on login and /refresh so seller approval is picked up without
- * waiting for access-token expiry if the client refreshes. Not looked up on
- * every authenticated request.
+ * waiting for access-token expiry if the client refreshes.
  */
 export async function resolveEffectiveRole(userId: string, accountRole: string): Promise<UserRole> {
-  if (accountRole === "admin") {
-    return "admin";
-  }
-
+  if (accountRole === "admin") return "admin";
   const seller = await pool.query(
-    `select 1
-     from public.sellers
-     where user_id = $1
-       and status = 'active'
-       and deleted_at is null
+    `select 1 from public.sellers
+     where user_id = $1 and status = 'active' and deleted_at is null
      limit 1`,
     [userId]
   );
-
-  if (seller.rows.length > 0) {
-    return "seller";
-  }
-
-  return "customer";
+  return seller.rows.length > 0 ? "seller" : "customer";
 }
 
 /** Any shop row, including a pending application. Admins can own a shop too. */
 export async function userHasSellerProfile(userId: string) {
   const seller = await pool.query(
-    `select 1
-     from public.sellers
-     where user_id = $1
-       and deleted_at is null
-     limit 1`,
+    `select 1 from public.sellers where user_id = $1 and deleted_at is null limit 1`,
     [userId]
   );
   return seller.rows.length > 0;
@@ -61,6 +86,10 @@ export async function createUser(input: {
   phoneNumber: string;
   password: string;
 }) {
+  const phone = normalizeIndianMobile(input.phoneNumber);
+  if (!phone) {
+    throw new AppError(400, "INVALID_PHONE", "Enter a valid 10-digit Indian mobile number");
+  }
   const passwordHash = await hashPassword(input.password);
 
   const result = await pool.query<UserRecord>(
@@ -72,22 +101,58 @@ export async function createUser(input: {
       terms_accepted_at
     ) values ($1, lower($2), $3, $4, now())
     returning ${USER_COLUMNS}`,
-    [input.fullName, input.email, input.phoneNumber, passwordHash]
+    [input.fullName, input.email, phone, passwordHash]
   );
 
   return toAuthUser(result.rows[0]);
 }
 
 export async function findUserByEmailForLogin(email: string) {
-  const result = await pool.query<UserRecord & { password_hash: string | null }>(
-    `select ${USER_COLUMNS}, password_hash
-     from public.users
-     where lower(email) = lower($1)
+  const result = await pool.query<UserWithFlags & { password_hash: string | null }>(
+    `select ${USER_COLUMNS_U}, u.password_hash, ${SELLER_FLAGS_SQL}
+     from public.users u
+     where lower(u.email) = lower($1)
      limit 1`,
     [email]
   );
 
   return result.rows[0] ?? null;
+}
+
+/**
+ * A real bcrypt hash of a random string. Comparing against it when the email
+ * is unknown makes a failed login take as long as a wrong password, so
+ * response time doesn't reveal which emails have accounts.
+ */
+let dummyHash: Promise<string> | null = null;
+export function burnPasswordCheck(password: string) {
+  const hash = (dummyHash ??= hashPassword(generateOpaqueToken()));
+  return hash.then((value: string) => comparePassword(password, value)).then(() => false);
+}
+
+/**
+ * Checks a password login. Returns the public user, or null for any wrong
+ * combination (deliberately one answer for "no such email" and "wrong password").
+ * Throws for blocked accounts and social-only accounts.
+ */
+export async function authenticateWithPassword(email: string, password: string) {
+  const row = await findUserByEmailForLogin(email);
+  if (!row) {
+    await burnPasswordCheck(password);
+    return null;
+  }
+  if (!row.password_hash) {
+    await burnPasswordCheck(password);
+    throw new AppError(
+      401,
+      "SOCIAL_LOGIN_ONLY",
+      "This account uses Google or Facebook sign-in. Continue with that provider."
+    );
+  }
+  const valid = await comparePassword(password, row.password_hash);
+  if (!valid) return null;
+  assertAccountUsable(row.status);
+  return toAuthUserWithFlags(row);
 }
 
 export async function findOrCreateOAuthUser(profile: {
@@ -97,6 +162,9 @@ export async function findOrCreateOAuthUser(profile: {
   fullName: string;
   emailVerified: boolean;
 }): Promise<AuthUser> {
+  const email = profile.email.trim().toLowerCase();
+  const fullName = profile.fullName.trim().slice(0, 80) || email.split("@")[0];
+
   const linked = await pool.query<{ user_id: string }>(
     `select user_id
      from public.oauth_accounts
@@ -110,24 +178,52 @@ export async function findOrCreateOAuthUser(profile: {
     if (!existing) {
       throw new Error("Linked OAuth user is missing");
     }
+    assertAccountUsable(existing.status);
     return existing;
   }
 
   const userId = await withTransaction(async (client) => {
     let id: string;
-    const byEmail = await client.query<UserRecord>(
-      `select ${USER_COLUMNS}
+    const byEmail = await client.query<UserRecord & { password_hash: string | null }>(
+      `select ${USER_COLUMNS}, password_hash
        from public.users
        where lower(email) = lower($1)
        limit 1
        for update`,
-      [profile.email]
+      [email]
     );
 
-    if (byEmail.rows[0]) {
-      id = byEmail.rows[0].id;
-      if (profile.emailVerified && !byEmail.rows[0].email_verified_at) {
-        await client.query(`update public.users set email_verified_at = now() where id = $1`, [id]);
+    const existing = byEmail.rows[0];
+    if (existing) {
+      // Linking a social login to an account found by email is only safe when
+      // the provider proves the person owns that inbox. Otherwise anyone could
+      // sign in to someone else's account with an unverified social profile.
+      if (!profile.emailVerified) {
+        throw new AppError(
+          409,
+          "OAUTH_EMAIL_UNVERIFIED",
+          "An account with this email already exists. Sign in with your password instead."
+        );
+      }
+      assertAccountUsable(existing.status);
+      id = existing.id;
+      if (!existing.email_verified_at) {
+        // Account pre-hijacking defence: an unverified account with this email
+        // may have been registered by someone who doesn't own the inbox. Now
+        // that the real owner has proven it, the password set by that person
+        // and every session they opened stop working.
+        await client.query(
+          `update public.users
+           set email_verified_at = now(), password_hash = null, updated_at = now()
+           where id = $1`,
+          [id]
+        );
+        await client.query(
+          `update public.refresh_tokens
+           set revoked_at = coalesce(revoked_at, now()), rotated_at = null
+           where user_id = $1`,
+          [id]
+        );
       }
     } else {
       const created = await client.query<UserRecord>(
@@ -140,14 +236,15 @@ export async function findOrCreateOAuthUser(profile: {
           email_verified_at
         ) values ($1, lower($2), null, null, now(), $3)
         returning ${USER_COLUMNS}`,
-        [profile.fullName, profile.email, profile.emailVerified ? new Date() : null]
+        [fullName, email, profile.emailVerified ? new Date() : null]
       );
       id = created.rows[0].id;
     }
 
     await client.query(
       `insert into public.oauth_accounts (id, user_id, provider, provider_user_id, created_at, updated_at)
-       values (gen_random_uuid(), $1, $2, $3, now(), now())`,
+       values (gen_random_uuid(), $1, $2, $3, now(), now())
+       on conflict (provider, provider_user_id) do nothing`,
       [id, profile.provider, profile.providerUserId]
     );
     return id;
@@ -172,21 +269,18 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
   return result.rows[0] ?? null;
 }
 
+/** Public profile with effective role and shop flag, in one query. */
 export async function findUserById(id: string): Promise<AuthUser | null> {
-  const result = await pool.query<UserRecord>(
-    `select ${USER_COLUMNS}
-     from public.users
-     where id = $1
+  const result = await pool.query<UserWithFlags>(
+    `select ${USER_COLUMNS_U}, ${SELLER_FLAGS_SQL}
+     from public.users u
+     where u.id = $1
      limit 1`,
     [id]
   );
 
   const row = result.rows[0];
-  if (!row) return null;
-  const user = toAuthUser(row);
-  user.role = await resolveEffectiveRole(id, row.role);
-  user.isSeller = await userHasSellerProfile(id);
-  return user;
+  return row ? toAuthUserWithFlags(row) : null;
 }
 
 export async function updateUserProfile(
@@ -207,8 +301,13 @@ export async function updateUserProfile(
     sets.push(`full_name = $${params.length}`);
   }
   if (input.phoneNumber !== undefined) {
-    const phone =
-      input.phoneNumber === null ? null : input.phoneNumber.replace(/[^\d+]/g, "") || null;
+    let phone: string | null = null;
+    if (input.phoneNumber !== null && input.phoneNumber.trim() !== "") {
+      phone = normalizeIndianMobile(input.phoneNumber);
+      if (!phone) {
+        throw new AppError(400, "INVALID_PHONE", "Enter a valid 10-digit Indian mobile number");
+      }
+    }
     params.push(phone);
     sets.push(`phone_number = $${params.length}`);
   }
@@ -233,11 +332,11 @@ export async function updateUserProfile(
 
   let result;
   try {
-    result = await pool.query<UserRecord>(
-      `update public.users
+    result = await pool.query<UserWithFlags>(
+      `update public.users u
        set ${sets.join(", ")}
-       where id = $1
-       returning ${USER_COLUMNS}`,
+       where u.id = $1
+       returning ${USER_COLUMNS_U}, ${SELLER_FLAGS_SQL}`,
       params
     );
   } catch (error) {
@@ -259,10 +358,17 @@ export async function updateUserProfile(
   if (!row) {
     throw new AppError(404, "USER_NOT_FOUND", "User was not found");
   }
-  const user = toAuthUser(row);
-  user.role = await resolveEffectiveRole(userId, row.role);
-  user.isSeller = await userHasSellerProfile(userId);
-  return user;
+  return toAuthUserWithFlags(row);
+}
+
+/** Ends every session for a user: password change/reset, block, account takeover recovery. */
+export async function revokeAllSessions(userId: string, client: PoolClient | typeof pool = pool) {
+  await client.query(
+    `update public.refresh_tokens
+     set revoked_at = coalesce(revoked_at, now()), rotated_at = null
+     where user_id = $1 and (revoked_at is null or rotated_at is not null)`,
+    [userId]
+  );
 }
 
 export async function changePassword(
@@ -293,24 +399,33 @@ export async function changePassword(
   if (!matches) {
     throw new AppError(400, "WRONG_PASSWORD", "Current password is incorrect");
   }
+  if (await comparePassword(newPassword, row.password_hash)) {
+    throw new AppError(400, "SAME_PASSWORD", "Choose a password different from your current one");
+  }
 
   const passwordHash = await hashPassword(newPassword);
-  await pool.query(
-    `update public.users set password_hash = $1, updated_at = now() where id = $2`,
-    [passwordHash, userId]
-  );
-  await pool.query(
-    `update public.refresh_tokens
-     set revoked_at = now()
-     where user_id = $1 and revoked_at is null`,
-    [userId]
-  );
+  await withTransaction(async (client) => {
+    await client.query(
+      `update public.users set password_hash = $1, updated_at = now() where id = $2`,
+      [passwordHash, userId]
+    );
+    await revokeAllSessions(userId, client);
+  });
 
   return { email: row.email, role: row.role };
 }
 
-export async function issueAuthTokens(user: { id: string; email: string; role: string }, rememberMe: boolean) {
-  const role = await resolveEffectiveRole(user.id, user.role);
+export async function issueAuthTokens(
+  user: { id: string; email: string; role: string },
+  rememberMe: boolean,
+  /** Skip the role lookup when the caller already resolved it. */
+  knownRole?: UserRole
+) {
+  const role =
+    knownRole ??
+    (user.role === "customer" || user.role === "seller" || user.role === "admin"
+      ? await resolveEffectiveRole(user.id, user.role)
+      : await resolveEffectiveRole(user.id, "customer"));
   const accessToken = signAccessToken({ userId: user.id, email: user.email, role });
   const refreshToken = generateOpaqueToken();
   const tokenHash = hashToken(refreshToken);
@@ -325,53 +440,97 @@ export async function issueAuthTokens(user: { id: string; email: string; role: s
   return { accessToken, refreshToken, role };
 }
 
+/**
+ * Two tabs whose access tokens expire together both call /refresh with the
+ * same cookie. The first rotates it; the second arrives a moment later with a
+ * token that is already rotated. Within this window that is a duplicate
+ * rotation, not theft, so it gets fresh tokens instead of a family revoke.
+ */
+const ROTATION_GRACE_MS = 30 * 1000;
+
+/**
+ * Rotates a refresh token. Returns new tokens, or null when the token is
+ * unknown, expired, revoked, or the account is blocked. Presenting a rotated
+ * token outside the grace window is treated as theft and ends every session.
+ */
 export async function rotateRefreshToken(rawRefreshToken: string, rememberMe: boolean) {
+  if (!rawRefreshToken || rawRefreshToken.length > 200) return null;
   const tokenHash = hashToken(rawRefreshToken);
-  const found = await pool.query<{
-    id: string;
-    user_id: string;
-    expires_at: Date;
-    revoked_at: Date | null;
-    email: string;
-    role: string;
-  }>(
-    `select rt.id, rt.user_id, rt.expires_at, rt.revoked_at, u.email, u.role
-     from public.refresh_tokens rt
-     join public.users u on u.id = rt.user_id
-     where rt.token_hash = $1
-     limit 1`,
+
+  // Atomic claim: only one concurrent request can flip revoked_at from null.
+  const claimed = await pool.query<{ user_id: string }>(
+    `update public.refresh_tokens
+     set revoked_at = now(), rotated_at = now()
+     where token_hash = $1 and revoked_at is null and expires_at > now()
+     returning user_id`,
     [tokenHash]
   );
 
-  const row = found.rows[0];
-  if (!row) {
-    return null;
-  }
+  let userId = claimed.rows[0]?.user_id;
 
-  if (row.revoked_at) {
-    await pool.query(
-      `update public.refresh_tokens
-       set revoked_at = coalesce(revoked_at, now())
-       where user_id = $1 and revoked_at is null`,
-      [row.user_id]
+  if (!userId) {
+    const found = await pool.query<{
+      user_id: string;
+      expires_at: Date;
+      revoked_at: Date | null;
+      rotated_at: Date | null;
+    }>(
+      `select user_id, expires_at, revoked_at, rotated_at
+       from public.refresh_tokens
+       where token_hash = $1
+       limit 1`,
+      [tokenHash]
     );
+    const row = found.rows[0];
+    if (!row || new Date(row.expires_at).getTime() <= Date.now()) return null;
+
+    const rotatedRecently =
+      row.rotated_at && Date.now() - new Date(row.rotated_at).getTime() < ROTATION_GRACE_MS;
+    if (!rotatedRecently) {
+      if (row.rotated_at) {
+        // A rotated token used again later: someone else holds a copy.
+        await revokeAllSessions(row.user_id);
+      }
+      return null;
+    }
+    userId = row.user_id;
+  }
+
+  const user = await pool.query<{
+    email: string;
+    role: string;
+    status: string;
+    is_active_seller: boolean;
+  }>(
+    `select u.email, u.role, u.status,
+            exists (
+              select 1 from public.sellers s
+              where s.user_id = u.id and s.status = 'active' and s.deleted_at is null
+            ) as is_active_seller
+     from public.users u
+     where u.id = $1`,
+    [userId]
+  );
+  const account = user.rows[0];
+  if (!account || account.status === "blocked") {
+    await revokeAllSessions(userId);
     return null;
   }
 
-  if (new Date(row.expires_at).getTime() <= Date.now()) {
-    return null;
-  }
-
-  await pool.query(`update public.refresh_tokens set revoked_at = now() where id = $1`, [row.id]);
-
-  return issueAuthTokens({ id: row.user_id, email: row.email, role: row.role }, rememberMe);
+  return issueAuthTokens(
+    { id: userId, email: account.email, role: account.role },
+    rememberMe,
+    effectiveRole(account.role, account.is_active_seller)
+  );
 }
 
 export async function revokeRefreshToken(rawRefreshToken: string) {
+  if (!rawRefreshToken || rawRefreshToken.length > 200) return;
   const tokenHash = hashToken(rawRefreshToken);
+  // Logout is a deliberate revoke, not a rotation, so it gets no reuse grace.
   await pool.query(
     `update public.refresh_tokens
-     set revoked_at = now()
+     set revoked_at = now(), rotated_at = null
      where token_hash = $1 and revoked_at is null`,
     [tokenHash]
   );
@@ -379,6 +538,9 @@ export async function revokeRefreshToken(rawRefreshToken: string) {
 
 const EMAIL_VERIFY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const EMAIL_VERIFY_RESEND_COOLDOWN_MS = 60 * 1000;
+/** One reset email per minute per account, at most five an hour: stops inbox flooding. */
+const PASSWORD_RESET_COOLDOWN_MS = 60 * 1000;
+const PASSWORD_RESET_MAX_PER_HOUR = 5;
 
 export async function createEmailVerificationToken(userId: string) {
   const token = generateOpaqueToken();
@@ -412,7 +574,7 @@ export async function requestEmailVerification(
   email: string
 ): Promise<{ status: "sent" | "skipped" } | { status: "cooldown"; retryAfterSeconds: number }> {
   const user = await findUserByEmail(email);
-  if (!user || user.email_verified_at) {
+  if (!user || user.email_verified_at || user.status === "blocked") {
     return { status: "skipped" };
   }
 
@@ -437,39 +599,27 @@ export async function requestEmailVerification(
 }
 
 export async function confirmEmailVerification(rawToken: string) {
+  if (!rawToken || rawToken.length > 200) return false;
   const tokenHash = hashToken(rawToken);
-  const found = await pool.query<{
-    id: string;
-    user_id: string;
-    expires_at: Date;
-    used_at: Date | null;
-  }>(
-    `select id, user_id, expires_at, used_at
-     from public.verification_tokens
-     where token_hash = $1
-       and purpose = 'email_verify'
-     limit 1`,
-    [tokenHash]
-  );
-
-  const row = found.rows[0];
-  if (!row || row.used_at || new Date(row.expires_at).getTime() <= Date.now()) {
-    return false;
-  }
-
   return withTransaction(async (client) => {
     // `used_at is null` makes the claim atomic: two clicks on the same link
-    // cannot both pass the check above and both succeed.
-    const claimed = await client.query(
+    // cannot both succeed.
+    const claimed = await client.query<{ user_id: string }>(
       `update public.verification_tokens set used_at = now()
-       where id = $1 and used_at is null
-       returning id`,
-      [row.id]
+       where token_hash = $1
+         and purpose = 'email_verify'
+         and used_at is null
+         and expires_at > now()
+       returning user_id`,
+      [tokenHash]
     );
-    if (!claimed.rows[0]) return false;
-    await client.query(`update public.users set email_verified_at = now() where id = $1`, [
-      row.user_id,
-    ]);
+    const userId = claimed.rows[0]?.user_id;
+    if (!userId) return false;
+    await client.query(
+      `update public.users set email_verified_at = coalesce(email_verified_at, now()), updated_at = now()
+       where id = $1`,
+      [userId]
+    );
     return true;
   });
 }
@@ -477,9 +627,21 @@ export async function confirmEmailVerification(rawToken: string) {
 export async function requestPasswordReset(email: string) {
   const user = await findUserByEmail(email);
   // Always no-op success to avoid account enumeration.
-  if (!user || !user.id) {
+  if (!user || !user.id || user.status === "blocked") {
     return;
   }
+
+  const recent = await pool.query<{ last_at: Date | null; in_hour: string }>(
+    `select max(created_at) as last_at,
+            count(*) filter (where created_at > now() - interval '1 hour')::text as in_hour
+     from public.verification_tokens
+     where user_id = $1 and purpose = 'password_reset'
+       and created_at > now() - interval '1 hour'`,
+    [user.id]
+  );
+  const lastAt = recent.rows[0]?.last_at;
+  if (lastAt && Date.now() - new Date(lastAt).getTime() < PASSWORD_RESET_COOLDOWN_MS) return;
+  if (Number(recent.rows[0]?.in_hour ?? 0) >= PASSWORD_RESET_MAX_PER_HOUR) return;
 
   const token = generateOpaqueToken();
   const tokenHash = hashToken(token);
@@ -498,49 +660,45 @@ export async function requestPasswordReset(email: string) {
 }
 
 export async function resetPasswordWithToken(rawToken: string, newPassword: string) {
+  if (!rawToken || rawToken.length > 200) return false;
   const tokenHash = hashToken(rawToken);
-  const found = await pool.query<{
-    id: string;
-    user_id: string;
-    expires_at: Date;
-    used_at: Date | null;
-  }>(
-    `select id, user_id, expires_at, used_at
+  const found = await pool.query<{ id: string }>(
+    `select id
      from public.verification_tokens
      where token_hash = $1
        and purpose = 'password_reset'
+       and used_at is null
+       and expires_at > now()
      limit 1`,
     [tokenHash]
   );
-
-  const row = found.rows[0];
-  if (!row || row.used_at || new Date(row.expires_at).getTime() <= Date.now()) {
-    return false;
-  }
+  if (!found.rows[0]) return false;
 
   const passwordHash = await hashPassword(newPassword);
   return withTransaction(async (client) => {
-    const claimed = await client.query(
+    const claimed = await client.query<{ user_id: string }>(
       `update public.verification_tokens set used_at = now()
-       where id = $1 and used_at is null
-       returning id`,
-      [row.id]
+       where id = $1 and used_at is null and expires_at > now()
+       returning user_id`,
+      [found.rows[0].id]
     );
-    if (!claimed.rows[0]) return false;
+    const userId = claimed.rows[0]?.user_id;
+    if (!userId) return false;
+    // Opening the reset link proves the person controls the inbox.
     await client.query(
-      `update public.users set password_hash = $1, updated_at = now() where id = $2`,
-      [passwordHash, row.user_id]
+      `update public.users
+       set password_hash = $1,
+           email_verified_at = coalesce(email_verified_at, now()),
+           updated_at = now()
+       where id = $2`,
+      [passwordHash, userId]
     );
     // A new password ends every session and every other pending reset link.
-    await client.query(
-      `update public.refresh_tokens set revoked_at = now()
-       where user_id = $1 and revoked_at is null`,
-      [row.user_id]
-    );
+    await revokeAllSessions(userId, client);
     await client.query(
       `update public.verification_tokens set used_at = now()
        where user_id = $1 and purpose = 'password_reset' and used_at is null`,
-      [row.user_id]
+      [userId]
     );
     return true;
   });

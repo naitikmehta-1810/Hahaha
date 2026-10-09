@@ -7,9 +7,21 @@ import { baseCookieOptions } from "../utils/cookie-options.js";
 import { loadCartItemsForCoupon, validateCoupon } from "./coupon.service.js";
 import { appliedGstPercent, goodsValueInclGst } from "./gst.js";
 import { AppError } from "../utils/errors.js";
+import { isUuid } from "../utils/validation.js";
 import { RETENTION } from "./maintenance.service.js";
 
 export const GUEST_SESSION_COOKIE = "guest_session_id";
+
+/** Most of one item a single cart line can hold (backorders included). */
+export const MAX_LINE_QUANTITY = 99;
+/** Distinct lines per cart; keeps cart, coupon and checkout queries bounded. */
+export const MAX_CART_LINES = 50;
+
+/** The guest cookie, when it is a well-formed id this server could have issued. */
+function readGuestSessionId(req: Request): string | null {
+  const raw = req.cookies?.[GUEST_SESSION_COOKIE];
+  return isUuid(raw) ? raw : null;
+}
 // Same window the cleanup job keeps an idle guest cart (maintenance.service.ts).
 const GUEST_SESSION_MAX_AGE_MS = RETENTION.guestCartIdleDays * 24 * 60 * 60 * 1000;
 
@@ -182,35 +194,35 @@ export async function getOrCreateCart(req: Request, res: Response): Promise<Cart
     return reviveOrCreateUserCart(req.user.id);
   }
 
-  const cookieId =
-    typeof req.cookies?.[GUEST_SESSION_COOKIE] === "string"
-      ? (req.cookies[GUEST_SESSION_COOKIE] as string)
-      : null;
-
+  const cookieId = readGuestSessionId(req);
   const guestSessionId = cookieId ?? randomUUID();
   const cart = await reviveOrCreateGuestCart(guestSessionId);
   res.cookie(GUEST_SESSION_COOKIE, guestSessionId, guestCookieOptions());
   return cart;
 }
 
-type StockLock = {
+type StockLevel = {
   available: number;
   onHand: number;
   reserved: number;
 };
 
-async function lockInventoryAvailable(
+/**
+ * Current stock without a row lock. Cart checks are a convenience for the
+ * buyer; placeOrder re-checks under FOR UPDATE and is the one that decides.
+ * Locking here made every add-to-cart queue behind checkouts of the same item.
+ */
+async function readInventoryAvailable(
   client: PoolClient,
   variantId: string
-): Promise<StockLock> {
+): Promise<StockLevel> {
   const result = await client.query<{
     quantity_on_hand: number;
     quantity_reserved: number;
   }>(
     `select quantity_on_hand, quantity_reserved
      from public.inventory
-     where variant_id = $1
-     for update`,
+     where variant_id = $1`,
     [variantId]
   );
 
@@ -327,13 +339,19 @@ export async function addItem(
   quantity: number,
   customizationNote?: string | null
 ) {
-  if (!Number.isInteger(quantity) || quantity < 1) {
-    throw new AppError(400, "INVALID_QUANTITY", "Quantity must be a positive integer");
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_LINE_QUANTITY) {
+    throw new AppError(
+      400,
+      "INVALID_QUANTITY",
+      `Quantity must be between 1 and ${MAX_LINE_QUANTITY}`
+    );
   }
 
   const client = await pool.connect();
   try {
     await client.query("begin");
+    // Serializes concurrent adds to the same cart (double-clicks, two tabs).
+    await client.query(`select id from public.carts where id = $1 for update`, [cart.id]);
     const { allowBackorder, isCustomizable, isDigital } = await assertVariantSellable(
       client,
       variantId
@@ -346,7 +364,7 @@ export async function addItem(
         "Add the customization you want the seller to make"
       );
     }
-    const stock = await lockInventoryAvailable(client, variantId);
+    const stock = await readInventoryAvailable(client, variantId);
 
     const existing = await client.query<{ id: string; quantity: number }>(
       `select id, quantity
@@ -369,6 +387,13 @@ export async function addItem(
     if (!allowBackorder && nextQty > stock.available) {
       throw insufficientStock(stock.available, nextQty);
     }
+    if (!isDigital && existing.rows[0] && Number(existing.rows[0].quantity) + quantity > MAX_LINE_QUANTITY) {
+      throw new AppError(
+        400,
+        "INVALID_QUANTITY",
+        `You can add up to ${MAX_LINE_QUANTITY} of one item`
+      );
+    }
 
     if (existing.rows[0]) {
       // A second "add" of a download keeps the single copy already in the cart.
@@ -379,6 +404,17 @@ export async function addItem(
         [quantity, existing.rows[0].id, isDigital]
       );
     } else {
+      const lines = await client.query<{ c: string }>(
+        `select count(*)::text as c from public.cart_items where cart_id = $1 and deleted_at is null`,
+        [cart.id]
+      );
+      if (Number(lines.rows[0]?.c ?? 0) >= MAX_CART_LINES) {
+        throw new AppError(
+          400,
+          "CART_FULL",
+          `Your cart can hold up to ${MAX_CART_LINES} different items. Remove some to add more.`
+        );
+      }
       const priceRow = await client.query<{ price: string }>(
         `select price::text from public.product_variants where id = $1`,
         [variantId]
@@ -402,8 +438,15 @@ export async function addItem(
 }
 
 export async function updateItemQuantity(cart: CartRow, itemId: string, quantity: number) {
-  if (!Number.isInteger(quantity) || quantity < 1) {
-    throw new AppError(400, "INVALID_QUANTITY", "Quantity must be a positive integer");
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_LINE_QUANTITY) {
+    throw new AppError(
+      400,
+      "INVALID_QUANTITY",
+      `Quantity must be between 1 and ${MAX_LINE_QUANTITY}`
+    );
+  }
+  if (!isUuid(itemId)) {
+    throw new AppError(404, "CART_ITEM_NOT_FOUND", "Cart item was not found");
   }
 
   const client = await pool.connect();
@@ -427,7 +470,7 @@ export async function updateItemQuantity(cart: CartRow, itemId: string, quantity
     if (isDigital) quantity = 1;
 
     if (!allowBackorder && quantity > item.rows[0].quantity) {
-      const stock = await lockInventoryAvailable(client, variantId);
+      const stock = await readInventoryAvailable(client, variantId);
       const siblings = await client.query<{ quantity: string }>(
         `select coalesce(sum(quantity), 0)::text as quantity
          from public.cart_items
@@ -457,6 +500,9 @@ export async function updateItemQuantity(cart: CartRow, itemId: string, quantity
 }
 
 export async function removeItem(cart: CartRow, itemId: string) {
+  if (!isUuid(itemId)) {
+    throw new AppError(404, "CART_ITEM_NOT_FOUND", "Cart item was not found");
+  }
   const result = await pool.query(
     `delete from public.cart_items
      where id = $1 and cart_id = $2
@@ -665,8 +711,8 @@ export async function mergeGuestCartIntoUserCart(
       [guestCart.id]
     );
 
-    for (const line of guestItems.rows) {
-      const stock = await lockInventoryAvailable(client, line.variant_id);
+    for (const line of guestItems.rows.slice(0, MAX_CART_LINES)) {
+      const stock = await readInventoryAvailable(client, line.variant_id);
       const sellable = await client.query<{
         ok: boolean;
         allow_backorder: boolean;
@@ -723,9 +769,10 @@ export async function mergeGuestCartIntoUserCart(
       // except for backorderable products which have no ceiling.
       const merged = sellable.rows[0]?.is_digital
         ? 1
-        : allowBackorder
-          ? requested
-          : Math.min(requested, Math.max(0, room));
+        : Math.min(
+            MAX_LINE_QUANTITY,
+            allowBackorder ? requested : Math.min(requested, Math.max(0, room))
+          );
       if (merged < 1) {
         continue;
       }
@@ -771,12 +818,10 @@ export async function mergeGuestCartIntoUserCart(
 
 /** Called after successful auth to fold any guest cart into the user cart. */
 export async function mergeGuestCartFromRequest(req: Request, res: Response, userId: string) {
-  const guestSessionId =
-    typeof req.cookies?.[GUEST_SESSION_COOKIE] === "string"
-      ? (req.cookies[GUEST_SESSION_COOKIE] as string)
-      : null;
+  const guestSessionId = readGuestSessionId(req);
 
   if (!guestSessionId) {
+    if (req.cookies?.[GUEST_SESSION_COOKIE]) clearGuestSessionCookie(res);
     return;
   }
 
@@ -786,17 +831,9 @@ export async function mergeGuestCartFromRequest(req: Request, res: Response, use
     return;
   }
 
-  let userCart = await findCartByUserId(userId);
-  if (!userCart) {
-    const created = await pool.query<CartRow>(
-      `insert into public.carts (id, user_id, guest_session_id, created_at, updated_at)
-       values (gen_random_uuid(), $1, null, now(), now())
-       returning id, user_id, guest_session_id, coupon_id, coupon_code`,
-      [userId]
-    );
-    userCart = created.rows[0];
-  }
-
+  // Revives a soft-deleted cart instead of inserting a second one, which used
+  // to hit unique(user_id) and fail the whole sign-in with a 409.
+  const userCart = await reviveOrCreateUserCart(userId);
   await mergeGuestCartIntoUserCart(guestCart, userCart, res);
 }
 

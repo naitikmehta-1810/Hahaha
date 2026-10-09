@@ -37,12 +37,13 @@ import {
 } from "@/utils/cart";
 import { formatInr, inclusiveLineTotal, priceWithGst, totalsInclGst } from "@/utils/gst";
 import {
-  fetchProducts,
+  fetchCartRecommendations,
   productHref,
   productImageUrl,
   type ProductCard as CatalogProduct,
 } from "@/utils/catalog";
 import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
+import { MAX_LINE_QUANTITY } from "@/utils/validation";
 
 export default function CartPage() {
   const router = useRouter();
@@ -84,7 +85,9 @@ export default function CartPage() {
   }, [syncFromCache]);
 
   useEffect(() => {
-    void fetchProducts({ sort: "bestsellers", pageSize: 5 }).then((result) => {
+    // Goes with what's in this cart (bought/viewed together, similar items);
+    // the server already leaves out what's in the cart.
+    void fetchCartRecommendations(5).then((result) => {
       const cartTitles = new Set(getCart().map((item) => item.title));
       setRecommendations(
         result.products.filter((product) => !cartTitles.has(product.title)).slice(0, 5)
@@ -317,7 +320,7 @@ export default function CartPage() {
                     <button
                       type="button"
                       className={styles.qtyBtn}
-                      disabled={!item.available}
+                      disabled={!item.available || item.qty >= MAX_LINE_QUANTITY}
                       aria-label="Increase quantity"
                       onClick={() => void handleQtyChange(item.id, "inc")}
                     >

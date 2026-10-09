@@ -162,7 +162,9 @@ export async function apiRequest<T>(
     return {
       data: null,
       error:
-        "Unable to connect to the backend server. Make sure the API is running on port 4000 (npm run dev:backend).",
+        process.env.NODE_ENV === "production"
+          ? "We couldn't reach Stuffsy. Check your connection and try again."
+          : "Unable to connect to the backend server. Make sure the API is running on port 4000 (npm run dev:backend).",
       status: 0,
     };
   }

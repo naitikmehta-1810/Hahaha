@@ -122,7 +122,9 @@
 }
 
 .suggestItem {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 16px;
   color: var(--color-text-main);
   font-size: 0.9rem;

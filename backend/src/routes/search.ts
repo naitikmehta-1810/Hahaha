@@ -4,7 +4,11 @@ import { asyncHandler } from "../middleware/async-handler.js";
 import { publicReadLimiter } from "../middleware/auth-rate-limit.js";
 import { optionalAuth } from "../middleware/requireAuth.js";
 import { listProducts, suggestSearch } from "../services/catalog.service.js";
+import { cached } from "../services/catalog-cache.js";
+import { recordSearch, trendingSearches } from "../services/product-stats.service.js";
+import { normalizeQuery } from "../services/search-query.js";
 import { resolveViewerRegion } from "../services/viewer-region.service.js";
+import { analyticsVisitorId } from "./analytics.js";
 
 const searchRouter = Router();
 
@@ -39,10 +43,20 @@ searchRouter.get(
       search: parsed.data.q,
       page: parsed.data.page,
       pageSize: parsed.data.pageSize ?? 24,
-      sort: "featured",
+      sort: "relevance",
       viewerCity: region.city,
       viewerState: region.state,
     });
+    if ((parsed.data.page ?? 1) === 1) {
+      recordSearch({
+        query: parsed.data.q,
+        normalized: normalizeQuery(parsed.data.q),
+        corrected: result.search?.correctedQuery ?? null,
+        resultCount: result.total,
+        userId: req.user?.id ?? null,
+        sessionId: analyticsVisitorId(req),
+      });
+    }
     res.json(result);
   })
 );
@@ -60,8 +74,19 @@ searchRouter.get(
       return;
     }
     const region = await resolveViewerRegion(req);
-    const suggestions = await suggestSearch(parsed.data.q, 8, region.state);
+    const suggestions = await suggestSearch(parsed.data.q, 6, region.state);
     res.json(suggestions);
+  })
+);
+
+/** What other buyers searched for this week; shown when the search box is empty. */
+searchRouter.get(
+  "/trending",
+  publicReadLimiter,
+  asyncHandler(async (_req, res) => {
+    const terms = await cached("search:trending", 600, () => trendingSearches(8), { versioned: false });
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.json({ terms });
   })
 );
 

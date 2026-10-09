@@ -41,6 +41,11 @@ const envSchema = z.object({
    * true in development so scripts/Bearer proofs keep working.
    */
   AUTH_RETURN_TOKEN_IN_BODY: z.enum(["true", "false"]).optional(),
+  /**
+   * Buyers must confirm their email before placing an order, so junk signups
+   * (typos, someone else's address) can't transact. Defaults on in production.
+   */
+  REQUIRE_VERIFIED_EMAIL_FOR_ORDERS: z.enum(["true", "false"]).optional(),
   /** Shared secret for POST /api/shipping/webhook (header x-stuffsy-shipping-secret). */
   SHIPPING_WEBHOOK_SECRET: z.string().min(16).optional(),
   /** Allow admin PATCH inventory reset (k6). Forbidden implicitly in production unless true. */
@@ -120,6 +125,10 @@ export const env = {
     parsed.AUTH_RETURN_TOKEN_IN_BODY !== undefined
       ? parsed.AUTH_RETURN_TOKEN_IN_BODY === "true"
       : parsed.NODE_ENV !== "production",
+  REQUIRE_VERIFIED_EMAIL_FOR_ORDERS:
+    parsed.REQUIRE_VERIFIED_EMAIL_FOR_ORDERS !== undefined
+      ? parsed.REQUIRE_VERIFIED_EMAIL_FOR_ORDERS === "true"
+      : parsed.NODE_ENV === "production",
 };
 
 if (env.NODE_ENV === "production" && !env.SHIPPING_WEBHOOK_SECRET) {

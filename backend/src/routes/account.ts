@@ -21,6 +21,36 @@ const accountRouter = Router();
 
 accountRouter.use(requireAuth);
 
+/**
+ * Browser push services. The server POSTs to the subscription endpoint, so
+ * accepting any URL would let a user aim our server at internal addresses
+ * (cloud metadata, private services). Only real push services are allowed.
+ */
+const PUSH_SERVICE_HOSTS = [
+  "fcm.googleapis.com",
+  "android.googleapis.com",
+  "updates.push.services.mozilla.com",
+  "push.services.mozilla.com",
+  "web.push.apple.com",
+  "notify.windows.com",
+  "push.api.chromium.org",
+];
+
+const pushEndpointSchema = z
+  .string()
+  .max(1000)
+  .url()
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== "https:" || url.port) return false;
+      const host = url.hostname.toLowerCase();
+      return PUSH_SERVICE_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+    } catch {
+      return false;
+    }
+  }, "Unsupported push service");
+
 /** Digital products the buyer has bought, with their files (see Downloads tab). */
 accountRouter.get(
   "/downloads",
@@ -96,10 +126,10 @@ accountRouter.post(
     }
     const parsed = z
       .object({
-        endpoint: z.string().url(),
+        endpoint: pushEndpointSchema,
         keys: z.object({
-          p256dh: z.string().min(1),
-          auth: z.string().min(1),
+          p256dh: z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+={0,2}$/),
+          auth: z.string().min(1).max(100).regex(/^[A-Za-z0-9_-]+={0,2}$/),
         }),
       })
       .safeParse(req.body ?? {});
@@ -109,7 +139,8 @@ accountRouter.post(
     }
     await upsertPushSubscription(req.user!.id, {
       ...parsed.data,
-      userAgent: typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : null,
+      userAgent:
+        typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"].slice(0, 300) : null,
     });
     res.json({ ok: true });
   })
@@ -120,7 +151,7 @@ accountRouter.delete(
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
-        endpoint: z.string().url(),
+        endpoint: z.string().max(1000).url(),
       })
       .safeParse(req.body ?? {});
     if (!parsed.success) {

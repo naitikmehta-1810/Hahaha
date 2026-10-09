@@ -300,7 +300,8 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
           keys: { p256dh: sub.p256dh, auth: sub.auth },
         },
         body,
-        { TTL: 60 * 60 * 12 }
+        // A slow push service must not hold up the job that triggered the push.
+        { TTL: 60 * 60 * 12, timeout: 10_000 }
       );
       sent += 1;
     } catch (error) {

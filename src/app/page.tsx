@@ -18,6 +18,7 @@ import {
   HOME_POPULAR_SORT,
   fetchCategories,
   fetchProducts,
+  fetchRecommendedForYou,
   pickShopByCategoryNodes,
   pickSidebarCategories,
   productHref,
@@ -350,6 +351,17 @@ export default function Home() {
     let cancelled = false;
     setLoadingRecommended(true);
     void (async () => {
+      if (activeRecommendTab === "for-you") {
+        // Personal picks from views, wishlist, cart and orders (trending for new visitors).
+        const picks = await fetchRecommendedForYou(6);
+        if (cancelled) return;
+        if (picks.products.length > 0) {
+          setRecommendedProducts(picks.products);
+          setShowingFallback(false);
+          setLoadingRecommended(false);
+          return;
+        }
+      }
       if (activeRecommendTab === "views") {
         const result = await apiRequest<{ products: CatalogProduct[] }>(
           "GET",

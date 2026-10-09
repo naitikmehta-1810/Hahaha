@@ -4,10 +4,25 @@ import { asyncHandler } from "../middleware/async-handler.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
+import { accountWriteLimiter } from "../middleware/auth-rate-limit.js";
+import { indianMobileSchema, isUuid, pincodeSchema } from "../utils/validation.js";
 
 const addressesRouter = Router();
 
 addressesRouter.use(requireAuth);
+
+/** Saved addresses per account; plenty for real use, bounded for abuse. */
+const MAX_ADDRESSES = 20;
+
+const addressText = (max: number, message: string) =>
+  z
+    .string({ required_error: message })
+    .trim()
+    .transform((value) => value.replace(/\s+/g, " "))
+    .refine((value) => value.length >= 1, message)
+    .refine((value) => value.length <= max, `Keep this under ${max} characters`)
+    // eslint-disable-next-line no-control-regex
+    .refine((value) => !/[\u0000-\u001f<>]/.test(value), "Remove unsupported characters");
 
 type AddressRow = {
   id: string;
@@ -44,15 +59,28 @@ function mapAddress(row: AddressRow) {
 
 /** Mirrors checkout's Shipping Information step field-for-field. */
 const addressSchema = z.object({
-  label: z.string().trim().min(1).max(40).default("Home"),
-  recipientName: z.string().trim().min(1, "Full name is required").max(120),
-  phoneNumber: z.string().trim().min(6, "Phone number is required").max(20),
-  line1: z.string().trim().min(1, "Address is required").max(255),
+  label: addressText(40, "Label is required").default("Home"),
+  recipientName: addressText(120, "Full name is required").refine(
+    (value) => value.length >= 2,
+    "Full name is required"
+  ),
+  // Couriers call this number; it must be a real 10-digit Indian mobile.
+  phoneNumber: indianMobileSchema,
+  line1: addressText(255, "Address is required").refine(
+    (value) => value.length >= 3,
+    "Enter the house number and street"
+  ),
   line2: z.string().trim().max(255).optional().nullable(),
-  city: z.string().trim().min(1, "City is required").max(80),
-  state: z.string().trim().min(1, "State is required").max(80),
-  postalCode: z.string().trim().min(4, "PIN code is required").max(12),
-  country: z.string().trim().min(2).max(2).default("IN"),
+  city: addressText(80, "City is required"),
+  state: addressText(80, "State is required"),
+  postalCode: pincodeSchema,
+  // Delivery is India-only (Shiprocket, INR, GST).
+  country: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .refine((value) => value === "IN", "We deliver within India only")
+    .default("IN"),
   isDefault: z.boolean().default(false),
 });
 
@@ -73,6 +101,7 @@ addressesRouter.get(
 
 addressesRouter.post(
   "/",
+  accountWriteLimiter,
   asyncHandler(async (req, res) => {
     const parsed = addressSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -94,6 +123,13 @@ addressesRouter.post(
          where user_id = $1 and deleted_at is null`,
         [req.user!.id]
       );
+      if (Number(existing.rows[0].count) >= MAX_ADDRESSES) {
+        throw new AppError(
+          400,
+          "TOO_MANY_ADDRESSES",
+          `You can save up to ${MAX_ADDRESSES} addresses. Remove one to add another.`
+        );
+      }
       const isFirst = Number(existing.rows[0].count) === 0;
       const shouldBeDefault = data.isDefault || isFirst;
 
@@ -139,7 +175,12 @@ addressesRouter.post(
 
 addressesRouter.patch(
   "/:id",
+  accountWriteLimiter,
   asyncHandler(async (req, res) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ message: "Address was not found" });
+      return;
+    }
     const parsed = addressSchema.partial().safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid address" });
@@ -208,7 +249,12 @@ addressesRouter.patch(
 
 addressesRouter.delete(
   "/:id",
+  accountWriteLimiter,
   asyncHandler(async (req, res) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ message: "Address was not found" });
+      return;
+    }
     // Soft delete — orders snapshot their address, but keeping the row avoids
     // breaking anything that still references it.
     const result = await pool.query(

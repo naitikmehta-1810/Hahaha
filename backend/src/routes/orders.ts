@@ -13,6 +13,7 @@ import { getInvoicePdfForOrder } from "../jobs/generate-invoice.js";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
 import { resolveDigitalDownload } from "../services/digital-delivery.service.js";
+import { pagination } from "../utils/validation.js";
 
 const ordersRouter = Router();
 
@@ -21,8 +22,7 @@ ordersRouter.use(requireAuth);
 ordersRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const page = Number(req.query.page ?? 1);
-    const pageSize = Number(req.query.pageSize ?? 20);
+    const { page, pageSize } = pagination(req.query, { pageSize: 20, maxPageSize: 50 });
     const result = await listOrdersForUser(req.user!.id, page, pageSize);
     res.json(result);
   })
@@ -52,21 +52,24 @@ ordersRouter.get(
     }
 
     const { refreshShipmentTracking } = await import("../services/shipping.service.js");
-    const shipments = [];
-    for (const sh of order.shipments ?? []) {
-      const refreshed = await refreshShipmentTracking(sh.id);
-      shipments.push({
-        id: sh.id,
-        sellerId: sh.sellerId,
-        shopName: sh.shopName,
-        trackingNumber: sh.trackingNumber,
-        carrier: sh.carrier,
-        courierUrl: sh.courierUrl,
-        status: sh.status,
-        events: refreshed.events,
-        refreshed: refreshed.refreshed,
-      });
-    }
+    // One courier lookup per seller parcel; they're independent, so in parallel.
+    const shipments = await Promise.all(
+      (order.shipments ?? []).map(async (sh) => {
+        const refreshed = await refreshShipmentTracking(sh.id);
+        return {
+          id: sh.id,
+          sellerId: sh.sellerId,
+          shopName: sh.shopName,
+          trackingNumber: sh.trackingNumber,
+          carrier: sh.carrier,
+          courierUrl: sh.courierUrl,
+          status: sh.status,
+          events: refreshed.events,
+          refreshed: refreshed.refreshed,
+        };
+      })
+    );
+    res.setHeader("Cache-Control", "private, no-store");
     res.json({ orderId, shipments });
   })
 );
@@ -168,15 +171,23 @@ ordersRouter.post(
       return;
     }
 
-    const inserted = await pool.query<{ id: string; status: string }>(
-      `insert into public.return_requests
-         (id, order_id, user_id, reason, status, created_at, updated_at)
-       values (gen_random_uuid(), $1, $2, $3, 'requested', now(), now())
-       returning id, status`,
-      [orderId, req.user!.id, parsed.data.reason]
-    );
-
-    res.status(201).json({ returnRequest: inserted.rows[0] });
+    try {
+      const inserted = await pool.query<{ id: string; status: string }>(
+        `insert into public.return_requests
+           (id, order_id, user_id, reason, status, created_at, updated_at)
+         values (gen_random_uuid(), $1, $2, $3, 'requested', now(), now())
+         returning id, status`,
+        [orderId, req.user!.id, parsed.data.reason]
+      );
+      res.status(201).json({ returnRequest: inserted.rows[0] });
+    } catch (error) {
+      // A second click racing the first hits the one-open-request index.
+      if ((error as { code?: string }).code === "23505") {
+        res.status(409).json({ message: "A return request is already open for this order" });
+        return;
+      }
+      throw error;
+    }
   })
 );
 
@@ -184,7 +195,7 @@ export const placeOrderSchema = z.object({
   addressId: z.string().uuid(),
   deliveryOption: z.enum(["standard", "express"]).default("standard"),
   paymentMethod: z.enum(["card", "upi", "netbanking", "wallet", "cod"]).optional().nullable(),
-  couponCode: z.string().trim().min(1).optional().nullable(),
+  couponCode: z.string().trim().min(1).max(40).optional().nullable(),
   referrerChannel: z.enum(["website", "marketplace", "social", "other"]).default("website"),
   /** Delivery charge shown to the buyer; a mismatch with the live quote refuses the order. */
   expectedShippingAmount: z.number().nonnegative().max(100000).optional().nullable(),

@@ -1,19 +1,20 @@
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
 import { productVideoPosterUrl, productVideoUrl } from "./media.service.js";
-import { appliedGstPercent, PRODUCT_GST_PERCENT_SQL, PRODUCT_PRICE_INCL_GST_SQL } from "./gst.js";
+import { appliedGstPercent, defaultGstPercent } from "./gst.js";
 import {
-  cacheGetJson,
-  cacheSetJson,
+  cached,
   catalogDetailCacheKey,
   catalogListCacheKey,
   CATEGORY_TREE_CACHE_KEY,
 } from "./catalog-cache.js";
+import { buildTsQuery, correctToken, normalizeQuery, parseSearch, type ParsedSearch } from "./search-query.js";
+import { getVocabulary } from "./product-stats.service.js";
 
 /**
- * Public catalog reads backing the home page, product listing page, product detail
- * page, and the seller storefront's product grid (which is the same query pre-scoped
- * to one seller rather than a parallel implementation).
+ * Public catalog reads backing the home page, product listing page, search,
+ * product detail page, and the seller storefront's product grid (which is the
+ * same query pre-scoped to one seller rather than a parallel implementation).
  *
  * Visibility rule applied everywhere in this module: a product is publicly listable
  * only when it is active and not soft-deleted, AND its seller is active and not in
@@ -43,17 +44,55 @@ const IN_STOCK_SQL = `
   )
 `;
 
-/** Home page tabs and the listing page's sort dropdown, mapped to real orderings. */
+/**
+ * Average rating pulled toward 4.0 by five virtual reviews, so one 5-star
+ * review can't outrank fifty reviews averaging 4.8 (Bayesian average).
+ */
+const BAYES_RATING_SQL = `((p.avg_rating * p.review_count + 4.0 * 5) / (p.review_count + 5))`;
+
+/**
+ * Listing queries join the product's category rows once (aliases gc / gsc,
+ * see CATALOG_FROM) instead of looking the GST rate up per row: same result
+ * as gst.ts PRODUCT_GST_PERCENT_SQL, but one hash join instead of a subquery
+ * for each of thousands of products.
+ */
+const GST_PERCENT_SQL = `coalesce(
+  case when gc.id is not null then coalesce(gsc.gst_rate, gc.gst_rate) end,
+  ${defaultGstPercent()}
+)`;
+const PRICE_INCL_GST_SQL = `round(p.base_price * (1 + ${GST_PERCENT_SQL} / 100.0), 2)`;
+
+const CATALOG_FROM = `
+  from public.products p
+  join public.sellers s on s.id = p.seller_id
+  left join public.categories gc on gc.id = p.category_id
+  left join public.categories gsc on gsc.id = p.subcategory_id
+`;
+
+/** Thumbnail for product `x` (resolved after paging, so only for rows shown). */
+const THUMBNAIL_SQL = `(
+  select pi.url from public.product_images pi
+  where pi.product_id = x.id
+  order by pi.is_thumbnail desc, pi.display_order asc
+  limit 1
+)`;
+
+/**
+ * Sort keys over the ranked row `x` (see listQuery). Every list ends with
+ * x.id so ties are broken the same way on every page: without it, offset
+ * paging can show a product twice and skip another.
+ */
 export const PRODUCT_SORTS = {
-  featured: `p.is_bestseller desc, p.review_count desc, p.created_at desc`,
-  popular: `p.review_count desc, p.avg_rating desc`,
-  bestsellers: `p.is_bestseller desc, sales_count desc, p.review_count desc`,
-  top_rated: `p.avg_rating desc, p.review_count desc`,
-  newest: `p.created_at desc`,
-  new_arrivals: `p.created_at desc`,
-  price_asc: `${PRODUCT_PRICE_INCL_GST_SQL} asc`,
-  price_desc: `${PRODUCT_PRICE_INCL_GST_SQL} desc`,
-  rating: `p.avg_rating desc, p.review_count desc`,
+  relevance: `x.relevance desc, x.trending desc`,
+  featured: `x.is_bestseller desc, x.trending desc, x.review_count desc, x.created_at desc`,
+  popular: `x.trending desc, x.review_count desc, x.created_at desc`,
+  bestsellers: `x.is_bestseller desc, x.sales_total desc, x.trending desc`,
+  top_rated: `x.bayes_rating desc, x.review_count desc`,
+  newest: `x.created_at desc`,
+  new_arrivals: `x.created_at desc`,
+  price_asc: `x.price_incl asc`,
+  price_desc: `x.price_incl desc`,
+  rating: `x.bayes_rating desc, x.review_count desc`,
 } as const;
 
 export type ProductSort = keyof typeof PRODUCT_SORTS;
@@ -62,23 +101,36 @@ export function isProductSort(value: unknown): value is ProductSort {
   return typeof value === "string" && value in PRODUCT_SORTS;
 }
 
+/** Sorts where the buyer asked for an order; out-of-stock items aren't pushed down. */
+const STOCK_NEUTRAL_SORTS = new Set<ProductSort>(["price_asc", "price_desc", "newest", "new_arrivals"]);
+
 export type ProductListFilters = {
   categorySlug?: string | null;
   categoryId?: string | null;
   sellerId?: string | null;
   shopSlug?: string | null;
+  /** Marketplace "Shop" filter: any of these shop slugs. */
+  shops?: string[] | null;
   search?: string | null;
+  /** Search exactly what was typed: no typo correction ("Search instead for …"). */
+  exactSearch?: boolean;
   tags?: string[] | null;
   priceMin?: number | null;
   priceMax?: number | null;
   minRating?: number | null;
   inStockOnly?: boolean;
+  /** Only listings with a compare-at price above the price. */
+  onSale?: boolean;
+  productType?: "physical" | "digital" | null;
+  customizable?: boolean;
   sort?: ProductSort;
   page?: number;
   pageSize?: number;
   /** Lowercased elsewhere. Empty means the buyer location is unknown. */
   viewerCity?: string | null;
   viewerState?: string | null;
+  /** Also return filter counts (categories, price bands, ratings…). */
+  includeFacets?: boolean;
 };
 
 export type ProductCard = {
@@ -154,34 +206,144 @@ function mapProductCard(row: ProductCardRow): ProductCard {
   };
 }
 
-/**
- * Builds the shared WHERE clause + params for both the listing query and its
- * count/price-range companions, so the three can never disagree about what's visible.
- */
-function buildFilterClause(filters: ProductListFilters) {
-  const conditions: string[] = [PUBLIC_VISIBILITY_SQL];
-  const params: unknown[] = [];
-  let searchRankSql: string | null = null;
+/** User text used in ILIKE, with % and _ treated as literals. */
+function ilikeContains(value: string) {
+  return `%${value.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+}
 
+function ilikePrefix(value: string) {
+  return `${value.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+}
+
+/* ── Query understanding ───────────────────────────────────────────────── */
+
+export type SearchPlan = {
+  parsed: ParsedSearch;
+  /** Category ids the query names ("wall decor"), boosted in ranking. */
+  categoryIds: string[];
+};
+
+/** Parses, typo-corrects and maps a query to categories. Returns null for an empty query. */
+async function planSearch(raw: string | null | undefined, exact = false): Promise<SearchPlan | null> {
+  if (!raw || !normalizeQuery(raw)) return null;
+  const vocabulary = exact ? null : await getVocabulary();
+  const parsed = parseSearch(raw, (token) => (vocabulary ? correctToken(token, vocabulary) : null));
+  if (parsed.tokens.length === 0 && parsed.priceMin === null && parsed.priceMax === null) return null;
+
+  const categoryIds: string[] = [];
+  if (parsed.tokens.length > 0) {
+    const tree = await getCategoryIndex();
+    const phrase = parsed.tokens.join(" ");
+    const visit = (nodes: CategoryNode[]) => {
+      for (const node of nodes) {
+        const name = normalizeQuery(node.name);
+        const slugWords = node.slug.replace(/-/g, " ");
+        const words = new Set(name.split(" "));
+        const named =
+          name === phrase ||
+          slugWords === phrase ||
+          parsed.tokens.every((token) => words.has(token) || words.has(token.replace(/s$/, "")));
+        if (named) categoryIds.push(node.id);
+        visit(node.children);
+      }
+    };
+    visit(tree);
+  }
+  return { parsed, categoryIds: categoryIds.slice(0, 20) };
+}
+
+/* ── Filters ───────────────────────────────────────────────────────────── */
+
+/** Filters that are also facets: each facet's counts ignore its own filter. */
+type FacetKey = "category" | "price" | "rating" | "stock" | "sale" | "type" | "custom" | "shop" | "tags";
+const FACET_KEYS: FacetKey[] = ["category", "price", "rating", "stock", "sale", "type", "custom", "shop", "tags"];
+
+type QueryParts = {
+  /** Always applied: visibility, storefront scope, search match. */
+  base: string[];
+  /** Applied to results; dropped one at a time to count that facet. */
+  facet: Record<FacetKey, string | null>;
+  /** Every parameter: filters first, then ones only the ranking expression uses. */
+  params: unknown[];
+  /** How many leading params the filters use (count/facet queries pass only these). */
+  filterParamCount: number;
+  /** Text relevance for the search (0 when there is no search). */
+  textRank: string;
+};
+
+function buildQueryParts(filters: ProductListFilters, plan: SearchPlan | null, mode: "all" | "any"): QueryParts {
+  const params: unknown[] = [];
   const push = (value: unknown) => {
     params.push(value);
     return `$${params.length}`;
   };
+  const base: string[] = [PUBLIC_VISIBILITY_SQL];
+  const facet: Record<FacetKey, string | null> = {
+    category: null,
+    price: null,
+    rating: null,
+    stock: null,
+    sale: null,
+    type: null,
+    custom: null,
+    shop: null,
+    tags: null,
+  };
+  let textRank = "0";
+  /** Built after the filters, so its parameters come last. */
+  let buildRank: (() => string) | null = null;
+
+  if (filters.sellerId) base.push(`p.seller_id = ${push(filters.sellerId)}`);
+  if (filters.shopSlug) base.push(`s.shop_slug = ${push(filters.shopSlug)}`);
+
+  if (plan && plan.parsed.tokens.length > 0) {
+    const tsquery = buildTsQuery(plan.parsed.tokens, mode);
+    const phrase = plan.parsed.tokens.join(" ");
+    const likePhrase = push(ilikeContains(phrase));
+    if (tsquery) {
+      const q = push(tsquery);
+      // A shop whose name matches lists all its products ("search by shop").
+      base.push(`(
+        p.search_vector @@ to_tsquery('english', ${q})
+        or s.shop_name ilike ${likePhrase} escape '\\'
+      )`);
+      buildRank = () => {
+        const exact = push(phrase);
+        const prefix = push(ilikePrefix(phrase));
+        const categoryIds = push(plan.categoryIds);
+        return `(
+        ts_rank_cd(p.search_vector, to_tsquery('english', ${q}), 32) * 2
+        + case
+            when lower(p.title) = ${exact} then 1.5
+            when lower(p.title) like ${prefix} escape '\\' then 0.8
+            when lower(p.title) like ${likePhrase} escape '\\' then 0.5
+            else 0
+          end
+        + case
+            when cardinality(${categoryIds}::uuid[]) > 0
+              and (p.category_id = any(${categoryIds}::uuid[]) or p.subcategory_id = any(${categoryIds}::uuid[]))
+            then 0.4 else 0
+          end
+        + case when s.shop_name ilike ${likePhrase} escape '\\' then 0.3 else 0 end
+      )`;
+      };
+    } else {
+      base.push(`(p.title ilike ${likePhrase} escape '\\' or s.shop_name ilike ${likePhrase} escape '\\')`);
+    }
+  }
 
   if (filters.categoryId) {
     // Matches the category itself, its children, or a product filed under it as
     // a subcategory — the listing sidebar shows parents but must include children.
     const idParam = push(filters.categoryId);
-    conditions.push(`(
+    facet.category = `(
       p.category_id = ${idParam}
       or p.subcategory_id = ${idParam}
       or p.category_id in (select c.id from public.categories c where c.parent_id = ${idParam})
-    )`);
-  }
-
-  if (filters.categorySlug) {
+    )`;
+  } else if (filters.categorySlug) {
     const slugParam = push(filters.categorySlug);
-    conditions.push(`(
+    facet.category = `(
       p.category_id in (select c.id from public.categories c where c.slug = ${slugParam})
       or p.subcategory_id in (select c.id from public.categories c where c.slug = ${slugParam})
       or p.category_id in (
@@ -189,86 +351,112 @@ function buildFilterClause(filters: ProductListFilters) {
         join public.categories parent on parent.id = child.parent_id
         where parent.slug = ${slugParam}
       )
-    )`);
+    )`;
   }
 
-  if (filters.sellerId) {
-    conditions.push(`p.seller_id = ${push(filters.sellerId)}`);
-  }
+  const priceMin = filters.priceMin ?? plan?.parsed.priceMin ?? null;
+  const priceMax = filters.priceMax ?? plan?.parsed.priceMax ?? null;
+  const priceParts: string[] = [];
+  if (priceMin !== null) priceParts.push(`${PRICE_INCL_GST_SQL} >= ${push(priceMin)}`);
+  if (priceMax !== null) priceParts.push(`${PRICE_INCL_GST_SQL} <= ${push(priceMax)}`);
+  if (priceParts.length > 0) facet.price = `(${priceParts.join(" and ")})`;
 
-  if (filters.shopSlug) {
-    conditions.push(`s.shop_slug = ${push(filters.shopSlug)}`);
+  if (filters.minRating !== null && filters.minRating !== undefined && filters.minRating > 0) {
+    facet.rating = `p.avg_rating >= ${push(filters.minRating)}`;
   }
+  if (filters.inStockOnly) facet.stock = IN_STOCK_SQL;
+  if (filters.onSale) facet.sale = `(p.compare_at_price is not null and p.compare_at_price > p.base_price)`;
+  if (filters.productType) facet.type = `p.product_type = ${push(filters.productType)}`;
+  if (filters.customizable) facet.custom = `p.is_customizable`;
+  if (filters.shops && filters.shops.length > 0) facet.shop = `s.shop_slug = any(${push(filters.shops)}::text[])`;
+  if (filters.tags && filters.tags.length > 0) facet.tags = `p.tags && ${push(filters.tags)}::text[]`;
 
-  if (filters.search) {
-    const q = filters.search.trim();
-    if (q.length < 3) {
-      const searchParam = push(ilikeContains(q));
-      conditions.push(`(
-        p.title ilike ${searchParam} escape '\\'
-        or p.short_description ilike ${searchParam} escape '\\'
-        or s.shop_name ilike ${searchParam} escape '\\'
-      )`);
-    } else {
-      const searchParam = push(q);
-      conditions.push(`(
-        p.search_vector @@ websearch_to_tsquery('english', ${searchParam})
-        or to_tsvector('english', coalesce(s.shop_name, ''))
-             @@ websearch_to_tsquery('english', ${searchParam})
-      )`);
-      searchRankSql = `ts_rank(
-        p.search_vector,
-        websearch_to_tsquery('english', ${searchParam})
-      )`;
+  const filterParamCount = params.length;
+  if (buildRank) textRank = buildRank();
+  return { base, facet, params, filterParamCount, textRank };
+}
+
+/**
+ * Keeps only the parameters `sql` references, renumbered from $1. Queries
+ * built from the same parts drop different conditions (the price slider
+ * range ignores the price filter), and Postgres rejects unused parameters.
+ */
+function compactParams(sql: string, params: unknown[]): [string, unknown[]] {
+  const used = new Map<number, number>();
+  const kept: unknown[] = [];
+  const text = sql.replace(/\$(\d+)\b/g, (_match, digits: string) => {
+    const original = Number(digits);
+    let next = used.get(original);
+    if (next === undefined) {
+      kept.push(params[original - 1]);
+      next = kept.length;
+      used.set(original, next);
     }
-  }
-
-  if (filters.tags && filters.tags.length > 0) {
-    conditions.push(`p.tags && ${push(filters.tags)}::text[]`);
-  }
-
-  if (filters.priceMin !== null && filters.priceMin !== undefined) {
-    conditions.push(`${PRODUCT_PRICE_INCL_GST_SQL} >= ${push(filters.priceMin)}`);
-  }
-
-  if (filters.priceMax !== null && filters.priceMax !== undefined) {
-    conditions.push(`${PRODUCT_PRICE_INCL_GST_SQL} <= ${push(filters.priceMax)}`);
-  }
-
-  if (filters.minRating !== null && filters.minRating !== undefined) {
-    conditions.push(`p.avg_rating >= ${push(filters.minRating)}`);
-  }
-
-  if (filters.inStockOnly) {
-    conditions.push(IN_STOCK_SQL);
-  }
-
-  // Every active product is browsable. Shops that may only sell inside their
-  // own state (no GSTIN) are still listed (local shops rank first); checkout
-  // refuses delivery addresses outside that state (order.service.ts).
-
-  return { where: conditions.join(" and "), params, searchRankSql };
+    return `$${next}`;
+  });
+  return [text, kept];
 }
 
-/** User text used in ILIKE, with % and _ treated as literals. */
-function ilikeContains(value: string) {
-  return `%${value.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+function query<T extends object>(sql: string, params: unknown[]) {
+  const [text, values] = compactParams(sql, params);
+  return pool.query<T & Record<string, unknown>>(text, values);
 }
 
-export async function listProducts(filters: ProductListFilters = {}) {
+function whereAll(parts: QueryParts) {
+  const facetConditions = FACET_KEYS.map((key) => parts.facet[key]).filter((c): c is string => Boolean(c));
+  return [...parts.base, ...facetConditions].join(" and ");
+}
+
+/* ── Listing ───────────────────────────────────────────────────────────── */
+
+export type CategoryFacet = { id: string; slug: string; name: string; parentId: string | null; count: number };
+
+export type ProductFacets = {
+  categories: CategoryFacet[];
+  priceBuckets: Array<{ label: string; min: number | null; max: number | null; count: number }>;
+  ratings: Array<{ minRating: number; count: number }>;
+  availability: { inStock: number; onSale: number; digital: number; customizable: number };
+  shops: Array<{ slug: string; name: string; count: number }>;
+  tags: Array<{ tag: string; count: number }>;
+};
+
+export type SearchInfo = {
+  query: string;
+  /** Results are for this spelling instead ("Showing results for …"). */
+  correctedQuery: string | null;
+  /** "any": nothing matched every word, so products matching some words are shown. */
+  matchMode: "all" | "any";
+  /** A price phrase in the query ("under 500") applied as a filter. */
+  priceFromQuery: { min: number | null; max: number | null } | null;
+};
+
+export type ProductListResult = {
+  products: ProductCard[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  priceRange: { min: number; max: number };
+  facets?: ProductFacets;
+  search?: SearchInfo;
+};
+
+export async function listProducts(filters: ProductListFilters = {}): Promise<ProductListResult> {
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(60, Math.max(1, filters.pageSize ?? 12));
   const offset = (page - 1) * pageSize;
   const sort = filters.sort && isProductSort(filters.sort) ? filters.sort : "featured";
-  const normalizedFilters = { ...filters, page, pageSize, sort };
+  const normalizedFilters = {
+    ...filters,
+    search: filters.search ? normalizeQuery(filters.search) : null,
+    page,
+    pageSize,
+    sort,
+  };
 
-  const cacheKey = catalogListCacheKey(normalizedFilters);
-  const cached = await cacheGetJson<Awaited<ReturnType<typeof listProductsUncached>>>(cacheKey);
-  if (cached) return cached;
-
-  const result = await listProductsUncached(normalizedFilters, page, pageSize, offset, sort);
-  await cacheSetJson(cacheKey, result, 30);
-  return result;
+  return cached(catalogListCacheKey(normalizedFilters), 30, () =>
+    listProductsUncached(normalizedFilters, page, pageSize, offset, sort, filters.search ?? null)
+  );
 }
 
 async function listProductsUncached(
@@ -276,112 +464,321 @@ async function listProductsUncached(
   page: number,
   pageSize: number,
   offset: number,
-  sort: ProductSort
-) {
-  const { where, params, searchRankSql } = buildFilterClause(filters);
-  const listParams: unknown[] = [...params];
-  const city = (filters.viewerCity ?? "").trim().toLowerCase();
-  const state = (filters.viewerState ?? "").trim().toLowerCase();
-  listParams.push(city, state);
-  const cityParam = `$${params.length + 1}`;
-  const stateParam = `$${params.length + 2}`;
-  const proximitySql = `case
-    when ${cityParam} <> '' and lower(trim(coalesce(s.selling_city, ''))) = ${cityParam} then 0
-    when ${stateParam} <> '' and lower(trim(coalesce(s.selling_state, ''))) = ${stateParam} then 1
-    else 2
-  end`;
-  const relevance = searchRankSql
-    ? `${searchRankSql} desc, ${PRODUCT_SORTS[sort]}`
-    : PRODUCT_SORTS[sort];
-  const orderBy = `${proximitySql}, ${relevance}`;
+  requestedSort: ProductSort,
+  rawSearch: string | null
+): Promise<ProductListResult> {
+  const plan = await planSearch(rawSearch, Boolean(filters.exactSearch));
+  // A search with no explicit order is ranked by relevance.
+  const sort: ProductSort = plan?.parsed.tokens.length && requestedSort === "featured" ? "relevance" : requestedSort;
 
-  const needsSalesCount = sort === "bestsellers";
-  const salesCountSql = needsSalesCount
-    ? `(
-        select count(*)
-        from public.order_items oi
-        join public.orders o on o.id = oi.order_id
-        where oi.product_id = p.id and o.status in ('delivered', 'returned', 'refunded')
-      ) as sales_count`
-    : `0::bigint as sales_count`;
+  let mode: "all" | "any" = "all";
+  let parts = buildQueryParts(filters, plan, mode);
+  let summary = await loadSummary(parts, Boolean(filters.includeFacets));
 
-  const listQuery = `
-    select
-      p.id,
-      p.slug,
-      p.title,
-      p.base_price,
-      p.compare_at_price,
-      p.avg_rating,
-      p.review_count,
-      p.is_bestseller,
-      p.maker_name,
-      p.seller_id,
-      s.shop_name,
-      s.shop_slug,
-      ${PRODUCT_GST_PERCENT_SQL} as gst_percent,
-      (
-        select pi.url from public.product_images pi
-        where pi.product_id = p.id
-        order by pi.is_thumbnail desc, pi.display_order asc
-        limit 1
-      ) as thumbnail_url,
-      ${IN_STOCK_SQL} as in_stock,
-      ${salesCountSql}
-    from public.products p
-    join public.sellers s on s.id = p.seller_id
-    where ${where}
-    order by ${orderBy}
-    limit $${params.length + 3} offset $${params.length + 4}
-  `;
+  // Nothing matched every word: show products matching some of them, best first.
+  if (summary.total === 0 && plan && plan.parsed.tokens.length > 1) {
+    mode = "any";
+    parts = buildQueryParts(filters, plan, mode);
+    summary = await loadSummary(parts, Boolean(filters.includeFacets));
+  }
 
-  // Price slider range: same facet filters minus min/max price so the slider stays useful.
-  const rangeFilters: ProductListFilters = {
-    ...filters,
-    priceMin: null,
-    priceMax: null,
-    page: undefined,
-    pageSize: undefined,
-    sort: undefined,
-  };
-  const rangeClause = buildFilterClause(rangeFilters);
-
-  const [listResult, countResult, rangeResult] = await Promise.all([
-    pool.query<ProductCardRow & { sales_count: string }>(listQuery, [
-      ...listParams,
-      pageSize,
-      offset,
-    ]),
-    pool.query<{ count: string }>(
-      `select count(*)::text as count
-       from public.products p
-       join public.sellers s on s.id = p.seller_id
-       where ${where}`,
-      params
-    ),
-    pool.query<{ min_price: string | null; max_price: string | null }>(
-      `select min(${PRODUCT_PRICE_INCL_GST_SQL})::text as min_price,
-              max(${PRODUCT_PRICE_INCL_GST_SQL})::text as max_price
-       from public.products p
-       join public.sellers s on s.id = p.seller_id
-       where ${rangeClause.where}`,
-      rangeClause.params
-    ),
-  ]);
-
-  const total = Number(countResult.rows[0]?.count ?? 0);
+  const products = summary.total > offset ? await loadPage(parts, filters, sort, pageSize, offset) : [];
 
   return {
-    products: listResult.rows.map(mapProductCard),
+    products,
     page,
     pageSize,
-    total,
-    totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    priceRange: {
-      min: Math.floor(money(rangeResult.rows[0]?.min_price)),
-      max: Math.ceil(money(rangeResult.rows[0]?.max_price)),
+    total: summary.total,
+    totalPages: Math.max(1, Math.ceil(summary.total / pageSize)),
+    priceRange: summary.priceRange,
+    ...(summary.facets ? { facets: summary.facets } : {}),
+    ...(plan
+      ? {
+          search: {
+            query: plan.parsed.raw,
+            correctedQuery: plan.parsed.correctedText,
+            matchMode: mode,
+            priceFromQuery:
+              (filters.priceMin == null && plan.parsed.priceMin !== null) ||
+              (filters.priceMax == null && plan.parsed.priceMax !== null)
+                ? { min: plan.parsed.priceMin, max: plan.parsed.priceMax }
+                : null,
+          },
+        }
+      : {}),
+  };
+}
+
+async function loadPage(
+  parts: QueryParts,
+  filters: ProductListFilters,
+  sort: ProductSort,
+  pageSize: number,
+  offset: number
+) {
+  const params = [...parts.params];
+  const push = (value: unknown) => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+  const city = push((filters.viewerCity ?? "").trim().toLowerCase());
+  const state = push((filters.viewerState ?? "").trim().toLowerCase());
+  const proximitySql = `case
+    when ${city} <> '' and lower(trim(coalesce(s.selling_city, ''))) = ${city} then 0
+    when ${state} <> '' and lower(trim(coalesce(s.selling_state, ''))) = ${state} then 1
+    else 2
+  end`;
+  // Relevance blends text match with popularity, rating and nearness, so among
+  // equally good matches the ones buyers actually choose come first.
+  const relevanceSql = `(
+    ${parts.textRank}
+    + 0.06 * ln(1 + coalesce(ps.trending_score, 0))
+    + 0.05 * (${BAYES_RATING_SQL} - 3)
+    + case ${proximitySql} when 0 then 0.1 when 1 then 0.05 else 0 end
+  )`;
+  const stockFirst = STOCK_NEUTRAL_SORTS.has(sort) ? "" : "x.in_stock desc, ";
+  // Local shops lead ordinary listings; for relevance, nearness is already in the score.
+  const proximityFirst = sort === "relevance" ? "" : "x.proximity, ";
+  const limit = push(pageSize);
+  const skip = push(offset);
+
+  const result = await query<ProductCardRow>(
+    `select x.*, ${THUMBNAIL_SQL} as thumbnail_url
+     from (
+       select
+         p.id, p.slug, p.title, p.base_price, p.compare_at_price, p.avg_rating,
+         p.review_count, p.is_bestseller, p.maker_name, p.seller_id, p.created_at,
+         s.shop_name, s.shop_slug,
+         ${GST_PERCENT_SQL} as gst_percent,
+         ${PRICE_INCL_GST_SQL} as price_incl,
+         ${IN_STOCK_SQL} as in_stock,
+         coalesce(ps.trending_score, 0) as trending,
+         coalesce(ps.sales_total, 0) as sales_total,
+         ${BAYES_RATING_SQL} as bayes_rating,
+         ${proximitySql} as proximity,
+         ${relevanceSql} as relevance
+       ${CATALOG_FROM}
+       left join public.product_stats ps on ps.product_id = p.id
+       where ${whereAll(parts)}
+     ) x
+     order by ${stockFirst}${proximityFirst}${PRODUCT_SORTS[sort]}, x.id
+     limit ${limit} offset ${skip}`,
+    params
+  );
+  return result.rows.map(mapProductCard);
+}
+
+type Summary = { total: number; priceRange: { min: number; max: number }; facets: ProductFacets | null };
+
+const PRICE_BUCKETS: Array<{ label: string; min: number | null; max: number | null }> = [
+  { label: "Under ₹500", min: null, max: 499 },
+  { label: "₹500 – ₹999", min: 500, max: 999 },
+  { label: "₹1,000 – ₹1,999", min: 1000, max: 1999 },
+  { label: "₹2,000 – ₹4,999", min: 2000, max: 4999 },
+  { label: "₹5,000 & above", min: 5000, max: null },
+];
+
+/**
+ * Result count, price slider range and (optionally) every facet, in one
+ * statement: the matching rows are read once into a CTE that carries a flag
+ * per filter, and each facet counts the rows passing every filter but its own.
+ */
+async function loadSummary(parts: QueryParts, includeFacets: boolean): Promise<Summary> {
+  const filterParams = parts.params.slice(0, parts.filterParamCount);
+  if (!includeFacets) {
+    const where = whereAll(parts);
+    const withoutPrice = [...parts.base, ...FACET_KEYS.filter((k) => k !== "price").map((k) => parts.facet[k])]
+      .filter((c): c is string => Boolean(c))
+      .join(" and ");
+    const [count, range] = await Promise.all([
+      query<{ count: string }>(
+        `select count(*)::text as count
+         ${CATALOG_FROM}
+         where ${where}`,
+        filterParams
+      ),
+      query<{ min_price: string | null; max_price: string | null }>(
+        `select min(${PRICE_INCL_GST_SQL})::text as min_price,
+                max(${PRICE_INCL_GST_SQL})::text as max_price
+         ${CATALOG_FROM}
+         where ${withoutPrice}`,
+        filterParams
+      ),
+    ]);
+    return {
+      total: Number(count.rows[0]?.count ?? 0),
+      priceRange: {
+        min: Math.floor(money(range.rows[0]?.min_price)),
+        max: Math.ceil(money(range.rows[0]?.max_price)),
+      },
+      facets: null,
+    };
+  }
+
+  const flag = (key: FacetKey) => parts.facet[key] ?? "true";
+  /** Rows passing every facet filter except `skip`. */
+  const allBut = (skip: FacetKey | null) =>
+    FACET_KEYS.filter((key) => key !== skip)
+      .map((key) => `m_${key}`)
+      .join(" and ");
+  const bucketCounts = PRICE_BUCKETS.map((bucket, i) => {
+    const conds = [
+      bucket.min !== null ? `price >= ${bucket.min}` : null,
+      bucket.max !== null ? `price < ${bucket.max + 1}` : null,
+    ].filter(Boolean);
+    return `'b${i}', count(*) filter (where ${allBut("price")} and ${conds.join(" and ")})`;
+  }).join(", ");
+
+  const result = await query<{ summary: Record<string, unknown> }>(
+    `with base as materialized (
+       select p.id, p.seller_id, s.shop_slug, s.shop_name, p.tags, p.avg_rating,
+              coalesce(p.subcategory_id, p.category_id) as category_key,
+              ${PRICE_INCL_GST_SQL} as price,
+              ${IN_STOCK_SQL} as in_stock,
+              (p.compare_at_price is not null and p.compare_at_price > p.base_price) as on_sale,
+              p.product_type = 'digital' as is_digital,
+              p.is_customizable,
+              ${FACET_KEYS.map((key) => `${flag(key)} as m_${key}`).join(",\n              ")}
+       ${CATALOG_FROM}
+       where ${parts.base.join(" and ")}
+     )
+     select json_build_object(
+       'total', (select count(*) from base where ${allBut(null)}),
+       'priceMin', (select min(price) from base where ${allBut("price")}),
+       'priceMax', (select max(price) from base where ${allBut("price")}),
+       'categories', (
+         select coalesce(json_agg(json_build_object('id', category_key, 'count', c)), '[]'::json)
+         from (select category_key, count(*) as c from base where ${allBut("category")} group by category_key) t
+       ),
+       'buckets', (select json_build_object(${bucketCounts}) from base),
+       'ratings', (
+         select json_build_object(
+           'r4', count(*) filter (where ${allBut("rating")} and avg_rating >= 4),
+           'r3', count(*) filter (where ${allBut("rating")} and avg_rating >= 3),
+           'r2', count(*) filter (where ${allBut("rating")} and avg_rating >= 2)
+         ) from base
+       ),
+       'flags', (
+         select json_build_object(
+           'inStock', count(*) filter (where ${allBut("stock")} and in_stock),
+           'onSale', count(*) filter (where ${allBut("sale")} and on_sale),
+           'digital', count(*) filter (where ${allBut("type")} and is_digital),
+           'customizable', count(*) filter (where ${allBut("custom")} and is_customizable)
+         ) from base
+       ),
+       'shops', (
+         select coalesce(json_agg(json_build_object('slug', shop_slug, 'name', shop_name, 'count', c) order by c desc, shop_name), '[]'::json)
+         from (
+           select shop_slug, shop_name, count(*) as c from base
+           where ${allBut("shop")}
+           group by shop_slug, shop_name
+           order by count(*) desc, shop_name
+           limit 12
+         ) t
+       ),
+       'tags', (
+         select coalesce(json_agg(json_build_object('tag', tag, 'count', c) order by c desc, tag), '[]'::json)
+         from (
+           select lower(tag) as tag, count(distinct id) as c
+           from base, unnest(tags) as tag
+           where ${allBut("tags")} and length(tag) between 2 and 40
+           group by lower(tag)
+           order by count(distinct id) desc, lower(tag)
+           limit 15
+         ) t
+       )
+     ) as summary`,
+    filterParams
+  );
+
+  const raw = result.rows[0]?.summary ?? {};
+  const num = (value: unknown) => Number(value ?? 0);
+  const buckets = (raw.buckets ?? {}) as Record<string, unknown>;
+  const ratings = (raw.ratings ?? {}) as Record<string, unknown>;
+  const flags = (raw.flags ?? {}) as Record<string, unknown>;
+
+  return {
+    total: num(raw.total),
+    priceRange: { min: Math.floor(num(raw.priceMin)), max: Math.ceil(num(raw.priceMax)) },
+    facets: {
+      categories: await rollUpCategoryCounts(
+        ((raw.categories ?? []) as Array<{ id: string | null; count: number }>).filter(
+          (row): row is { id: string; count: number } => Boolean(row.id)
+        )
+      ),
+      priceBuckets: PRICE_BUCKETS.map((bucket, i) => ({ ...bucket, count: num(buckets[`b${i}`]) })),
+      ratings: [4, 3, 2].map((minRating) => ({ minRating, count: num(ratings[`r${minRating}`]) })),
+      availability: {
+        inStock: num(flags.inStock),
+        onSale: num(flags.onSale),
+        digital: num(flags.digital),
+        customizable: num(flags.customizable),
+      },
+      shops: ((raw.shops ?? []) as Array<{ slug: string; name: string; count: number }>).map((shop) => ({
+        slug: shop.slug,
+        name: shop.name,
+        count: num(shop.count),
+      })),
+      tags: ((raw.tags ?? []) as Array<{ tag: string; count: number }>).map((tag) => ({
+        tag: tag.tag,
+        count: num(tag.count),
+      })),
     },
   };
+}
+
+/** Counts at each product's own category, rolled up so a parent includes its children. */
+async function rollUpCategoryCounts(rows: Array<{ id: string; count: number }>): Promise<CategoryFacet[]> {
+  if (rows.length === 0) return [];
+  const tree = await getCategoryIndex();
+  const byId = new Map<string, { node: CategoryNode; parentId: string | null }>();
+  const index = (nodes: CategoryNode[], parentId: string | null) => {
+    for (const node of nodes) {
+      byId.set(node.id, { node, parentId });
+      index(node.children, node.id);
+    }
+  };
+  index(tree, null);
+
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    let id: string | null = row.id;
+    let guard = 0;
+    while (id && byId.has(id) && guard < 10) {
+      totals.set(id, (totals.get(id) ?? 0) + Number(row.count));
+      id = byId.get(id)!.parentId;
+      guard += 1;
+    }
+  }
+  return [...totals.entries()]
+    .map(([id, count]) => {
+      const { node, parentId } = byId.get(id)!;
+      return { id, slug: node.slug, name: node.name, parentId, count };
+    })
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+/**
+ * Cards for these products, in the given order, skipping any that are no
+ * longer publicly listable. Used by recommendations.
+ */
+export async function loadProductCards(ids: string[]): Promise<ProductCard[]> {
+  if (ids.length === 0) return [];
+  const result = await pool.query<ProductCardRow>(
+    `select x.*, ${THUMBNAIL_SQL} as thumbnail_url
+     from (
+       select p.id, p.slug, p.title, p.base_price, p.compare_at_price, p.avg_rating,
+              p.review_count, p.is_bestseller, p.maker_name, p.seller_id,
+              s.shop_name, s.shop_slug,
+              ${GST_PERCENT_SQL} as gst_percent,
+              ${IN_STOCK_SQL} as in_stock
+       ${CATALOG_FROM}
+       where p.id = any($1::uuid[]) and ${PUBLIC_VISIBILITY_SQL}
+     ) x`,
+    [ids]
+  );
+  const byId = new Map(result.rows.map((row) => [row.id, mapProductCard(row)]));
+  return ids.map((id) => byId.get(id)).filter((card): card is ProductCard => Boolean(card));
 }
 
 export type ProductDetail = ProductCard & {
@@ -442,6 +839,8 @@ async function loadBreadcrumb(categoryId: string | null) {
        select c.id, c.name, c.slug, c.parent_id, chain.depth + 1
        from public.categories c
        join chain on chain.parent_id = c.id
+       -- Bounded so a bad parent loop can never spin until the statement timeout.
+       where chain.depth < 10
      )
      select id, name, slug, depth from chain order by depth desc`,
     [categoryId]
@@ -451,15 +850,9 @@ async function loadBreadcrumb(categoryId: string | null) {
 }
 
 export async function getProductBySlug(slug: string): Promise<ProductDetail | null> {
-  const cacheKey = catalogDetailCacheKey(slug);
-  const cached = await cacheGetJson<ProductDetail>(cacheKey);
-  if (cached) return cached;
-
-  const detail = await loadProductBySlugUncached(slug);
-  if (detail) {
-    await cacheSetJson(cacheKey, detail, 60);
-  }
-  return detail;
+  // Slugs are kebab-case; anything else can't match and isn't worth a query or a cache key.
+  if (!slug || slug.length > 200 || !/^[a-z0-9][a-z0-9-]*$/i.test(slug)) return null;
+  return cached(catalogDetailCacheKey(slug), 60, () => loadProductBySlugUncached(slug));
 }
 
 async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | null> {
@@ -635,9 +1028,53 @@ export async function getCategoryTree(sellerId?: string | null): Promise<Categor
   const cacheKey = sellerId
     ? `${CATEGORY_TREE_CACHE_KEY}:seller:${sellerId}`
     : CATEGORY_TREE_CACHE_KEY;
-  const cached = await cacheGetJson<CategoryNode[]>(cacheKey);
-  if (cached) return cached;
+  return cached(cacheKey, 120, () => loadCategoryTree(sellerId));
+}
 
+/**
+ * The category tree without product counts: what search and facet roll-ups
+ * need (names, slugs, parents). One indexed read of a small table instead of
+ * counting products per category.
+ */
+async function getCategoryIndex(): Promise<CategoryNode[]> {
+  return cached(`${CATEGORY_TREE_CACHE_KEY}:index`, 300, async () => {
+    const result = await pool.query<{
+      id: string;
+      parent_id: string | null;
+      name: string;
+      slug: string;
+      display_order: number;
+    }>(
+      `select id, parent_id, name, slug, display_order
+       from public.categories
+       where is_active and deleted_at is null
+       order by display_order asc, name asc`
+    );
+    const byId = new Map<string, CategoryNode>();
+    for (const row of result.rows) {
+      byId.set(row.id, {
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        iconUrl: null,
+        imageUrl: null,
+        displayOrder: row.display_order,
+        productCount: 0,
+        children: [],
+      });
+    }
+    const roots: CategoryNode[] = [];
+    for (const row of result.rows) {
+      const node = byId.get(row.id)!;
+      const parent = row.parent_id ? byId.get(row.parent_id) : null;
+      if (parent) parent.children.push(node);
+      else roots.push(node);
+    }
+    return roots;
+  });
+}
+
+async function loadCategoryTree(sellerId?: string | null): Promise<CategoryNode[]> {
   const params: unknown[] = [];
   let sellerClause = "";
   if (sellerId) {
@@ -663,19 +1100,20 @@ export async function getCategoryTree(sellerId?: string | null): Promise<Categor
        c.icon_url,
        c.image_url,
        c.display_order,
-       (
-         select count(*)
-         from public.products p
-         join public.sellers s on s.id = p.seller_id
-         -- Count each product once, at its MOST SPECIFIC node. Matching both
-         -- category_id and subcategory_id here would count a product filed under
-         -- "Home & Living > Wall Decor" twice, and the roll-up below would then
-         -- double it again.
-         where coalesce(p.subcategory_id, p.category_id) = c.id
-           ${sellerClause}
-           and ${PUBLIC_VISIBILITY_SQL}
-       )::text as product_count
+       coalesce(counts.n, 0)::text as product_count
      from public.categories c
+     -- One pass over visible products, counted at each product's MOST SPECIFIC
+     -- node. Matching both category_id and subcategory_id would count a product
+     -- filed under "Home & Living > Wall Decor" twice, and the roll-up below
+     -- would then double it again.
+     left join (
+       select coalesce(p.subcategory_id, p.category_id) as category_id, count(*) as n
+       from public.products p
+       join public.sellers s on s.id = p.seller_id
+       where ${PUBLIC_VISIBILITY_SQL}
+         ${sellerClause}
+       group by 1
+     ) counts on counts.category_id = c.id
      where c.is_active and c.deleted_at is null
      order by c.display_order asc, c.name asc`,
     params
@@ -714,111 +1152,119 @@ export async function getCategoryTree(sellerId?: string | null): Promise<Categor
   };
   roots.forEach(rollUp);
 
-  await cacheSetJson(cacheKey, roots, 120);
   return roots;
 }
 
 /**
- * "You may also like" on the cart page and related products elsewhere:
- * same category, excluding a set of products already in the cart.
- * State-only shops stay hidden unless the viewer is in that state.
+ * "You may also like" for a set of products (cart page, product page).
+ * Kept for GET /api/products/related; the scoring lives in recommendation.service.
  */
 export async function getRelatedProducts(
-  categoryIds: string[],
+  _categoryIds: string[],
   excludeProductIds: string[],
   limit = 5,
   viewerState: string | null = null
 ) {
-  const state = (viewerState ?? "").trim().toLowerCase();
-  const result = await pool.query<ProductCardRow>(
-    `select
-       p.id, p.slug, p.title, p.base_price, p.compare_at_price, p.avg_rating,
-       p.review_count, p.is_bestseller, p.maker_name, p.seller_id,
-       s.shop_name, s.shop_slug,
-       ${PRODUCT_GST_PERCENT_SQL} as gst_percent,
-       (
-         select pi.url from public.product_images pi
-         where pi.product_id = p.id
-         order by pi.is_thumbnail desc, pi.display_order asc
-         limit 1
-       ) as thumbnail_url,
-       ${IN_STOCK_SQL} as in_stock
-     from public.products p
-     join public.sellers s on s.id = p.seller_id
-     where ${PUBLIC_VISIBILITY_SQL}
-       and (cardinality($1::uuid[]) = 0 or p.category_id = any($1::uuid[]))
-       and not (p.id = any($2::uuid[]))
-     order by
-       case
-         when $4 <> '' and lower(trim(coalesce(s.selling_state, ''))) = $4 then 0
-         else 1
-       end,
-       p.is_bestseller desc, p.review_count desc
-     limit $3`,
-    [categoryIds, excludeProductIds, limit, state]
-  );
-
-  return result.rows.map(mapProductCard);
+  const { relatedToProducts } = await import("./recommendation.service.js");
+  return relatedToProducts(excludeProductIds, limit, viewerState);
 }
 
-/** Lightweight typeahead: product titles + category names. */
-export async function suggestSearch(q: string, limit = 8, viewerState: string | null = null) {
-  const term = q.trim();
-  if (!term) {
-    return { products: [] as { id: string; slug: string; title: string }[], categories: [] as { id: string; slug: string; name: string }[] };
-  }
+export type SearchSuggestions = {
+  products: Array<{ id: string; slug: string; title: string; thumbnailUrl: string | null }>;
+  categories: Array<{ id: string; slug: string; name: string }>;
+  shops: Array<{ slug: string; name: string }>;
+  /** Popular searches starting with what was typed. */
+  queries: string[];
+  /** The query after typo correction, when it changed. */
+  correctedQuery: string | null;
+};
 
-  const useFts = term.length >= 3;
-  // Suggestions cover every shop; same-state shops sort first.
+/**
+ * Typeahead: products, categories, shops and popular searches for a partial
+ * query. Uses the same parsing, typo correction and prefix matching as full
+ * search, so the dropdown never suggests something the results page won't find.
+ * Cached: every keystroke calls it.
+ */
+export async function suggestSearch(
+  q: string,
+  limit = 8,
+  viewerState: string | null = null
+): Promise<SearchSuggestions> {
+  const term = normalizeQuery(q);
+  const empty: SearchSuggestions = { products: [], categories: [], shops: [], queries: [], correctedQuery: null };
+  if (!term) return empty;
   const state = (viewerState ?? "").trim().toLowerCase();
-  // Shops in the viewer's state come first.
-  const localFirst = `(lower(trim(coalesce(s.selling_state, ''))) = $3) desc`;
-  const ilikeSql = `select p.id, p.slug, p.title
-         from public.products p
-         join public.sellers s on s.id = p.seller_id
-         where ${PUBLIC_VISIBILITY_SQL}
-           and (
-             p.title ilike $1 escape '\\'
-             or p.short_description ilike $1 escape '\\'
-             or s.shop_name ilike $1 escape '\\'
-           )
-         order by ${localFirst}, p.review_count desc
-         limit $2`;
-  const ftsSql = `select p.id, p.slug, p.title
-         from public.products p
-         join public.sellers s on s.id = p.seller_id
-         where ${PUBLIC_VISIBILITY_SQL}
-           and (
-             p.search_vector @@ websearch_to_tsquery('english', $1)
-             or to_tsvector('english', coalesce(s.shop_name, ''))
-                  @@ websearch_to_tsquery('english', $1)
-           )
-         order by ${localFirst}, ts_rank(p.search_vector, websearch_to_tsquery('english', $1)) desc
-         limit $2`;
+  return cached(`suggest:v2:${term}|${limit}|${state}`, 60, () => loadSuggestions(q, limit, state));
+}
 
-  let products: { rows: { id: string; slug: string; title: string }[] };
-  if (!useFts) {
-    products = await pool.query(ilikeSql, [ilikeContains(term), limit, state]);
-  } else {
-    try {
-      products = await pool.query(ftsSql, [term, limit, state]);
-    } catch {
-      products = await pool.query(ilikeSql, [ilikeContains(term), limit, state]);
-    }
-  }
+async function loadSuggestions(q: string, limit: number, state: string): Promise<SearchSuggestions> {
+  const plan = await planSearch(q);
+  const tokens = plan?.parsed.tokens ?? [];
+  const phrase = tokens.join(" ") || normalizeQuery(q);
+  const tsquery = tokens.length > 0 ? buildTsQuery(tokens, "all") : null;
+  const like = ilikeContains(phrase);
 
-  const categories = await pool.query<{ id: string; slug: string; name: string }>(
+  const productsQuery = tsquery
+    ? pool.query<{ id: string; slug: string; title: string; thumbnail_url: string | null }>(
+        `select x.id, x.slug, x.title, ${THUMBNAIL_SQL} as thumbnail_url
+         from (
+           select p.id, p.slug, p.title,
+                  ts_rank_cd(p.search_vector, to_tsquery('english', $1), 32) * 2
+                  + case when lower(p.title) like $4 escape '\\' then 0.8 else 0 end
+                  + 0.06 * ln(1 + coalesce(ps.trending_score, 0))
+                  + case when $3 <> '' and lower(trim(coalesce(s.selling_state, ''))) = $3 then 0.05 else 0 end
+                    as score
+           from public.products p
+           join public.sellers s on s.id = p.seller_id
+           left join public.product_stats ps on ps.product_id = p.id
+           where ${PUBLIC_VISIBILITY_SQL}
+             and p.search_vector @@ to_tsquery('english', $1)
+         ) x
+         order by x.score desc, x.id
+         limit $2`,
+        [tsquery, limit, state, ilikePrefix(phrase)]
+      )
+    : Promise.resolve({ rows: [] as Array<{ id: string; slug: string; title: string; thumbnail_url: string | null }> });
+
+  const categoriesQuery = pool.query<{ id: string; slug: string; name: string }>(
     `select id, slug, name
      from public.categories
      where deleted_at is null and is_active = true
-       and (name ilike $1 escape '\\' or slug ilike $1 escape '\\')
-     order by display_order asc, name asc
+       and (name ilike $1 escape '\\' or slug ilike $1 escape '\\'
+            or ($3::uuid[] <> '{}' and id = any($3::uuid[])))
+     order by (lower(name) like $4 escape '\\') desc, display_order asc, name asc
      limit $2`,
-    [ilikeContains(term), Math.min(limit, 5)]
+    [like, Math.min(limit, 5), plan?.categoryIds ?? [], ilikePrefix(phrase)]
   );
 
+  const shopsQuery = pool.query<{ slug: string; name: string }>(
+    `select s.shop_slug as slug, s.shop_name as name
+     from public.sellers s
+     where s.status = 'active' and s.deleted_at is null and s.is_vacation_mode = false
+       and s.shop_name ilike $1 escape '\\'
+     order by (lower(s.shop_name) like $3 escape '\\') desc, s.shop_name
+     limit $2`,
+    [like, 3, ilikePrefix(phrase)]
+  );
+
+  const { searchCompletions } = await import("./product-stats.service.js");
+  const [products, categories, shops, queries] = await Promise.all([
+    productsQuery,
+    categoriesQuery,
+    shopsQuery,
+    searchCompletions(phrase, 4).catch(() => [] as string[]),
+  ]);
+
   return {
-    products: products.rows,
+    products: products.rows.map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      title: row.title,
+      thumbnailUrl: row.thumbnail_url,
+    })),
     categories: categories.rows,
+    shops: shops.rows,
+    queries,
+    correctedQuery: plan?.parsed.correctedText ?? null,
   };
 }

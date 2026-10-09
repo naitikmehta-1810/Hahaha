@@ -54,6 +54,14 @@ import StatusPill from "@/components/ui/StatusPill/StatusPill";
 import Sidebar from "@/components/layout/Sidebar/Sidebar";
 import MyReviews from "@/components/reviews/MyReviews";
 import AccountDownloads from "@/components/orders/AccountDownloads";
+import {
+  newPasswordProblem,
+  normalizeIndianMobile,
+  normalizePincode,
+  personNameProblem,
+  phoneProblem,
+  pincodeProblem,
+} from "@/utils/validation";
 
 type TabKey =
   | "dashboard"
@@ -960,11 +968,21 @@ function AccountPageInner() {
                   onSubmit={(event) => {
                     event.preventDefault();
                     void (async () => {
+                      const problem =
+                        personNameProblem(newAddress.recipientName) ??
+                        phoneProblem(newAddress.phoneNumber) ??
+                        pincodeProblem(newAddress.postalCode);
+                      if (problem) {
+                        setAddressMsg({ tone: "danger", text: problem });
+                        return;
+                      }
                       setAddressBusy(true);
                       setAddressMsg(null);
                       try {
                         await createAddress({
                           ...newAddress,
+                          phoneNumber: normalizeIndianMobile(newAddress.phoneNumber) ?? newAddress.phoneNumber,
+                          postalCode: normalizePincode(newAddress.postalCode),
                           line2: newAddress.line2 || null,
                           isDefault: addresses.length === 0,
                         });
@@ -1000,7 +1018,27 @@ function AccountPageInner() {
                         value={newAddress[key]}
                         placeholder={placeholder}
                         required={required}
-                        inputMode={key === "phoneNumber" || key === "postalCode" ? "numeric" : undefined}
+                        inputMode={key === "phoneNumber" ? "tel" : key === "postalCode" ? "numeric" : undefined}
+                        maxLength={
+                          key === "postalCode" ? 7 : key === "phoneNumber" ? 16 : key === "label" ? 40 : key === "line1" || key === "line2" ? 255 : 120
+                        }
+                        autoComplete={
+                          key === "recipientName"
+                            ? "name"
+                            : key === "phoneNumber"
+                              ? "tel-national"
+                              : key === "postalCode"
+                                ? "postal-code"
+                                : key === "line1"
+                                  ? "address-line1"
+                                  : key === "line2"
+                                    ? "address-line2"
+                                    : key === "city"
+                                      ? "address-level2"
+                                      : key === "state"
+                                        ? "address-level1"
+                                        : "off"
+                        }
                         onChange={(e) => setNewAddress((prev) => ({ ...prev, [key]: e.target.value }))}
                       />
                     </label>
@@ -1207,12 +1245,16 @@ function AccountPageInner() {
                       void (async () => {
                         const name = profileName.trim();
                         const phone = profilePhone.trim();
-                        if (name.length < 2) {
-                          setProfileMsg({ tone: "danger", text: "Enter your full name." });
+                        const nameError = personNameProblem(name);
+                        if (nameError) {
+                          setProfileMsg({ tone: "danger", text: nameError });
                           return;
                         }
-                        if (phone && phone.replace(/\D/g, "").length < 8) {
-                          setProfileMsg({ tone: "danger", text: "Enter a valid phone number, or leave it blank." });
+                        if (phone && !normalizeIndianMobile(phone)) {
+                          setProfileMsg({
+                            tone: "danger",
+                            text: "Enter a valid 10-digit Indian mobile number, or leave it blank.",
+                          });
                           return;
                         }
                         setProfileBusy(true);
@@ -1292,8 +1334,18 @@ function AccountPageInner() {
                           setPasswordMsg({ tone: "danger", text: "Enter your current password." });
                           return;
                         }
-                        if (nextPassword.length < 8) {
-                          setPasswordMsg({ tone: "danger", text: "New password must be at least 8 characters." });
+                        const passwordError = newPasswordProblem(nextPassword, {
+                          email: sessionUser?.email,
+                        });
+                        if (passwordError) {
+                          setPasswordMsg({ tone: "danger", text: passwordError });
+                          return;
+                        }
+                        if (nextPassword === currentPassword) {
+                          setPasswordMsg({
+                            tone: "danger",
+                            text: "Choose a password different from your current one.",
+                          });
                           return;
                         }
                         if (nextPassword !== confirmPassword) {

@@ -151,6 +151,115 @@ export function maskTransactionReference(reference: string | null) {
   return `${prefix}••••${suffix}`;
 }
 
+/**
+ * Locks inventory rows for these variants in one statement, always in
+ * variant_id order. Every path that changes stock (checkout, capture,
+ * cancel, expiry) locks through here, so two transactions touching the same
+ * variants can't take the locks in opposite orders and deadlock.
+ */
+export async function lockInventoryRows(client: PoolClient, variantIds: string[]) {
+  const unique = [...new Set(variantIds)].sort();
+  const stock = new Map<string, { onHand: number; reserved: number }>();
+  if (unique.length === 0) return stock;
+  const locked = await client.query<{
+    variant_id: string;
+    quantity_on_hand: number;
+    quantity_reserved: number;
+  }>(
+    `select variant_id, quantity_on_hand, quantity_reserved
+     from public.inventory
+     where variant_id = any($1::uuid[])
+     order by variant_id
+     for update`,
+    [unique]
+  );
+  for (const row of locked.rows) {
+    stock.set(row.variant_id, {
+      onHand: Number(row.quantity_on_hand),
+      reserved: Number(row.quantity_reserved),
+    });
+  }
+  return stock;
+}
+
+/** Order lines that hold or consumed stock, summed per variant. */
+async function stockLinesForOrder(client: PoolClient, orderId: string) {
+  const items = await client.query<{ variant_id: string; quantity: string }>(
+    `select variant_id, sum(quantity)::text as quantity
+     from public.order_items
+     where order_id = $1 and is_backordered = false and is_digital = false
+       and variant_id is not null
+     group by variant_id`,
+    [orderId]
+  );
+  return items.rows.map((row) => ({ variantId: row.variant_id, quantity: Number(row.quantity) }));
+}
+
+/**
+ * Applies a per-variant stock change for an order's lines in one statement,
+ * after taking the row locks in a fixed order.
+ */
+export async function adjustInventoryForOrder(
+  client: PoolClient,
+  orderId: string,
+  change: "release_reservation" | "capture" | "restore"
+) {
+  const lines = await stockLinesForOrder(client, orderId);
+  if (lines.length === 0) return 0;
+  await lockInventoryRows(
+    client,
+    lines.map((line) => line.variantId)
+  );
+  const set =
+    change === "release_reservation"
+      ? `quantity_reserved = greatest(i.quantity_reserved - x.qty, 0)`
+      : change === "capture"
+        ? `quantity_on_hand = greatest(i.quantity_on_hand - x.qty, 0),
+           quantity_reserved = greatest(i.quantity_reserved - x.qty, 0)`
+        : `quantity_on_hand = i.quantity_on_hand + x.qty`;
+  await client.query(
+    `update public.inventory i
+     set ${set}, updated_at = now()
+     from unnest($1::uuid[], $2::int[]) as x(variant_id, qty)
+     where i.variant_id = x.variant_id`,
+    [lines.map((line) => line.variantId), lines.map((line) => line.quantity)]
+  );
+  return lines.length;
+}
+
+/**
+ * Buyers confirm their email before their first order (REQUIRE_VERIFIED_EMAIL_FOR_ORDERS).
+ * A fresh link is sent on the way out so the error is one click from resolved.
+ */
+async function assertCanPlaceOrders(userId: string) {
+  const user = await pool.query<{ email: string; status: string; email_verified_at: Date | null }>(
+    `select email, status, email_verified_at from public.users where id = $1`,
+    [userId]
+  );
+  const row = user.rows[0];
+  if (!row) throw new AppError(401, "UNAUTHORIZED", "Sign in again to continue");
+  if (row.status === "blocked") {
+    throw new AppError(403, "ACCOUNT_BLOCKED", "This account can't place orders. Contact support.");
+  }
+  if (!env.REQUIRE_VERIFIED_EMAIL_FOR_ORDERS || row.email_verified_at) return;
+
+  let sentTo: string | null = null;
+  try {
+    const { requestEmailVerification } = await import("./auth.service.js");
+    const result = await requestEmailVerification(row.email);
+    if (result.status !== "skipped") sentTo = row.email;
+  } catch {
+    /* the error below still tells them what to do */
+  }
+  throw new AppError(
+    403,
+    "EMAIL_NOT_VERIFIED",
+    sentTo
+      ? `Verify your email before placing an order. We've sent a link to ${sentTo}.`
+      : "Verify your email before placing an order. Use the link we emailed you, or request a new one from your account."
+  );
+}
+
 function addDays(from: Date, days: number) {
   const next = new Date(from);
   next.setDate(next.getDate() + days);
@@ -307,6 +416,7 @@ export async function placeOrder(input: PlaceOrderInput) {
     expectedShippingAmount = null,
   } = input;
 
+  await assertCanPlaceOrders(userId);
   const preQuote = await quoteBeforeCheckout(userId, addressId, paymentMethod === "cod");
 
   const client = await pool.connect();
@@ -326,6 +436,8 @@ export async function placeOrder(input: PlaceOrderInput) {
 
     const failures: StockFailureLine[] = [];
     const backorderedVariantIds = new Set<string>();
+    /** Physical lines that passed the availability checks, for the stock check below. */
+    const stockLines: CartLineForOrder[] = [];
 
     // Authoritative stock check with row-level locks. The cart-level checks are UX
     // conveniences; this is the one that decides whether the order can exist.
@@ -367,40 +479,44 @@ export async function placeOrder(input: PlaceOrderInput) {
       if (line.product_type === "digital") {
         continue;
       }
+      stockLines.push(line);
+    }
 
-      const locked = await client.query<{
-        quantity_on_hand: number;
-        quantity_reserved: number;
-      }>(
-        `select quantity_on_hand, quantity_reserved
-         from public.inventory
-         where variant_id = $1
-         for update`,
-        [line.variant_id]
+    // One sorted lock for every variant, then compare against the total asked
+    // for per variant: the same item can sit on two lines with different
+    // customization notes, and each line alone could otherwise pass.
+    const stock = await lockInventoryRows(
+      client,
+      stockLines.map((line) => line.variant_id)
+    );
+    const requestedByVariant = new Map<string, number>();
+    for (const line of stockLines) {
+      requestedByVariant.set(
+        line.variant_id,
+        (requestedByVariant.get(line.variant_id) ?? 0) + Number(line.quantity)
       );
+    }
+    for (const line of stockLines) {
+      const inv = stock.get(line.variant_id);
+      const available = inv ? inv.onHand - inv.reserved : 0;
+      const requested = requestedByVariant.get(line.variant_id) ?? Number(line.quantity);
+      if (available >= requested) continue;
 
-      const inv = locked.rows[0];
-      const available = inv
-        ? Number(inv.quantity_on_hand) - Number(inv.quantity_reserved)
-        : 0;
-
-      if (available < Number(line.quantity)) {
-        // Backorderable lines are allowed through, but flagged so the seller can
-        // tell them apart when fulfilling.
-        if (line.allow_backorder) {
-          backorderedVariantIds.add(line.variant_id);
-          continue;
-        }
-
-        failures.push({
-          cartItemId: line.cart_item_id,
-          variantId: line.variant_id,
-          title: line.title,
-          requestedQuantity: Number(line.quantity),
-          availableQuantity: Math.max(0, available),
-          reason: "INSUFFICIENT_STOCK",
-        });
+      // Backorderable lines are allowed through, but flagged so the seller can
+      // tell them apart when fulfilling.
+      if (line.allow_backorder) {
+        backorderedVariantIds.add(line.variant_id);
+        continue;
       }
+
+      failures.push({
+        cartItemId: line.cart_item_id,
+        variantId: line.variant_id,
+        title: line.title,
+        requestedQuantity: Number(line.quantity),
+        availableQuantity: Math.max(0, available),
+        reason: "INSUFFICIENT_STOCK",
+      });
     }
 
     if (failures.length > 0) {
@@ -827,16 +943,16 @@ export function paymentReadyShape(order: OrderDetail) {
 }
 
 export async function listOrdersForUser(userId: string, page = 1, pageSize = 20) {
-  const safePage = Math.max(1, page);
-  const safeSize = Math.min(50, Math.max(1, pageSize));
+  const safePage = Number.isInteger(page) ? Math.min(Math.max(1, page), 1000) : 1;
+  const safeSize = Number.isInteger(pageSize) ? Math.min(50, Math.max(1, pageSize)) : 20;
   const offset = (safePage - 1) * safeSize;
 
-  const countResult = await pool.query<{ count: string }>(
+  const countQuery = pool.query<{ count: string }>(
     `select count(*)::text as count from public.orders where user_id = $1`,
     [userId]
   );
 
-  const result = await pool.query<{
+  const listQuery = pool.query<{
     id: string;
     order_number: string;
     status: string;
@@ -848,17 +964,22 @@ export async function listOrdersForUser(userId: string, page = 1, pageSize = 20)
     preview_thumbnail_url: string | null;
   }>(
     `select o.id, o.order_number, o.status, o.total_amount, o.created_at, o.placed_at,
-            (select count(*)::text from public.order_items oi where oi.order_id = o.id) as item_count,
-            (select oi.product_title from public.order_items oi
-              where oi.order_id = o.id order by oi.created_at asc limit 1) as preview_title,
-            (select oi.product_thumbnail_url from public.order_items oi
-              where oi.order_id = o.id order by oi.created_at asc limit 1) as preview_thumbnail_url
+            items.item_count, items.preview_title, items.preview_thumbnail_url
      from public.orders o
+     cross join lateral (
+       select count(*)::text as item_count,
+              (array_agg(oi.product_title order by oi.created_at asc))[1] as preview_title,
+              (array_agg(oi.product_thumbnail_url order by oi.created_at asc))[1] as preview_thumbnail_url
+       from public.order_items oi
+       where oi.order_id = o.id
+     ) items
      where o.user_id = $1
      order by o.created_at desc
      limit $2 offset $3`,
     [userId, safeSize, offset]
   );
+
+  const [countResult, result] = await Promise.all([countQuery, listQuery]);
 
   const orders: OrderListItem[] = result.rows.map((row) => ({
     id: row.id,
@@ -994,6 +1115,10 @@ export async function getOrderForUser(
   userId: string,
   orderId: string
 ): Promise<OrderDetail | null> {
+  // Order ids come from URLs; a malformed one is simply "not found".
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId)) {
+    return null;
+  }
   const orderResult = await pool.query<{
     id: string;
     order_number: string;
@@ -1035,7 +1160,8 @@ export async function getOrderForUser(
     return null;
   }
 
-  const itemsResult = await pool.query<{
+  // Everything below depends only on the order id, so it runs in parallel.
+  const itemsQuery = pool.query<{
     id: string;
     seller_id: string;
     variant_id: string;
@@ -1100,7 +1226,7 @@ export async function getOrderForUser(
     [orderId, userId]
   );
 
-  const historyResult = await pool.query<{
+  const historyQuery = pool.query<{
     to_status: string;
     note: string | null;
     created_at: Date;
@@ -1112,13 +1238,42 @@ export async function getOrderForUser(
     [orderId]
   );
 
+  const shipmentsQuery = pool.query<{
+    id: string;
+    seller_id: string;
+    shop_name: string | null;
+    tracking_number: string | null;
+    carrier: string | null;
+    courier_url: string | null;
+    status: string;
+    label_url: string | null;
+    awb_code: string | null;
+    tracking_events: unknown;
+    tracking_synced_at: Date | null;
+  }>(
+    `select sh.id, sh.seller_id, s.shop_name, sh.tracking_number, sh.carrier,
+            sh.courier_url, sh.status, sh.label_url, sh.awb_code,
+            sh.tracking_events, sh.tracking_synced_at
+     from public.shipments sh
+     left join public.sellers s on s.id = sh.seller_id
+     where sh.order_id = $1
+     order by sh.created_at asc`,
+    [orderId]
+  );
+
+  const [itemsResult, historyResult, downloads, shipmentsResult] = await Promise.all([
+    itemsQuery,
+    historyQuery,
+    listOrderDownloads(orderId, row.status),
+    shipmentsQuery,
+  ]);
+
   const timeline: OrderTimelineEntry[] = historyResult.rows.map((entry) => ({
     status: entry.to_status,
     note: entry.note,
     createdAt: new Date(entry.created_at).toISOString(),
   }));
 
-  const downloads = await listOrderDownloads(orderId, row.status);
   const items: OrderItemDetail[] = itemsResult.rows.map((item) => ({
     id: item.id,
     sellerId: item.seller_id,
@@ -1189,30 +1344,7 @@ export async function getOrderForUser(
       courierName: row.courier_name,
       courierUrl: row.courier_url,
     },
-    shipments: (
-      await pool.query<{
-        id: string;
-        seller_id: string;
-        shop_name: string | null;
-        tracking_number: string | null;
-        carrier: string | null;
-        courier_url: string | null;
-        status: string;
-        label_url: string | null;
-        awb_code: string | null;
-        tracking_events: unknown;
-        tracking_synced_at: Date | null;
-      }>(
-        `select sh.id, sh.seller_id, s.shop_name, sh.tracking_number, sh.carrier,
-                sh.courier_url, sh.status, sh.label_url, sh.awb_code,
-                sh.tracking_events, sh.tracking_synced_at
-         from public.shipments sh
-         left join public.sellers s on s.id = sh.seller_id
-         where sh.order_id = $1
-         order by sh.created_at asc`,
-        [orderId]
-      )
-    ).rows.map((sh) => ({
+    shipments: shipmentsResult.rows.map((sh) => ({
       id: sh.id,
       sellerId: sh.seller_id,
       shopName: sh.shop_name,
@@ -1240,25 +1372,7 @@ export async function getOrderForUser(
  * Backordered lines never reserved anything, so releasing them would corrupt the count.
  */
 export async function releaseReservationsForOrder(client: PoolClient, orderId: string) {
-  const items = await client.query<{ variant_id: string; quantity: number }>(
-    `select variant_id, quantity
-     from public.order_items
-     where order_id = $1 and is_backordered = false and is_digital = false
-     for update`,
-    [orderId]
-  );
-
-  for (const item of items.rows) {
-    await client.query(
-      `update public.inventory
-       set quantity_reserved = greatest(quantity_reserved - $1, 0),
-           updated_at = now()
-       where variant_id = $2`,
-      [Number(item.quantity), item.variant_id]
-    );
-  }
-
-  return items.rows.length;
+  return adjustInventoryForOrder(client, orderId, "release_reservation");
 }
 
 /**
@@ -1266,26 +1380,7 @@ export async function releaseReservationsForOrder(client: PoolClient, orderId: s
  * non-backordered lines after a paid/processing cancel (stock was already captured).
  */
 export async function restoreInventoryForCancelledOrder(client: PoolClient, orderId: string) {
-  const items = await client.query<{ variant_id: string; quantity: number }>(
-    `select variant_id, quantity
-     from public.order_items
-     where order_id = $1 and is_backordered = false and is_digital = false
-     for update`,
-    [orderId]
-  );
-
-  for (const item of items.rows) {
-    const qty = Number(item.quantity);
-    await client.query(
-      `update public.inventory
-       set quantity_on_hand = quantity_on_hand + $1,
-           updated_at = now()
-       where variant_id = $2`,
-      [qty, item.variant_id]
-    );
-  }
-
-  return items.rows.length;
+  return adjustInventoryForOrder(client, orderId, "restore");
 }
 
 const CANCELLABLE_STATUSES = ["pending_payment", "paid", "processing", "accepted"] as const;
@@ -1296,6 +1391,9 @@ export async function cancelOrderForUser(
   orderId: string,
   reason?: string | null
 ) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId)) {
+    throw new AppError(404, "ORDER_NOT_FOUND", "Order was not found");
+  }
   const client = await pool.connect();
   let priorStatus: OrderStatus | null = null;
   let totalAmount = 0;
@@ -1415,6 +1513,30 @@ export async function cancelExpiredPendingOrder(orderId: string) {
   const client = await pool.connect();
   try {
     await client.query("begin");
+    // The expiry scan ran without locks. If the payment was captured since,
+    // the order is paid now and must not be cancelled (paid → cancelled is a
+    // legal edge, so transition() alone would allow it and skip the refund).
+    const current = await client.query<{ status: string }>(
+      `select status from public.orders
+       where id = $1
+         and created_at < now() - make_interval(mins => $2)
+       for update`,
+      [orderId, env.RESERVATION_TIMEOUT_MINUTES]
+    );
+    if (current.rows[0]?.status !== "pending_payment") {
+      await client.query("rollback");
+      return 0;
+    }
+    const capturing = await client.query(
+      `select 1 from public.payments
+       where order_id = $1 and status in ('captured', 'authorized')
+       limit 1`,
+      [orderId]
+    );
+    if (capturing.rows[0]) {
+      await client.query("rollback");
+      return 0;
+    }
     await transition(
       orderId,
       "cancelled" satisfies OrderStatus,

@@ -22,6 +22,14 @@ import {
   shopSetupHref,
   type ShopSetupStep,
 } from "@/components/seller/shopSetupSteps";
+import {
+  emailProblem,
+  httpsUrlProblem,
+  normalizeIndianMobile,
+  phoneProblem,
+  pincodeProblem,
+  socialLinkProblem,
+} from "@/utils/validation";
 
 function Counter({ value, max }: { value: string; max: number }) {
   return (
@@ -232,6 +240,23 @@ function ShopSetupContent() {
       });
       return;
     }
+    // The API's rules, checked here so the right tab opens on the problem.
+    const fieldChecks: Array<[ShopSetupStep, string | null]> = [
+      ["information", form.shopName.trim().length < 2 ? "Shop name must be at least 2 characters." : null],
+      ["information", phoneProblem(form.contactPhone)],
+      ["information", form.contactEmail.trim() ? emailProblem(form.contactEmail) : null],
+      ["branding", socialLinkProblem(form.instagram) && `Instagram: ${socialLinkProblem(form.instagram)}`],
+      ["branding", socialLinkProblem(form.facebook) && `Facebook: ${socialLinkProblem(form.facebook)}`],
+      ["branding", socialLinkProblem(form.pinterest) && `Pinterest: ${socialLinkProblem(form.pinterest)}`],
+      ["branding", httpsUrlProblem(form.logoUrl) && `Logo: ${httpsUrlProblem(form.logoUrl)}`],
+      ["branding", httpsUrlProblem(form.bannerUrl) && `Banner: ${httpsUrlProblem(form.bannerUrl)}`],
+    ];
+    const failed = fieldChecks.find(([, problem]) => problem);
+    if (failed) {
+      setTab(failed[0]);
+      setMessage({ tone: "danger", text: failed[1]! });
+      return;
+    }
     setSaving(true);
     setMessage(null);
     const pickupStarted = Boolean(
@@ -253,7 +278,7 @@ function ShopSetupContent() {
       form.pickupAddress1.trim().length >= 5 &&
       form.pickupCity.trim().length >= 2 &&
       form.pickupState.trim().length >= 2 &&
-      /^\d{6}$/.test(form.pickupPincode.trim());
+      !pincodeProblem(form.pickupPincode);
     if (pickupStarted && !pickupComplete) {
       setSaving(false);
       setTab("shipping");
@@ -269,7 +294,7 @@ function ShopSetupContent() {
       tagline: form.tagline.trim() || null,
       description: form.description.trim() || null,
       contactEmail: form.contactEmail.trim() || null,
-      contactPhone: form.contactPhone.trim(),
+      contactPhone: normalizeIndianMobile(form.contactPhone) ?? form.contactPhone.trim(),
       businessAddress: form.businessAddress.trim() || null,
       socialLinks: {
         instagram: form.instagram.trim(),

@@ -1,12 +1,18 @@
 import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
-import { shippingQuoteLimiter } from "../middleware/auth-rate-limit.js";
+import {
+  accountWriteLimiter,
+  checkoutLimiter,
+  couponLimiter,
+  shippingQuoteLimiter,
+} from "../middleware/auth-rate-limit.js";
 import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
 import {
   addItem,
   getCartView,
   getOrCreateCart,
+  MAX_LINE_QUANTITY,
   removeItem,
   setCartCoupon,
   updateItemQuantity,
@@ -21,18 +27,29 @@ import { placeOrderSchema } from "./orders.js";
 
 const cartRouter = Router();
 
+const quantitySchema = z
+  .number()
+  .int("Quantity must be a whole number")
+  .positive("Quantity must be at least 1")
+  .max(MAX_LINE_QUANTITY, `You can add up to ${MAX_LINE_QUANTITY} of one item`);
+
 const addItemSchema = z.object({
   variantId: z.string().uuid(),
-  quantity: z.number().int().positive().default(1),
+  quantity: quantitySchema.default(1),
   customizationNote: z.string().trim().max(400).optional().nullable(),
 });
 
 const updateItemSchema = z.object({
-  quantity: z.number().int().positive(),
+  quantity: quantitySchema,
 });
 
 const applyCouponSchema = z.object({
-  code: z.string().trim().min(1, "Coupon code is required"),
+  code: z
+    .string()
+    .trim()
+    .min(1, "Coupon code is required")
+    .max(40, "That coupon code isn't valid")
+    .regex(/^[A-Za-z0-9_-]+$/, "That coupon code isn't valid"),
 });
 
 cartRouter.get(
@@ -47,6 +64,7 @@ cartRouter.get(
 
 cartRouter.post(
   "/items",
+  accountWriteLimiter,
   optionalAuth,
   asyncHandler(async (req, res) => {
     const parsed = addItemSchema.safeParse(req.body);
@@ -69,6 +87,7 @@ cartRouter.post(
 
 cartRouter.patch(
   "/items/:id",
+  accountWriteLimiter,
   optionalAuth,
   asyncHandler(async (req, res) => {
     const parsed = updateItemSchema.safeParse(req.body);
@@ -79,24 +98,27 @@ cartRouter.patch(
 
     const cart = await getOrCreateCart(req, res);
     await updateItemQuantity(cart, String(req.params.id), parsed.data.quantity);
-    const view = await getCartView(await getOrCreateCart(req, res));
+    // Coupon/cart columns don't change on an item edit, so the row read above is current.
+    const view = await getCartView(cart);
     res.json({ cart: view });
   })
 );
 
 cartRouter.delete(
   "/items/:id",
+  accountWriteLimiter,
   optionalAuth,
   asyncHandler(async (req, res) => {
     const cart = await getOrCreateCart(req, res);
     await removeItem(cart, String(req.params.id));
-    const view = await getCartView(await getOrCreateCart(req, res));
+    const view = await getCartView(cart);
     res.json({ cart: view });
   })
 );
 
 cartRouter.post(
   "/coupon",
+  couponLimiter,
   optionalAuth,
   asyncHandler(async (req, res) => {
     const parsed = applyCouponSchema.safeParse(req.body);
@@ -151,7 +173,7 @@ const shippingQuoteSchema = z
     /** A saved address of this buyer, or */
     addressId: z.string().uuid().optional(),
     /** a PIN code typed into a new-address form. */
-    pincode: z.string().trim().optional(),
+    pincode: z.string().trim().max(12).optional(),
     paymentMethod: z.enum(["online", "cod"]).default("online"),
   })
   .refine((value) => value.addressId || value.pincode, {
@@ -237,6 +259,7 @@ function publicOption(option: {
 cartRouter.post(
   "/checkout",
   requireAuth,
+  checkoutLimiter,
   asyncHandler(async (req, res) => {
     const parsed = placeOrderSchema.safeParse(req.body);
 

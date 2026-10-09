@@ -5,8 +5,13 @@ import { asyncHandler } from "../middleware/async-handler.js";
 import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
+import { accountWriteLimiter } from "../middleware/auth-rate-limit.js";
+import { isUuid } from "../utils/validation.js";
 
 const wishlistsRouter = Router();
+
+/** Saved items per account; bounded so the list query and page stay fast. */
+const MAX_WISHLIST_ITEMS = 500;
 
 wishlistsRouter.get(
   "/",
@@ -37,7 +42,8 @@ wishlistsRouter.get(
        join public.products p on p.id = w.product_id and p.deleted_at is null
        join public.sellers s on s.id = p.seller_id
        where w.user_id = $1
-       order by w.created_at desc`,
+       order by w.created_at desc
+       limit ${MAX_WISHLIST_ITEMS}`,
       [req.user!.id]
     );
 
@@ -78,11 +84,24 @@ const addSchema = z.object({
 wishlistsRouter.post(
   "/",
   requireAuth,
+  accountWriteLimiter,
   asyncHandler(async (req, res) => {
     const parsed = addSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ message: "productId is required" });
       return;
+    }
+
+    const count = await pool.query<{ c: string }>(
+      `select count(*)::text as c from public.wishlists where user_id = $1`,
+      [req.user!.id]
+    );
+    if (Number(count.rows[0]?.c ?? 0) >= MAX_WISHLIST_ITEMS) {
+      throw new AppError(
+        400,
+        "WISHLIST_FULL",
+        `Your wishlist can hold up to ${MAX_WISHLIST_ITEMS} items. Remove some to add more.`
+      );
     }
 
     const product = await pool.query(
@@ -107,7 +126,12 @@ wishlistsRouter.post(
 wishlistsRouter.delete(
   "/:productId",
   requireAuth,
+  accountWriteLimiter,
   asyncHandler(async (req, res) => {
+    if (!isUuid(req.params.productId)) {
+      res.json({ ok: true });
+      return;
+    }
     await pool.query(
       `delete from public.wishlists where user_id = $1 and product_id = $2`,
       [req.user!.id, String(req.params.productId)]
@@ -121,7 +145,7 @@ wishlistsRouter.get(
   "/has/:productId",
   optionalAuth,
   asyncHandler(async (req, res) => {
-    if (!req.user) {
+    if (!req.user || !isUuid(req.params.productId)) {
       res.json({ wished: false });
       return;
     }

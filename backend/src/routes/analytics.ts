@@ -20,6 +20,17 @@ const ANALYTICS_SESSION_COOKIE = "stuffsy_vid";
 const LAST_CHANNEL_COOKIE = "stuffsy_ref_channel";
 const DEDUPE_MINUTES = 30;
 
+/** This browser's analytics visitor id (the stuffsy_vid cookie), or null. */
+export function analyticsVisitorId(req: { cookies?: Record<string, unknown> }) {
+  return readSessionId(req.cookies?.[ANALYTICS_SESSION_COOKIE]) || null;
+}
+
+/** The visitor cookie, when it is an id this server issued (a uuid); otherwise none. */
+function readSessionId(raw: unknown) {
+  const value = typeof raw === "string" ? raw.trim() : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : "";
+}
+
 const trackSchema = z.object({
   productId: z.string().uuid(),
   utmSource: z.string().trim().max(80).optional().nullable(),
@@ -47,7 +58,7 @@ analyticsRouter.post(
       return;
     }
 
-    let sessionId = String(req.cookies?.[ANALYTICS_SESSION_COOKIE] ?? "").trim();
+    let sessionId = readSessionId(req.cookies?.[ANALYTICS_SESSION_COOKIE]);
     if (!sessionId) {
       sessionId = randomUUID();
       res.cookie(ANALYTICS_SESSION_COOKIE, sessionId, {
@@ -108,8 +119,9 @@ analyticsRouter.get(
   "/recently-viewed",
   optionalAuth,
   asyncHandler(async (req, res) => {
-    const limit = Math.min(24, Math.max(1, Number(req.query.limit ?? 8)));
-    const sessionId = String(req.cookies?.[ANALYTICS_SESSION_COOKIE] ?? "").trim();
+    const rawLimit = Number(req.query.limit ?? 8);
+    const limit = Number.isInteger(rawLimit) ? Math.min(24, Math.max(1, rawLimit)) : 8;
+    const sessionId = readSessionId(req.cookies?.[ANALYTICS_SESSION_COOKIE]);
     const userId = req.user?.id ?? null;
 
     if (!userId && !sessionId) {

@@ -40,6 +40,7 @@ import PickupAddressDialog from "@/components/seller/PickupAddressDialog";
 import { SELLER_TAGLINE } from "@/components/brand/tagline";
 import { fetchSiteMedia, type SiteMedia } from "@/utils/siteMedia";
 import { optimizedImage } from "@/utils/media";
+import { normalizeIndianMobile } from "@/utils/validation";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3;
@@ -322,7 +323,8 @@ export default function SellPage() {
   const canNext = () => {
     if (step === 1) return selectedCats.length > 0;
     if (step === 2) {
-      const basics = shopName.trim().length >= 2 && phone.trim().length >= 6;
+      // Same phone rule as the API: a valid 10-digit Indian mobile.
+      const basics = shopName.trim().length >= 2 && Boolean(normalizeIndianMobile(phone));
       if (!basics || businessRegistered === null) return false;
       if (businessRegistered) {
         return gstin.trim().length === 15 && verifiedGstin === gstin.trim().toUpperCase();
@@ -660,14 +662,18 @@ export default function SellPage() {
                       id="shop-phone"
                       type="tel"
                       className={styles.formInput}
-                      placeholder="Enter your contact number"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      placeholder="10-digit mobile number"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
                       maxLength={10}
                     />
                   </div>
-                  <span className={styles.formHelp}>
-                    We will use this number to contact you regarding your shop.
+                  <span className={styles.formHelp} role={phone.length === 10 && !normalizeIndianMobile(phone) ? "alert" : undefined}>
+                    {phone.length === 10 && !normalizeIndianMobile(phone)
+                      ? "Enter a valid Indian mobile number (starts with 6, 7, 8 or 9)."
+                      : "We will use this number to contact you regarding your shop."}
                   </span>
                 </div>
 

@@ -23,6 +23,13 @@ import { apiBaseUrl, apiRequest, type AuthUser } from "@/utils/api-client";
 import { refreshCart } from "@/utils/cart";
 import { fetchSiteMedia } from "@/utils/siteMedia";
 import { optimizedImage } from "@/utils/media";
+import {
+  emailProblem,
+  newPasswordProblem,
+  PASSWORD_HINT,
+  personNameProblem,
+  phoneProblem,
+} from "@/utils/validation";
 import styles from "./AuthPage.module.css";
 
 type AuthMode = "signin" | "signup";
@@ -140,6 +147,25 @@ function AuthPageInner({ mode }: AuthPageProps) {
           confirmPassword: String(formData.get("confirmPassword") ?? ""),
           termsAccepted: formData.get("termsAccepted") === "on",
         };
+
+    // Same rules the API applies, so the problem shows before a round trip.
+    const problem = isSignIn
+      ? emailProblem(payload.email)
+      : personNameProblem(String(formData.get("fullName") ?? "")) ??
+        emailProblem(payload.email) ??
+        phoneProblem(String(formData.get("phoneNumber") ?? "")) ??
+        newPasswordProblem(payload.password, {
+          email: payload.email,
+          fullName: String(formData.get("fullName") ?? ""),
+        }) ??
+        (payload.password !== String(formData.get("confirmPassword") ?? "")
+          ? "Passwords do not match"
+          : null);
+    if (problem) {
+      setStatus({ type: "error", message: problem });
+      setIsSubmitting(false);
+      return;
+    }
 
     const result = await apiRequest<{ message?: string; user?: AuthUser }>(
       "POST",
@@ -263,6 +289,9 @@ function AuthPageInner({ mode }: AuthPageProps) {
                       type="text"
                       placeholder="Enter your full name"
                       className={styles.input}
+                      autoComplete="name"
+                      minLength={2}
+                      maxLength={80}
                     />
                   </div>
                 </label>
@@ -278,6 +307,8 @@ function AuthPageInner({ mode }: AuthPageProps) {
                     type="email"
                     placeholder="Enter your email address"
                     className={styles.input}
+                    autoComplete="email"
+                    maxLength={254}
                     suppressHydrationWarning
                   />
                 </div>
@@ -292,8 +323,11 @@ function AuthPageInner({ mode }: AuthPageProps) {
                       required
                       name="phoneNumber"
                       type="tel"
-                      placeholder="Enter your phone number"
+                      inputMode="tel"
+                      autoComplete="tel-national"
+                      placeholder="10-digit mobile number"
                       className={styles.input}
+                      maxLength={16}
                     />
                   </div>
                 </label>
@@ -310,6 +344,9 @@ function AuthPageInner({ mode }: AuthPageProps) {
                     placeholder={isSignIn ? "Enter your password" : "Create a password"}
                     className={styles.input}
                     autoComplete={isSignIn ? "current-password" : "new-password"}
+                    minLength={isSignIn ? undefined : 8}
+                    maxLength={isSignIn ? 256 : 72}
+                    aria-describedby={isSignIn ? undefined : "password-hint"}
                   />
                   <button
                     type="button"
@@ -321,6 +358,11 @@ function AuthPageInner({ mode }: AuthPageProps) {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+                {!isSignIn && (
+                  <small id="password-hint" className={styles.fieldHint}>
+                    {PASSWORD_HINT}
+                  </small>
+                )}
               </label>
 
               {!isSignIn && (
@@ -335,6 +377,7 @@ function AuthPageInner({ mode }: AuthPageProps) {
                       placeholder="Confirm your password"
                       className={styles.input}
                       autoComplete="new-password"
+                      maxLength={72}
                     />
                     <button
                       type="button"

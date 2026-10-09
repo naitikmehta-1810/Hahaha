@@ -747,8 +747,27 @@ export async function shipSellerShipment(orderId: string, sellerId: string) {
   };
 }
 
+/** Shiprocket numeric status ids that mean the parcel won't reach the buyer (for now). */
+const FAILED_STATUS_CODES = new Set(["8", "9", "10", "12", "13", "14", "16", "21", "45", "46"]);
+
 export function mapProviderStatus(providerStatus: string): string {
-  const mapped = providerStatus.toLowerCase().replace(/\s+/g, "_");
+  const mapped = providerStatus.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  // Checked first: "UNDELIVERED" and "RTO DELIVERED" contain "deliver" but mean
+  // the buyer did NOT get the parcel. Marking them delivered would start the
+  // return window and tell the buyer it arrived.
+  if (
+    FAILED_STATUS_CODES.has(mapped) ||
+    mapped.includes("rto") ||
+    mapped.includes("undeliver") ||
+    mapped.includes("not_deliver") ||
+    mapped.includes("cancel") ||
+    mapped.includes("lost") ||
+    mapped.includes("damage") ||
+    mapped.includes("destroy") ||
+    mapped.includes("fail")
+  ) {
+    return "failed";
+  }
   if (
     mapped.includes("out_for_delivery") ||
     mapped === "ofd" ||
@@ -758,9 +777,10 @@ export function mapProviderStatus(providerStatus: string): string {
     return "out_for_delivery";
   }
   if (
-    mapped.includes("deliver") ||
     mapped === "7" ||
-    mapped.includes("delivered")
+    mapped === "delivered" ||
+    mapped.startsWith("delivered_") ||
+    mapped.endsWith("_delivered")
   ) {
     return "delivered";
   }
@@ -774,9 +794,6 @@ export function mapProviderStatus(providerStatus: string): string {
     mapped === "20"
   ) {
     return "in_transit";
-  }
-  if (mapped.includes("fail") || mapped.includes("rto") || mapped.includes("cancel")) {
-    return "failed";
   }
   return "pending";
 }

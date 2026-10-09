@@ -20,9 +20,32 @@ import { apiRequest } from "@/utils/api-client";
 import BrandLogo from "@/components/brand/BrandLogo";
 import OrderNotifications from "@/components/notifications/OrderNotifications";
 import { optimizedImage } from "@/utils/media";
+import { fetchTrendingSearches } from "@/utils/catalog";
 
 type SuggestProduct = { id: string; slug: string; title: string };
 type SuggestCategory = { id: string; slug: string; name: string };
+type SuggestShop = { slug: string; name: string };
+type Suggestions = {
+  products: SuggestProduct[];
+  categories: SuggestCategory[];
+  /** Older API responses omit these. */
+  shops?: SuggestShop[];
+  queries?: string[];
+  correctedQuery?: string | null;
+};
+
+function hasSuggestions(s: Suggestions | null) {
+  return Boolean(
+    s &&
+      (s.products.length ||
+        s.categories.length ||
+        s.shops?.length ||
+        s.queries?.length ||
+        s.correctedQuery)
+  );
+}
+
+const searchHref = (q: string) => `/shop?search=${encodeURIComponent(q.trim())}`;
 
 export const Header = () => {
   const router = useRouter();
@@ -30,10 +53,8 @@ export const Header = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [cartCount, setCartCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<{
-    products: SuggestProduct[];
-    categories: SuggestCategory[];
-  } | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
+  const [trending, setTrending] = useState<string[] | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -62,15 +83,14 @@ export const Header = () => {
     }
     debounceRef.current = setTimeout(() => {
       void (async () => {
-        const result = await apiRequest<{
-          products: SuggestProduct[];
-          categories: SuggestCategory[];
-        }>("GET", `/api/search/suggest?q=${encodeURIComponent(q)}`, { skipRefresh: true });
+        const result = await apiRequest<Suggestions>(
+          "GET",
+          `/api/search/suggest?q=${encodeURIComponent(q)}`,
+          { skipRefresh: true }
+        );
         if (result.data) {
           setSuggestions(result.data);
-          setSuggestOpen(
-            result.data.products.length > 0 || result.data.categories.length > 0
-          );
+          setSuggestOpen(hasSuggestions(result.data));
         }
       })();
     }, 220);
@@ -113,7 +133,7 @@ export const Header = () => {
     setSuggestOpen(false);
     setMobileOpen(false);
     if (searchQuery.trim()) {
-      router.push(`/shop?search=${encodeURIComponent(searchQuery)}`);
+      router.push(searchHref(searchQuery));
     } else {
       router.push("/shop");
     }
@@ -133,8 +153,20 @@ export const Header = () => {
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
         onFocus={() => {
-          if (suggestions && (suggestions.products.length || suggestions.categories.length)) {
+          if (searchQuery.trim().length >= 2 && hasSuggestions(suggestions)) {
             setSuggestOpen(true);
+            return;
+          }
+          // Empty box: show what other buyers are searching for this week.
+          if (!searchQuery.trim()) {
+            if (trending) {
+              setSuggestOpen(trending.length > 0);
+            } else {
+              void fetchTrendingSearches().then((terms) => {
+                setTrending(terms);
+                setSuggestOpen(terms.length > 0);
+              });
+            }
           }
         }}
         autoComplete="off"
@@ -144,8 +176,66 @@ export const Header = () => {
         aria-expanded={suggestOpen}
       />
       <Search size={18} className={styles.searchIcon} />
-      {suggestOpen && suggestions ? (
+      {suggestOpen && !searchQuery.trim() && trending?.length ? (
         <div className={styles.suggestPanel} role="listbox">
+          <div className={styles.suggestGroup}>
+            <p className={styles.suggestLabel}>Trending searches</p>
+            {trending.map((term) => (
+              <Link
+                key={term}
+                href={searchHref(term)}
+                className={styles.suggestItem}
+                role="option"
+                onClick={() => {
+                  setSearchQuery(term);
+                  setSuggestOpen(false);
+                  setMobileOpen(false);
+                }}
+              >
+                <Search size={14} aria-hidden="true" /> {term}
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {suggestOpen && searchQuery.trim() && suggestions ? (
+        <div className={styles.suggestPanel} role="listbox">
+          {suggestions.correctedQuery ? (
+            <div className={styles.suggestGroup}>
+              <Link
+                href={searchHref(suggestions.correctedQuery)}
+                className={styles.suggestItem}
+                role="option"
+                onClick={() => {
+                  setSearchQuery(suggestions.correctedQuery ?? "");
+                  setSuggestOpen(false);
+                  setMobileOpen(false);
+                }}
+              >
+                Did you mean <strong>{suggestions.correctedQuery}</strong>?
+              </Link>
+            </div>
+          ) : null}
+          {suggestions.queries?.length ? (
+            <div className={styles.suggestGroup}>
+              <p className={styles.suggestLabel}>Popular searches</p>
+              {suggestions.queries.map((term) => (
+                <Link
+                  key={term}
+                  href={searchHref(term)}
+                  className={styles.suggestItem}
+                  role="option"
+                  onClick={() => {
+                    setSearchQuery(term);
+                    setSuggestOpen(false);
+                    setMobileOpen(false);
+                  }}
+                >
+                  <Search size={14} aria-hidden="true" /> {term}
+                </Link>
+              ))}
+            </div>
+          ) : null}
           {suggestions.products.length > 0 ? (
             <div className={styles.suggestGroup}>
               <p className={styles.suggestLabel}>Products</p>
@@ -180,6 +270,25 @@ export const Header = () => {
                   }}
                 >
                   {c.name}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+          {suggestions.shops?.length ? (
+            <div className={styles.suggestGroup}>
+              <p className={styles.suggestLabel}>Shops</p>
+              {suggestions.shops.map((s) => (
+                <Link
+                  key={s.slug}
+                  href={`/shops/${encodeURIComponent(s.slug)}`}
+                  className={styles.suggestItem}
+                  role="option"
+                  onClick={() => {
+                    setSuggestOpen(false);
+                    setMobileOpen(false);
+                  }}
+                >
+                  <Store size={14} aria-hidden="true" /> {s.name}
                 </Link>
               ))}
             </div>

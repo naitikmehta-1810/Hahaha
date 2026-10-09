@@ -2,6 +2,7 @@ import { apiRequest } from "./api-client";
 import { FALLBACK_PRODUCT_IMAGE } from "./media";
 
 export type ProductSort =
+  | "relevance"
   | "featured"
   | "popular"
   | "bestsellers"
@@ -86,6 +87,26 @@ export type CategoryNode = {
   children: CategoryNode[];
 };
 
+/** Filter counts returned with `facets: true`; each ignores its own filter. */
+export type ProductFacets = {
+  categories: Array<{ id: string; slug: string; name: string; parentId: string | null; count: number }>;
+  priceBuckets: Array<{ label: string; min: number | null; max: number | null; count: number }>;
+  ratings: Array<{ minRating: number; count: number }>;
+  availability: { inStock: number; onSale: number; digital: number; customizable: number };
+  shops: Array<{ slug: string; name: string; count: number }>;
+  tags: Array<{ tag: string; count: number }>;
+};
+
+export type SearchInfo = {
+  query: string;
+  /** Results are for this spelling ("Showing results for …"). */
+  correctedQuery: string | null;
+  /** "any": nothing matched every word, so close matches are shown. */
+  matchMode: "all" | "any";
+  /** A price phrase in the query ("under 500") applied as a filter. */
+  priceFromQuery: { min: number | null; max: number | null } | null;
+};
+
 export type ProductListResult = {
   products: ProductCard[];
   page: number;
@@ -93,18 +114,29 @@ export type ProductListResult = {
   total: number;
   totalPages: number;
   priceRange: { min: number; max: number };
+  facets?: ProductFacets;
+  search?: SearchInfo;
 };
 
 export type ProductListParams = {
   category?: string | null;
   categoryId?: string | null;
   shop?: string | null;
+  /** Marketplace shop filter (any of these shop slugs). */
+  shops?: string[] | null;
   search?: string | null;
+  /** Search exactly what was typed (no typo correction). */
+  exact?: boolean;
   tags?: string[] | null;
   priceMin?: number | null;
   priceMax?: number | null;
   minRating?: number | null;
   inStock?: boolean;
+  onSale?: boolean;
+  customizable?: boolean;
+  type?: "physical" | "digital" | null;
+  /** Ask for filter counts (shop page). */
+  facets?: boolean;
   sort?: ProductSort;
   page?: number;
   pageSize?: number;
@@ -153,12 +185,18 @@ function buildQuery(params: ProductListParams) {
   if (params.category) query.set("category", params.category);
   if (params.categoryId) query.set("categoryId", params.categoryId);
   if (params.shop) query.set("shop", params.shop);
+  if (params.shops?.length) query.set("shops", params.shops.join(","));
   if (params.search) query.set("search", params.search);
+  if (params.search && params.exact) query.set("exact", "true");
   if (params.tags?.length) query.set("tags", params.tags.join(","));
   if (params.priceMin != null) query.set("priceMin", String(params.priceMin));
   if (params.priceMax != null) query.set("priceMax", String(params.priceMax));
   if (params.minRating != null) query.set("minRating", String(params.minRating));
   if (params.inStock) query.set("inStock", "true");
+  if (params.onSale) query.set("onSale", "true");
+  if (params.customizable) query.set("customizable", "true");
+  if (params.type) query.set("type", params.type);
+  if (params.facets) query.set("facets", "true");
   if (params.sort) query.set("sort", params.sort);
   if (params.page) query.set("page", String(params.page));
   if (params.pageSize) query.set("pageSize", String(params.pageSize));
@@ -191,6 +229,39 @@ export async function fetchProducts(params: ProductListParams = {}) {
     };
   }
   return { ...result.data, error: null as string | null };
+}
+
+/* ── Recommendations ───────────────────────────────────────────────────── */
+
+async function fetchProductList(path: string) {
+  const result = await apiRequest<{ products: ProductCard[]; personalized?: boolean }>("GET", path, {
+    skipRefresh: true,
+  });
+  return {
+    products: result.data?.products ?? [],
+    personalized: Boolean(result.data?.personalized),
+  };
+}
+
+/** Product page "You may also like": bought/viewed together and similar items. */
+export function fetchSimilarProducts(productId: string, limit = 8) {
+  return fetchProductList(`/api/recommendations/similar/${encodeURIComponent(productId)}?limit=${limit}`);
+}
+
+/** Cart page suggestions that go with what's in the cart. */
+export function fetchCartRecommendations(limit = 8) {
+  return fetchProductList(`/api/recommendations/cart?limit=${limit}`);
+}
+
+/** Home page "Recommended for you" (trending when there's no history yet). */
+export function fetchRecommendedForYou(limit = 12) {
+  return fetchProductList(`/api/recommendations/for-you?limit=${limit}`);
+}
+
+/** Searches other buyers ran this week, for the empty search box. */
+export async function fetchTrendingSearches() {
+  const result = await apiRequest<{ terms: string[] }>("GET", "/api/search/trending", { skipRefresh: true });
+  return result.data?.terms ?? [];
 }
 
 export async function fetchProductBySlug(slug: string) {

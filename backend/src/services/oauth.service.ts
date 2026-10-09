@@ -11,6 +11,9 @@ export type OAuthProfile = {
   emailVerified: boolean;
 };
 
+/** Provider calls happen inside the login redirect; never let one hang it. */
+const PROVIDER_TIMEOUT_MS = 8000;
+
 export function isGoogleOAuthConfigured() {
   return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 }
@@ -83,6 +86,7 @@ export async function exchangeGoogleCode(code: string): Promise<OAuthProfile> {
       redirect_uri: `${backendPublicUrl()}/api/auth/google/callback`,
       grant_type: "authorization_code",
     }),
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
   });
 
   if (!tokenRes.ok) {
@@ -96,6 +100,7 @@ export async function exchangeGoogleCode(code: string): Promise<OAuthProfile> {
 
   const profileRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
     headers: { Authorization: `Bearer ${tokenJson.access_token}` },
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
   });
   if (!profileRes.ok) {
     throw new Error("Failed to load Google profile");
@@ -132,7 +137,9 @@ export async function exchangeFacebookCode(code: string): Promise<OAuthProfile> 
     redirect_uri: `${backendPublicUrl()}/api/auth/facebook/callback`,
     code,
   });
-  const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?${tokenParams}`);
+  const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?${tokenParams}`, {
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+  });
   if (!tokenRes.ok) {
     throw new Error("Failed to exchange Facebook authorization code");
   }
@@ -146,7 +153,9 @@ export async function exchangeFacebookCode(code: string): Promise<OAuthProfile> 
     fields: "id,name,email",
     access_token: tokenJson.access_token,
   });
-  const profileRes = await fetch(`https://graph.facebook.com/v19.0/me?${profileParams}`);
+  const profileRes = await fetch(`https://graph.facebook.com/v19.0/me?${profileParams}`, {
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+  });
   if (!profileRes.ok) {
     throw new Error("Failed to load Facebook profile");
   }

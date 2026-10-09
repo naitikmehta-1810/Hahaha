@@ -25,6 +25,7 @@ import { startAbandonedCartJob } from "./jobs/find-abandoned-carts.js";
 import { startMaintenanceCleanupJob } from "./jobs/maintenance-cleanup.js";
 import { startCartPriceDropJob } from "./jobs/cart-price-drop.js";
 import { startRecentlyViewedDigestJob } from "./jobs/recently-viewed-digest.js";
+import { startProductStatsJob } from "./jobs/product-stats.js";
 import { startInvoiceWorker } from "./jobs/generate-invoice.js";
 import { errorHandler, notFound } from "./middleware/error-handler.js";
 import { asyncHandler } from "./middleware/async-handler.js";
@@ -35,6 +36,7 @@ import analyticsRouter from "./routes/analytics.js";
 import searchRouter from "./routes/search.js";
 import accountRouter from "./routes/account.js";
 import siteMediaRouter from "./routes/site-media.js";
+import recommendationsRouter from "./routes/recommendations.js";
 
 if (env.SENTRY_DSN) {
   Sentry.init({
@@ -49,6 +51,7 @@ const app = express();
 if (env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
+app.disable("x-powered-by");
 
 app.use(
   helmet({
@@ -84,6 +87,8 @@ app.use(
       callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true,
+    // Lets browsers skip the preflight for 10 minutes per endpoint.
+    maxAge: 600,
   })
 );
 app.use(cookieParser());
@@ -97,14 +102,36 @@ app.post(
   }
 );
 
-app.use(express.json({ limit: "12mb" }));
-app.use(express.urlencoded({ extended: true, limit: "12mb" }));
+/**
+ * Image uploads arrive as base64 JSON and a Shopify CSV can be 8 MB, so those
+ * routes get a large body limit. Everything else stays small, so no endpoint
+ * can be made to buffer and parse megabytes of JSON for nothing.
+ */
+const LARGE_BODY_ROUTES = [
+  /^\/api\/auth\/me\/avatar$/,
+  /^\/api\/seller\/uploads$/,
+  /^\/api\/seller\/import\/shopify\/preview$/,
+  /^\/api\/admin\/categories\/[^/]+\/image$/,
+  /^\/api\/admin\/site-media\/[^/]+$/,
+];
+const largeJson = express.json({ limit: "12mb" });
+const smallJson = express.json({ limit: "1mb" });
+app.use((req, res, next) => {
+  const parser = LARGE_BODY_ROUTES.some((route) => route.test(req.path)) ? largeJson : smallJson;
+  parser(req, res, next);
+});
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 app.get("/", (_req, res) => {
   res.json({ ok: true, service: "stuffsy-backend" });
 });
 
 app.get("/api/health", async (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  if (shuttingDown) {
+    res.status(503).json({ ok: false, shuttingDown: true });
+    return;
+  }
   const checks: { database: "ok" | "error"; redis: "ok" | "error" | "skipped" } = {
     database: "error",
     redis: "skipped",
@@ -155,8 +182,11 @@ app.use("/api/analytics", analyticsRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/account", accountRouter);
 app.use("/api/site-media", siteMediaRouter);
+app.use("/api/recommendations", recommendationsRouter);
 app.use(notFound);
 app.use(errorHandler);
+
+let shuttingDown = false;
 
 async function warmPool() {
   try {
@@ -169,7 +199,7 @@ async function warmPool() {
     void pool.query("select 1").catch((err) => {
       logger.error({ err }, "database heartbeat failed");
     });
-  }, 60_000);
+  }, 60_000).unref();
 }
 
 async function start() {
@@ -193,6 +223,7 @@ async function start() {
       startMaintenanceCleanupJob,
       startCartPriceDropJob,
       startRecentlyViewedDigestJob,
+      startProductStatsJob,
     ].forEach((startJob, index) => {
       setTimeout(() => {
         void startJob().catch((error) => logger.error({ err: error }, "background job failed to start"));
@@ -206,6 +237,41 @@ async function start() {
     void warmPool();
   });
 
+  // Render's proxy keeps connections open ~60 s; the server must outlast it or
+  // requests intermittently fail with 502 when a reused socket was just closed.
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
+  // A request that hasn't finished after this is stuck; free the socket.
+  server.requestTimeout = 120_000;
+
+  /**
+   * Render sends SIGTERM on every deploy. Stop taking new connections, let
+   * in-flight requests (a checkout mid-transaction) finish, then close the
+   * pool. Forced exit after 25 s so a stuck request can't block the deploy.
+   */
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info({ signal }, "shutting down");
+    const force = setTimeout(() => {
+      logger.warn("forced exit after shutdown timeout");
+      process.exit(1);
+    }, 25_000);
+    force.unref();
+    server.close(() => {
+      void pool
+        .end()
+        .catch(() => {})
+        .finally(async () => {
+          if (env.SENTRY_DSN) await Sentry.flush(2000).catch(() => false);
+          process.exit(0);
+        });
+    });
+    server.closeIdleConnections?.();
+  };
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE") {
       logger.error(
@@ -217,5 +283,10 @@ async function start() {
     throw error;
   });
 }
+
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "unhandled promise rejection");
+  if (env.SENTRY_DSN) Sentry.captureException(reason);
+});
 
 void start();

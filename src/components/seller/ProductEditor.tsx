@@ -313,6 +313,11 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       setError("Enter a price greater than ₹0.");
       return;
     }
+    // The API caps listing prices at ₹1 crore.
+    if (Number(form.price) > 10_000_000 || Number(form.compareAtPrice || 0) > 10_000_000) {
+      setError("Prices can be at most ₹1,00,00,000.");
+      return;
+    }
     const compareAt = parseOptionalNumber(form.compareAtPrice);
     if (compareAt != null && compareAt <= Number(form.price)) {
       setError("Compare-at price is the original price, so it must be higher than the price. Leave it blank if there's no discount.");

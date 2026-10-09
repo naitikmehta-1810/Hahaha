@@ -15,6 +15,9 @@ import { resolveViewerRegion } from "../services/viewer-region.service.js";
 import { normalizePincode, resolvePincode, sameState } from "../services/pincode.service.js";
 import { quoteProductDelivery } from "../services/shipping-quote.service.js";
 import { shippingQuoteLimiter } from "../middleware/auth-rate-limit.js";
+import { recordSearch } from "../services/product-stats.service.js";
+import { normalizeQuery } from "../services/search-query.js";
+import { analyticsVisitorId } from "./analytics.js";
 
 const productsRouter = Router();
 
@@ -23,23 +26,64 @@ productsRouter.use(publicReadLimiter);
 /** Comma-separated query values, e.g. ?tags=macrame,handmade */
 const csv = z
   .string()
+  .max(1000)
   .transform((value) => value.split(",").map((part) => part.trim()).filter(Boolean));
 
+/** Comma-separated product ids; malformed ones are dropped rather than reaching a ::uuid[] cast. */
+const uuidCsv = csv.transform((values) =>
+  values.filter((value) => z.string().uuid().safeParse(value).success).slice(0, 50)
+);
+
+const slugParam = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .regex(/^[a-z0-9][a-z0-9-]*$/i, "Invalid filter");
+
 const listQuerySchema = z.object({
-  category: z.string().trim().min(1).optional(),
+  category: slugParam.optional(),
   categoryId: z.string().uuid().optional(),
-  shop: z.string().trim().min(1).optional(),
-  search: z.string().trim().min(1).optional(),
-  tags: csv.optional(),
-  priceMin: z.coerce.number().nonnegative().optional(),
-  priceMax: z.coerce.number().nonnegative().optional(),
+  shop: slugParam.optional(),
+  search: z.string().trim().min(1).max(200).optional(),
+  tags: csv
+    .refine((values) => values.length <= 10, "Filter by up to 10 tags")
+    .refine((values) => values.every((tag) => tag.length <= 40), "Invalid tag")
+    .optional(),
+  priceMin: z.coerce.number().nonnegative().max(100_000_000).optional(),
+  priceMax: z.coerce.number().nonnegative().max(100_000_000).optional(),
   minRating: z.coerce.number().min(0).max(5).optional(),
   inStock: z
     .enum(["true", "false"])
     .transform((value) => value === "true")
     .optional(),
+  onSale: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
+  customizable: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
+  type: z.enum(["physical", "digital"]).optional(),
+  /** "Search instead for …": skip typo correction. */
+  exact: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
+  /** Comma-separated shop slugs. */
+  shops: csv
+    .refine((values) => values.length <= 20, "Filter by up to 20 shops")
+    .refine((values) => values.every((slug) => /^[a-z0-9][a-z0-9-]{0,119}$/i.test(slug)), "Invalid shop")
+    .optional(),
+  /** Include filter counts (the shop page sends this; widgets don't need it). */
+  facets: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
   sort: z
     .enum([
+      "relevance",
       "featured",
       "popular",
       "bestsellers",
@@ -51,7 +95,7 @@ const listQuerySchema = z.object({
       "rating",
     ])
     .optional(),
-  page: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().positive().max(500).optional(),
   pageSize: z.coerce.number().int().positive().max(60).optional(),
 });
 
@@ -71,17 +115,35 @@ productsRouter.get(
       categoryId: parsed.data.categoryId ?? null,
       shopSlug: parsed.data.shop ?? null,
       search: parsed.data.search ?? null,
+      exactSearch: parsed.data.exact ?? false,
       tags: parsed.data.tags ?? null,
       priceMin: parsed.data.priceMin ?? null,
       priceMax: parsed.data.priceMax ?? null,
       minRating: parsed.data.minRating ?? null,
       inStockOnly: parsed.data.inStock ?? false,
+      onSale: parsed.data.onSale ?? false,
+      customizable: parsed.data.customizable ?? false,
+      productType: parsed.data.type ?? null,
+      shops: parsed.data.shops ?? null,
+      includeFacets: parsed.data.facets ?? false,
       sort: parsed.data.sort as ProductSort | undefined,
       page: parsed.data.page,
       pageSize: parsed.data.pageSize,
       viewerCity: region.city,
       viewerState: region.state,
     });
+
+    // First page of a search is one search; later pages are the same one.
+    if (parsed.data.search && (parsed.data.page ?? 1) === 1) {
+      recordSearch({
+        query: parsed.data.search,
+        normalized: normalizeQuery(parsed.data.search),
+        corrected: result.search?.correctedQuery ?? null,
+        resultCount: result.total,
+        userId: req.user?.id ?? null,
+        sessionId: analyticsVisitorId(req),
+      });
+    }
 
     res.json(result);
   })
@@ -98,7 +160,7 @@ productsRouter.get(
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
-        productIds: csv.optional(),
+        productIds: uuidCsv.optional(),
         limit: z.coerce.number().int().positive().max(20).optional(),
       })
       .safeParse(req.query);
@@ -116,7 +178,7 @@ productsRouter.get(
         `select distinct category_id from public.products where id = any($1::uuid[])`,
         [productIds]
       );
-      categoryIds = categories.rows.map((row) => row.category_id);
+      categoryIds = categories.rows.map((row) => row.category_id).filter(Boolean);
     }
 
     const region = await resolveViewerRegion(req);
@@ -135,6 +197,10 @@ productsRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const productId = String(req.params.id);
+    if (!z.string().uuid().safeParse(productId).success) {
+      res.status(404).json({ message: "Product not found" });
+      return;
+    }
     const parsed = z
       .object({ variantId: z.string().uuid() })
       .safeParse(req.body);
@@ -166,6 +232,10 @@ productsRouter.get(
   asyncHandler(async (req, res) => {
     const pincode = normalizePincode(req.query.pincode);
     const slug = String(req.params.slug);
+    if (!slugParam.safeParse(slug).success) {
+      res.status(404).json({ message: "Product not found" });
+      return;
+    }
     const product = await pool.query<{
       selling_scope: string | null;
       selling_state: string | null;
@@ -234,6 +304,8 @@ productsRouter.get(
       res.status(404).json({ message: "Product not found" });
       return;
     }
+    // Lets the Vercel/CDN edge and browsers reuse the page data briefly.
+    res.setHeader("Cache-Control", "public, max-age=15, stale-while-revalidate=60");
     res.json({ product });
   })
 );

@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { inclusiveLineTotal, taxForLines } from "./gst.js";
 import type { PoolClient } from "pg";
 import Razorpay from "razorpay";
@@ -8,6 +8,7 @@ import { AppError } from "../utils/errors.js";
 import { enqueueEmailJob, enqueueWhatsAppJob } from "./notify.enqueue.js";
 import { transition } from "./order-state-machine.js";
 import { maybeEnqueueLowStockAlerts } from "./stock-notifications.service.js";
+import { logger } from "../utils/logger.js";
 
 export type PaymentStatus = "created" | "authorized" | "captured" | "failed" | "refunded";
 
@@ -38,28 +39,22 @@ function getRazorpay() {
  * Must run in the same transaction as pending_payment → paid.
  */
 export async function captureInventoryForPaidOrder(client: PoolClient, orderId: string) {
-  const items = await client.query<{ variant_id: string; quantity: number }>(
-    `select variant_id, quantity
-     from public.order_items
-     where order_id = $1 and is_backordered = false and is_digital = false
-     for update`,
-    [orderId]
-  );
-
-  for (const item of items.rows) {
-    const qty = Number(item.quantity);
-    await client.query(
-      `update public.inventory
-       set quantity_on_hand = greatest(quantity_on_hand - $1, 0),
-           quantity_reserved = greatest(quantity_reserved - $1, 0),
-           updated_at = now()
-       where variant_id = $2`,
-      [qty, item.variant_id]
-    );
-  }
-
-  return items.rows.length;
+  const { adjustInventoryForOrder } = await import("./order.service.js");
+  return adjustInventoryForOrder(client, orderId, "capture");
 }
+
+/** Constant-time comparison of two hex/base64 signatures. */
+function signaturesMatch(expected: string, provided: string) {
+  const a = Buffer.from(expected, "utf8");
+  const b = Buffer.from(provided, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * A Razorpay order is reused for retries while it still matches the order
+ * total, so repeated "Pay" clicks don't create a new gateway order each time.
+ */
+const GATEWAY_ORDER_REUSE_MS = 30 * 60 * 1000;
 
 async function loadOwnedPendingOrder(orderId: string, userId: string) {
   const result = await pool.query<{
@@ -93,6 +88,36 @@ export async function createPaymentOrder(orderId: string, userId: string) {
   const order = await loadOwnedPendingOrder(orderId, userId);
   const amount = Number(order.total_amount);
   const amountPaise = Math.round(amount * 100);
+  if (!Number.isFinite(amountPaise) || amountPaise < 100) {
+    throw new AppError(409, "ORDER_NOT_PAYABLE", "This order has nothing to pay online");
+  }
+  const keyId =
+    env.PAYMENT_MODE === "razorpay" ? (env.RAZORPAY_KEY_ID as string) : "rzp_test_stub";
+
+  const reusable = await pool.query<{ id: string; gateway_order_id: string }>(
+    `select id, gateway_order_id
+     from public.payments
+     where order_id = $1
+       and gateway = 'razorpay'
+       and status = 'created'
+       and amount = $2
+       and created_at > now() - make_interval(secs => $3)
+     order by created_at desc
+     limit 1`,
+    [order.id, amount, GATEWAY_ORDER_REUSE_MS / 1000]
+  );
+  if (reusable.rows[0]) {
+    return {
+      paymentId: reusable.rows[0].id,
+      orderId: order.id,
+      razorpayOrderId: reusable.rows[0].gateway_order_id,
+      amount: amountPaise,
+      currency: "INR" as const,
+      keyId,
+      mode: env.PAYMENT_MODE,
+    };
+  }
+
   const idempotencyKey = `pay_${order.id}_${randomUUID()}`;
 
   let gatewayOrderId: string;
@@ -135,10 +160,7 @@ export async function createPaymentOrder(orderId: string, userId: string) {
     razorpayOrderId: gatewayOrderId,
     amount: amountPaise,
     currency: "INR" as const,
-    keyId:
-      env.PAYMENT_MODE === "razorpay"
-        ? (env.RAZORPAY_KEY_ID as string)
-        : "rzp_test_stub",
+    keyId,
     mode: env.PAYMENT_MODE,
   };
 }
@@ -154,7 +176,7 @@ export function verifyPaymentSignature(
   const secret = env.RAZORPAY_KEY_SECRET!;
   const body = `${razorpayOrderId}|${razorpayPaymentId}`;
   const expected = createHmac("sha256", secret).update(body).digest("hex");
-  return expected === signature;
+  return signaturesMatch(expected, signature);
 }
 
 function verifyWebhookSignature(rawBody: Buffer, signature: string | undefined) {
@@ -167,7 +189,7 @@ function verifyWebhookSignature(rawBody: Buffer, signature: string | undefined) 
   const expected = createHmac("sha256", env.RAZORPAY_WEBHOOK_SECRET)
     .update(rawBody)
     .digest("hex");
-  return expected === signature;
+  return signaturesMatch(expected, signature);
 }
 
 type NotifyOrderSnapshot = {
@@ -395,6 +417,9 @@ async function applyCapturedPayment(opts: {
   gatewayOrderId: string;
   gatewayPaymentId: string;
   payload: unknown;
+  /** What the gateway says was captured; checked against the order before marking it paid. */
+  capturedAmountPaise?: number | null;
+  capturedCurrency?: string | null;
 }) {
   const client = await pool.connect();
   try {
@@ -438,11 +463,46 @@ async function applyCapturedPayment(opts: {
     }
 
     // Idempotent order transition — paid→paid is illegal and becomes a clean no-op path.
-    const orderLock = await client.query<{ status: string }>(
-      `select status from public.orders where id = $1 for update`,
+    const orderLock = await client.query<{ status: string; total_amount: string }>(
+      `select status, total_amount from public.orders where id = $1 for update`,
       [payment.order_id]
     );
     const orderStatus = orderLock.rows[0]?.status;
+
+    // The gateway order was created for this exact amount, so a mismatch means
+    // something is wrong (tampering, a reused gateway order). Never mark it paid.
+    const expectedPaise = Math.round(Number(orderLock.rows[0]?.total_amount ?? payment.amount) * 100);
+    const amountMismatch =
+      opts.capturedAmountPaise != null && Math.round(opts.capturedAmountPaise) !== expectedPaise;
+    const currencyMismatch =
+      opts.capturedCurrency != null && opts.capturedCurrency.toUpperCase() !== "INR";
+    if (amountMismatch || currencyMismatch) {
+      await client.query(
+        `update public.payments
+         set status = 'failed', gateway_payment_id = $1, raw_payload = $2::jsonb, updated_at = now()
+         where id = $3`,
+        [
+          opts.gatewayPaymentId,
+          JSON.stringify({
+            ...((opts.payload as object) ?? {}),
+            rejected: "amount_mismatch",
+            expectedPaise,
+          }),
+          payment.id,
+        ]
+      );
+      await client.query("commit");
+      logger.error(
+        {
+          orderId: payment.order_id,
+          expectedPaise,
+          capturedPaise: opts.capturedAmountPaise,
+          currency: opts.capturedCurrency,
+        },
+        "captured payment does not match order total; not marking paid"
+      );
+      return { handled: true as const, duplicate: false as const, orderId: payment.order_id };
+    }
 
     if (orderStatus === "pending_payment") {
       await transition(
@@ -477,9 +537,11 @@ async function applyCapturedPayment(opts: {
     } else if (orderStatus === "paid") {
       // Already paid (race / replay) — still ensure this payment row is captured if possible.
     } else {
-      // Order cancelled/expired while gateway succeeded — log; do not crash webhook.
-      console.error(
-        `[payments] captured webhook for non-payable order status=${orderStatus} order=${payment.order_id}`
+      // Order cancelled/expired while the gateway succeeded. The buyer's money
+      // is refunded after commit (refundLateCapture) instead of being kept.
+      logger.warn(
+        { orderId: payment.order_id, orderStatus },
+        "captured payment for an order that is no longer payable; refunding"
       );
     }
 
@@ -528,6 +590,8 @@ async function applyCapturedPayment(opts: {
     await client.query("commit");
     if (orderStatus === "pending_payment" || orderStatus === "paid") {
       void enqueuePostCaptureJobs(payment.order_id);
+    } else if (orderStatus === "cancelled") {
+      void refundLateCapture(payment.order_id, Number(payment.amount));
     }
     return { handled: true as const, duplicate: false as const, orderId: payment.order_id };
   } catch (error) {
@@ -535,6 +599,17 @@ async function applyCapturedPayment(opts: {
     throw error;
   } finally {
     client.release();
+  }
+}
+
+/** Money captured for an order that was already cancelled goes straight back. */
+async function refundLateCapture(orderId: string, amount: number) {
+  try {
+    await refundPayment(orderId, amount, "captured_after_cancel");
+    logger.info({ orderId, amount }, "refunded payment captured after cancellation");
+  } catch (error) {
+    // Ops can see these in the stuck/refund views; the webhook must still succeed.
+    logger.error({ err: error, orderId, amount }, "automatic refund of late capture failed");
   }
 }
 
@@ -576,7 +651,14 @@ export async function handleWebhook(rawBody: Buffer, signature: string | undefin
       return { ok: true, duplicate: true };
     }
 
-    await applyCapturedPayment({ gatewayOrderId, gatewayPaymentId, payload: event });
+    const capturedAmount = Number(entity.amount);
+    await applyCapturedPayment({
+      gatewayOrderId,
+      gatewayPaymentId,
+      payload: event,
+      capturedAmountPaise: Number.isFinite(capturedAmount) ? capturedAmount : null,
+      capturedCurrency: typeof entity.currency === "string" ? entity.currency : null,
+    });
     return { ok: true, duplicate: false };
   }
 
@@ -584,6 +666,7 @@ export async function handleWebhook(rawBody: Buffer, signature: string | undefin
     const entity = event.payload?.payment?.entity ?? {};
     const gatewayPaymentId = String(entity.id ?? "");
     const gatewayOrderId = String(entity.order_id ?? "");
+    if (!gatewayOrderId) return { ok: true, ignored: true };
     const payment = await pool.query<{ id: string }>(
       `select id from public.payments
        where gateway_order_id = $1
@@ -742,6 +825,9 @@ export async function stubCapturePayment(opts: {
 }
 
 export async function refundPayment(orderId: string, amount: number, reason: string) {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new AppError(400, "INVALID_REFUND_AMOUNT", "Refund amount must be positive");
+  }
   const payment = await pool.query<{
     id: string;
     gateway: string;
@@ -763,6 +849,10 @@ export async function refundPayment(orderId: string, amount: number, reason: str
   }
   if (row.gateway !== "cod" && !row.gateway_payment_id) {
     throw new AppError(409, "NO_CAPTURED_PAYMENT", "No captured payment to refund");
+  }
+
+  if (amount > Number(row.amount) + 0.005) {
+    throw new AppError(400, "REFUND_EXCEEDS_PAYMENT", "Refund can't be more than what was paid");
   }
 
   const already = await pool.query(

@@ -3,7 +3,7 @@ import type { PoolClient } from "pg";
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/errors.js";
-import { cacheGetJson, cacheSetJson } from "./catalog-cache.js";
+import { cached } from "./catalog-cache.js";
 import { goodsValueInclGst } from "./gst.js";
 import { buildParcel } from "./parcel.js";
 import { getServiceableCouriers, type ServiceableCourier } from "./shiprocket.client.js";
@@ -181,9 +181,25 @@ async function liveRates(opts: {
       )
       .digest("hex");
 
-  const cached = await cacheGetJson<CachedRates>(key);
-  if (cached) return cached;
+  // Coalesced: a burst of checkouts for the same route makes one Shiprocket call.
+  return cached<CachedRates>(key, env.SHIPPING_QUOTE_CACHE_SECONDS, () => fetchRates(opts, declaredBucket), {
+    versioned: false,
+    ttlFor: (rates) => (rates.serviceable ? env.SHIPPING_QUOTE_CACHE_SECONDS : UNSERVICEABLE_CACHE_SECONDS),
+  });
+}
 
+async function fetchRates(
+  opts: {
+    pickupPincode: string;
+    deliveryPincode: string;
+    weight: number;
+    length: number;
+    breadth: number;
+    height: number;
+    cod: boolean;
+  },
+  declaredBucket: number
+): Promise<CachedRates> {
   let result: CachedRates;
   try {
     const response = await getServiceableCouriers({
@@ -210,12 +226,6 @@ async function liveRates(opts: {
     if (!isUnserviceableError(error)) throw error;
     result = { serviceable: false };
   }
-
-  await cacheSetJson(
-    key,
-    result,
-    result.serviceable ? env.SHIPPING_QUOTE_CACHE_SECONDS : UNSERVICEABLE_CACHE_SECONDS
-  );
   return result;
 }
 

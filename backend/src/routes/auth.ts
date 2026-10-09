@@ -2,18 +2,26 @@ import type { CookieOptions, Request, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
 import { env } from "../config/env.js";
+import type { UserRole } from "../types.js";
 import { asyncHandler } from "../middleware/async-handler.js";
-import { authWriteLimiter } from "../middleware/auth-rate-limit.js";
+import {
+  accountSecurityLimiter,
+  authEdgeLimiter,
+  authEmailLimiter,
+  authTokenLimiter,
+  loginAccountLimiter,
+  loginLimiter,
+  signupLimiter,
+} from "../middleware/auth-rate-limit.js";
 import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
-import { comparePassword } from "../utils/password.js";
 import { REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from "../utils/cookies.js";
 import { baseCookieOptions } from "../utils/cookie-options.js";
 import {
+  authenticateWithPassword,
   confirmEmailVerification,
   createEmailVerificationToken,
   createUser,
   findOrCreateOAuthUser,
-  findUserByEmailForLogin,
   findUserById,
   issueAuthTokens,
   requestEmailVerification,
@@ -35,23 +43,44 @@ import {
   type OAuthProvider,
 } from "../services/oauth.service.js";
 import { mergeGuestCartFromRequest } from "../services/cart.service.js";
+import { AppError } from "../utils/errors.js";
+import { logger } from "../utils/logger.js";
+import {
+  emailSchema,
+  httpsUrlSchema,
+  indianMobileSchema,
+  loginEmailSchema,
+  loginPasswordSchema,
+  newPasswordSchema,
+  passwordResemblesIdentity,
+  personNameSchema,
+  undeliverableEmailReason,
+} from "../utils/validation.js";
 
 const authRouter = Router();
 
 const signupSchema = z.object({
-  fullName: z.string().trim().min(2, "Full name is required"),
-  email: z.string().trim().email("Valid email is required"),
-  phoneNumber: z.string().trim().min(8, "Phone number is required"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  confirmPassword: z.string().min(8, "Confirm your password"),
-  termsAccepted: z.boolean().refine((value) => value, "Terms acceptance is required"),
+  fullName: personNameSchema,
+  email: emailSchema,
+  phoneNumber: indianMobileSchema,
+  password: newPasswordSchema,
+  confirmPassword: z
+    .string({ required_error: "Confirm your password" })
+    .min(1, "Confirm your password")
+    .max(256),
+  termsAccepted: z.literal(true, {
+    errorMap: () => ({ message: "Accept the terms to create an account" }),
+  }),
 });
 
 const loginSchema = z.object({
-  email: z.string().trim().email("Valid email is required"),
-  password: z.string().min(1, "Password is required"),
+  email: loginEmailSchema,
+  password: loginPasswordSchema,
   rememberMe: z.boolean().optional().default(false),
 });
+
+/** Opaque tokens from emails: base64url, with a generous upper bound. */
+const emailTokenSchema = z.string().trim().min(16).max(200);
 
 const OAUTH_STATE_COOKIE = "oauth_state";
 const OAUTH_NEXT_COOKIE = "oauth_next";
@@ -76,10 +105,30 @@ function authResponseBody(
 }
 
 function safeNextPath(raw: unknown) {
-  if (typeof raw !== "string" || !raw.startsWith("/") || raw.startsWith("//")) {
+  if (
+    typeof raw !== "string" ||
+    raw.length > 500 ||
+    !raw.startsWith("/") ||
+    raw.startsWith("//") ||
+    // Browsers read "/\evil.com" as "//evil.com"; control characters can smuggle one in.
+    // eslint-disable-next-line no-control-regex
+    /[\\\u0000-\u001f]/.test(raw)
+  ) {
     return "/account";
   }
   return raw;
+}
+
+/**
+ * Folding a guest cart into the account is a convenience: if it fails, the
+ * user must still be signed in, and the guest cart is left for next time.
+ */
+async function mergeGuestCartSafely(req: Request, res: Response, userId: string) {
+  try {
+    await mergeGuestCartFromRequest(req, res, userId);
+  } catch (error) {
+    logger.warn({ err: error, userId }, "guest cart merge failed after sign-in");
+  }
 }
 
 function beginOAuth(provider: OAuthProvider, req: Request, res: Response) {
@@ -119,7 +168,13 @@ async function finishOAuth(
   res.clearCookie(OAUTH_STATE_COOKIE, oauthCookieOptions());
   res.clearCookie(OAUTH_NEXT_COOKIE, oauthCookieOptions());
 
-  if (!code || !state || !expectedHash || hashOAuthState(state) !== expectedHash) {
+  if (
+    !code ||
+    code.length > 2048 ||
+    !state ||
+    !expectedHash ||
+    hashOAuthState(state) !== expectedHash
+  ) {
     res.redirect(`${env.FRONTEND_URL}/login?error=oauth_state`);
     return;
   }
@@ -127,12 +182,16 @@ async function finishOAuth(
   try {
     const profile = await exchange(code);
     const user = await findOrCreateOAuthUser(profile);
-    const tokens = await issueAuthTokens(user, true);
+    const tokens = await issueAuthTokens(user, true, user.role as UserRole);
     setAuthCookies(res, tokens, true);
-    await mergeGuestCartFromRequest(req, res, user.id);
+    await mergeGuestCartSafely(req, res, user.id);
     res.redirect(`${env.FRONTEND_URL}${next}`);
   } catch (error) {
-    console.error(`[auth] ${provider} oauth failed`, error);
+    if (error instanceof AppError) {
+      logger.info({ provider, code: error.code }, "oauth sign-in refused");
+    } else {
+      logger.error({ err: error, provider }, "oauth sign-in failed");
+    }
     res.redirect(`${env.FRONTEND_URL}/login?error=oauth_${provider}`);
   }
 }
@@ -165,7 +224,8 @@ authRouter.get(
 
 authRouter.post(
   "/signup",
-  authWriteLimiter,
+  authEdgeLimiter,
+  signupLimiter,
   asyncHandler(async (req, res) => {
     const parsed = signupSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -178,18 +238,28 @@ authRouter.post(
       res.status(400).json({ message: "Passwords do not match" });
       return;
     }
+    if (passwordResemblesIdentity(password, email, fullName)) {
+      res.status(400).json({ message: "Your password can't contain your name or email" });
+      return;
+    }
+
+    const emailProblem = await undeliverableEmailReason(email);
+    if (emailProblem) {
+      res.status(400).json({ code: "EMAIL_UNDELIVERABLE", message: emailProblem });
+      return;
+    }
 
     const user = await createUser({ fullName, email, phoneNumber, password });
     const verificationToken = await createEmailVerificationToken(user.id);
     try {
       await sendVerificationEmailForUser(user.email, verificationToken);
     } catch (error) {
-      console.error("[auth] verification email failed after signup", error);
+      logger.error({ err: error }, "verification email failed after signup");
     }
 
-    const tokens = await issueAuthTokens(user, true);
+    const tokens = await issueAuthTokens(user, true, "customer");
     setAuthCookies(res, tokens, true);
-    await mergeGuestCartFromRequest(req, res, user.id);
+    await mergeGuestCartSafely(req, res, user.id);
 
     res.status(201).json(authResponseBody("Account created successfully", user, tokens.accessToken));
   })
@@ -197,7 +267,9 @@ authRouter.post(
 
 authRouter.post(
   "/login",
-  authWriteLimiter,
+  authEdgeLimiter,
+  loginLimiter,
+  loginAccountLimiter,
   asyncHandler(async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -206,32 +278,18 @@ authRouter.post(
     }
 
     const { email, password, rememberMe } = parsed.data;
-    const user = await findUserByEmailForLogin(email);
-
+    // One answer for an unknown email and a wrong password: no account enumeration.
+    const user = await authenticateWithPassword(email, password);
     if (!user) {
-      res.status(401).json({ message: "Invalid email or password" });
+      res.status(401).json({ code: "INVALID_CREDENTIALS", message: "Invalid email or password" });
       return;
     }
 
-    if (!user.password_hash) {
-      res.status(401).json({
-        message: "This account uses Google or Facebook sign-in. Continue with that provider.",
-      });
-      return;
-    }
-
-    const isValidPassword = await comparePassword(password, user.password_hash);
-    if (!isValidPassword) {
-      res.status(401).json({ message: "Invalid email or password" });
-      return;
-    }
-
-    const publicUser = await findUserById(user.id);
-    const tokens = await issueAuthTokens(user, rememberMe);
+    const tokens = await issueAuthTokens(user, rememberMe, user.role as UserRole);
     setAuthCookies(res, tokens, rememberMe);
-    await mergeGuestCartFromRequest(req, res, user.id);
+    await mergeGuestCartSafely(req, res, user.id);
 
-    res.status(200).json(authResponseBody("Login successful", publicUser, tokens.accessToken));
+    res.status(200).json(authResponseBody("Login successful", user, tokens.accessToken));
   })
 );
 
@@ -244,7 +302,7 @@ authRouter.post(
       return;
     }
 
-    const rememberMe = Boolean(req.body?.rememberMe);
+    const rememberMe = req.body?.rememberMe === true;
     const rotated = await rotateRefreshToken(raw, rememberMe);
     if (!rotated) {
       clearAuthCookies(res);
@@ -277,6 +335,7 @@ authRouter.get(
   "/me",
   optionalAuth,
   asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
     // Guests get 200 + user:null so the session probe is not a "failed" request in DevTools.
     if (!req.user?.id) {
       res.json({ user: null });
@@ -284,7 +343,7 @@ authRouter.get(
     }
 
     const user = await findUserById(req.user.id);
-    if (!user) {
+    if (!user || user.status === "blocked") {
       res.json({ user: null });
       return;
     }
@@ -299,15 +358,16 @@ authRouter.patch(
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
-        fullName: z.string().trim().min(2).max(120).optional(),
-        phoneNumber: z.string().trim().min(8).max(20).nullable().optional(),
+        fullName: personNameSchema.optional(),
+        // Normalized and validated as an Indian mobile number by updateUserProfile.
+        phoneNumber: z.string().trim().max(20).nullable().optional(),
         dateOfBirth: z
           .string()
           .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date of birth")
           .nullable()
           .optional(),
         gender: z.enum(["female", "male", "other", "prefer_not_to_say"]).nullable().optional(),
-        avatarUrl: z.string().url().nullable().optional(),
+        avatarUrl: httpsUrlSchema.nullable().optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) {
@@ -331,6 +391,10 @@ authRouter.patch(
         res.status(400).json({ message: "Date of birth cannot be in the future" });
         return;
       }
+      if (born.getUTCFullYear() < 1900) {
+        res.status(400).json({ message: "Use a valid date of birth" });
+        return;
+      }
     }
     const user = await updateUserProfile(req.user!.id, parsed.data);
     res.json({ user });
@@ -340,10 +404,20 @@ authRouter.patch(
 authRouter.post(
   "/me/avatar",
   requireAuth,
+  accountSecurityLimiter,
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
-        dataBase64: z.string().min(32).max(6_000_000),
+        dataBase64: z
+          .string()
+          .min(32)
+          .max(6_000_000, "Choose an image smaller than 4 MB")
+          .refine(
+            (value) =>
+              !value.startsWith("data:") ||
+              /^data:image\/(png|jpe?g|webp|gif|heic|heif);base64,/i.test(value),
+            "Choose a PNG, JPG, WebP or GIF image"
+          ),
         fileName: z.string().trim().min(1).max(120).default("avatar.jpg"),
       })
       .safeParse(req.body);
@@ -367,15 +441,20 @@ authRouter.post(
 authRouter.post(
   "/me/password",
   requireAuth,
+  accountSecurityLimiter,
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
-        currentPassword: z.string().min(1, "Enter your current password"),
-        newPassword: z.string().min(8, "New password must be at least 8 characters").max(72),
+        currentPassword: z.string().min(1, "Enter your current password").max(256),
+        newPassword: newPasswordSchema,
       })
       .safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid password" });
+      return;
+    }
+    if (passwordResemblesIdentity(parsed.data.newPassword, req.user!.email)) {
+      res.status(400).json({ message: "Your password can't contain your email" });
       return;
     }
     const account = await changePassword(
@@ -394,10 +473,10 @@ authRouter.post(
 
 authRouter.post(
   "/verify-email/request",
-  authWriteLimiter,
+  authEmailLimiter,
   optionalAuth,
   asyncHandler(async (req, res) => {
-    const emailFromBody = z.string().trim().email().safeParse(req.body?.email);
+    const emailFromBody = loginEmailSchema.safeParse(req.body?.email);
     const email = req.user?.email ?? (emailFromBody.success ? emailFromBody.data : undefined);
 
     let result: Awaited<ReturnType<typeof requestEmailVerification>> | null = null;
@@ -405,7 +484,7 @@ authRouter.post(
       try {
         result = await requestEmailVerification(email);
       } catch (error) {
-        console.error("[auth] verification email failed", error);
+        logger.error({ err: error }, "verification email failed");
         if (req.user) {
           res.status(502).json({ message: "Could not send the email. Please try again shortly." });
           return;
@@ -433,8 +512,9 @@ authRouter.post(
 
 authRouter.post(
   "/verify-email/confirm",
+  authTokenLimiter,
   asyncHandler(async (req, res) => {
-    const parsed = z.object({ token: z.string().min(1) }).safeParse(req.body);
+    const parsed = z.object({ token: emailTokenSchema }).safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ message: "Verification token is required" });
       return;
@@ -452,11 +532,10 @@ authRouter.post(
 
 authRouter.post(
   "/forgot-password",
-  authWriteLimiter,
+  authEdgeLimiter,
+  authEmailLimiter,
   asyncHandler(async (req, res) => {
-    const parsed = z
-      .object({ email: z.string().trim().email("Valid email is required") })
-      .safeParse(req.body);
+    const parsed = z.object({ email: loginEmailSchema }).safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request" });
       return;
@@ -465,7 +544,7 @@ authRouter.post(
     try {
       await requestPasswordReset(parsed.data.email);
     } catch (error) {
-      console.error("[auth] password reset email failed", error);
+      logger.error({ err: error }, "password reset email failed");
     }
 
     res.json({
@@ -476,13 +555,14 @@ authRouter.post(
 
 authRouter.post(
   "/reset-password",
-  authWriteLimiter,
+  authEdgeLimiter,
+  authTokenLimiter,
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({
-        token: z.string().min(1),
-        password: z.string().min(8, "Password must be at least 8 characters"),
-        confirmPassword: z.string().min(8),
+        token: emailTokenSchema,
+        password: newPasswordSchema,
+        confirmPassword: z.string().min(1).max(256),
       })
       .safeParse(req.body);
     if (!parsed.success) {

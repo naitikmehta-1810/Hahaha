@@ -10,14 +10,32 @@ import {
   unfollowShop,
 } from "../services/shop.service.js";
 import { resolveViewerRegion } from "../services/viewer-region.service.js";
+import { accountWriteLimiter, publicReadLimiter } from "../middleware/auth-rate-limit.js";
 
 const shopsRouter = Router();
 
+shopsRouter.use(publicReadLimiter);
+
+/** Shop slugs are kebab-case; anything else is a 404 without touching the database. */
+shopsRouter.param("slug", (req, res, next, value) => {
+  if (typeof value !== "string" || value.length > 120 || !/^[a-z0-9][a-z0-9-]*$/i.test(value)) {
+    res.status(404).json({ code: "SHOP_NOT_FOUND", message: "Shop not found" });
+    return;
+  }
+  next();
+});
+
 const shopProductsQuerySchema = z.object({
-  category: z.string().trim().min(1).optional(),
-  search: z.string().trim().min(1).optional(),
-  priceMin: z.coerce.number().nonnegative().optional(),
-  priceMax: z.coerce.number().nonnegative().optional(),
+  category: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .regex(/^[a-z0-9][a-z0-9-]*$/i, "Invalid category")
+    .optional(),
+  search: z.string().trim().min(1).max(200).optional(),
+  priceMin: z.coerce.number().nonnegative().max(100_000_000).optional(),
+  priceMax: z.coerce.number().nonnegative().max(100_000_000).optional(),
   minRating: z.coerce.number().min(0).max(5).optional(),
   inStock: z
     .enum(["true", "false"])
@@ -36,7 +54,7 @@ const shopProductsQuerySchema = z.object({
       "rating",
     ])
     .optional(),
-  page: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().positive().max(500).optional(),
   pageSize: z.coerce.number().int().positive().max(60).optional(),
 });
 
@@ -47,6 +65,7 @@ shopsRouter.get(
     const shop = await getShopBySlug(String(req.params.slug), req.user?.id ?? null);
     // Sidebar "Shop Categories" counts are the same tree, scoped to this seller.
     const categories = await getCategoryTree(shop.id);
+    res.setHeader("Cache-Control", "private, no-store");
     res.json({ shop, categories });
   })
 );
@@ -87,6 +106,7 @@ shopsRouter.get(
 shopsRouter.post(
   "/:slug/follow",
   requireAuth,
+  accountWriteLimiter,
   asyncHandler(async (req, res) => {
     const shop = await followShop(String(req.params.slug), req.user!.id);
     res.json({ shop });
@@ -96,6 +116,7 @@ shopsRouter.post(
 shopsRouter.delete(
   "/:slug/follow",
   requireAuth,
+  accountWriteLimiter,
   asyncHandler(async (req, res) => {
     const shop = await unfollowShop(String(req.params.slug), req.user!.id);
     res.json({ shop });

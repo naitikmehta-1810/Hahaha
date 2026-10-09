@@ -77,10 +77,29 @@ export default function AdminCouponsPage() {
       setError("Choose when the coupon expires.");
       return;
     }
+    // Mirrors the API: short alphanumeric codes, percentages up to 100.
+    if (!/^[A-Za-z0-9_-]{2,40}$/.test(code.trim())) {
+      setError("Codes use 2-40 letters, numbers, - or _.");
+      return;
+    }
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Enter a discount greater than 0.");
+      return;
+    }
+    if (type === "percentage" && amount > 100) {
+      setError("A percentage discount can't be more than 100.");
+      return;
+    }
+    if (new Date(expiresAt).getTime() <= Date.now()) {
+      setError("The expiry must be in the future.");
+      return;
+    }
+    setError(null);
     setSaving(true);
     setNotice(null);
     const body = {
-      code,
+      code: code.trim().toUpperCase(),
       type,
       value: Number(value),
       expiresAt: new Date(expiresAt).toISOString(),
@@ -157,8 +176,10 @@ export default function AdminCouponsPage() {
             <span>Code</span>
             <input
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
               placeholder="WELCOME10"
+              maxLength={40}
+              pattern="[A-Za-z0-9_-]{2,40}"
               required
             />
           </label>

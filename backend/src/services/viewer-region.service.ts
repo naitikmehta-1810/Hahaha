@@ -1,5 +1,6 @@
 import type { Request } from "express";
 import { pool } from "../config/db.js";
+import { clientIp as trustedClientIp } from "../middleware/auth-rate-limit.js";
 
 export type ViewerRegion = {
   city: string | null;
@@ -23,19 +24,34 @@ function isBot(userAgent: string) {
   return /bot|crawl|spider|slurp|facebookexternalhit|preview|headless/i.test(userAgent);
 }
 
-function clientIp(req: Request) {
-  const forwarded = req.get("x-forwarded-for");
-  const raw = (forwarded?.split(",")[0] ?? req.ip ?? "").trim();
-  return raw.replace(/^::ffff:/, "");
-}
-
 function isPublicIp(ip: string) {
   if (!ip || ip === "::1" || ip === "127.0.0.1") return false;
-  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(ip)) return false;
+  if (/^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(ip)) return false;
+  if (/^(fc|fd|fe80)/i.test(ip)) return false;
   return true;
 }
 
+/**
+ * The buyer's saved-address region, remembered briefly per user: every
+ * catalog request resolves the viewer's region, and the address rarely changes.
+ */
+const addressRegionCache = new Map<string, { region: ViewerRegion | null; at: number }>();
+const ADDRESS_REGION_TTL_MS = 2 * 60 * 1000;
+const ADDRESS_REGION_MAX = 5000;
+
 async function regionFromAddress(userId: string): Promise<ViewerRegion | null> {
+  const hit = addressRegionCache.get(userId);
+  if (hit && Date.now() - hit.at < ADDRESS_REGION_TTL_MS) return hit.region;
+  const region = await loadRegionFromAddress(userId);
+  if (addressRegionCache.size >= ADDRESS_REGION_MAX && !addressRegionCache.has(userId)) {
+    const oldest = addressRegionCache.keys().next().value;
+    if (oldest) addressRegionCache.delete(oldest);
+  }
+  addressRegionCache.set(userId, { region, at: Date.now() });
+  return region;
+}
+
+async function loadRegionFromAddress(userId: string): Promise<ViewerRegion | null> {
   const row = await pool.query<{ city: string; state: string }>(
     `select city, state
      from public.addresses
@@ -101,7 +117,9 @@ export async function resolveViewerRegion(req: Request): Promise<ViewerRegion> {
     if (fromAddress) return fromAddress;
   }
 
-  const ip = clientIp(req);
+  // Same trusted-proxy chain as rate limiting; a raw X-Forwarded-For is
+  // client-controlled and would let anyone burn geo lookups with random IPs.
+  const ip = trustedClientIp(req) ?? "";
   if (!isPublicIp(ip)) return { city: null, state: null, source: "none" };
   const fromIp = await regionFromIp(ip);
   return fromIp ?? { city: null, state: null, source: "none" };

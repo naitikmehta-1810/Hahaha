@@ -22,6 +22,8 @@ export const RETENTION = {
   anyNotificationDays: 180,
   /** Back-in-stock waitlist rows once the buyer has been told. */
   notifiedStockWaitDays: 30,
+  /** Search log rows; reports look back at most 90 days. */
+  searchQueryDays: 180,
 } as const;
 
 const BATCH_SIZE = 1000;
@@ -116,6 +118,19 @@ function cleanStockNotifications() {
   );
 }
 
+function cleanSearchQueries() {
+  return deleteInBatches(
+    "search_queries",
+    `delete from public.search_queries
+     where id in (
+       select id from public.search_queries
+       where created_at < now() - make_interval(days => $1)
+       limit $2
+     )`,
+    [RETENTION.searchQueryDays]
+  );
+}
+
 /**
  * Runs every cleanup. A failure in one does not stop the others; it is
  * reported in the result and logged by the caller.
@@ -127,6 +142,7 @@ export async function runMaintenanceCleanup(): Promise<CleanupResult[]> {
     ["verification_tokens", cleanVerificationTokens],
     ["user_notifications", cleanUserNotifications],
     ["stock_notifications", cleanStockNotifications],
+    ["search_queries", cleanSearchQueries],
   ];
   const results: CleanupResult[] = [];
   for (const [label, task] of tasks) {

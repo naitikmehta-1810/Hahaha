@@ -197,6 +197,12 @@
   color: var(--color-text-main);
 }
 
+.fieldHint {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
 .inputWrap {
   position: relative;
 }

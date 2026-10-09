@@ -37,6 +37,16 @@ import {
   productVideoUrl,
   signDirectUpload,
 } from "../services/media.service.js";
+import {
+  httpsUrlSchema,
+  indianMobileSchema,
+  pagination,
+  pincodeSchema,
+  socialHandleOrUrlSchema,
+} from "../utils/validation.js";
+
+/** Highest price a listing can carry; also keeps numeric(12,2) columns from overflowing. */
+const MAX_PRICE = 10_000_000;
 
 const sellerRouter = Router();
 
@@ -95,10 +105,15 @@ async function uniqueShopSlug(base: string, ownSellerId?: string) {
 
 const onboardingSchema = z
   .object({
-    shopName: z.string().trim().min(2).max(50),
-    contactPhone: z.string().trim().min(6).max(20),
-    phoneCountryCode: z.string().trim().min(1).max(8).default("+91"),
-    categories: z.array(z.string().trim().min(1)).min(1).max(20),
+    shopName: z
+      .string()
+      .trim()
+      .min(2)
+      .max(50)
+      .regex(/[\p{L}\p{N}]/u, "Shop name needs at least one letter or number"),
+    contactPhone: indianMobileSchema,
+    phoneCountryCode: z.string().trim().regex(/^\+\d{1,4}$/).default("+91"),
+    categories: z.array(z.string().trim().min(1).max(80)).min(1).max(20),
     termsAccepted: z.literal(true),
     businessRegistered: z.boolean(),
     gstin: z.string().trim().max(20).optional(),
@@ -322,12 +337,18 @@ sellerRouter.get(
 );
 
 const shopUpdateSchema = z.object({
-  shopName: z.string().trim().min(2).max(50).optional(),
+  shopName: z
+    .string()
+    .trim()
+    .min(2)
+    .max(50)
+    .regex(/[\p{L}\p{N}]/u, "Shop name needs at least one letter or number")
+    .optional(),
   tagline: z.string().trim().max(80).optional().nullable(),
   description: z.string().trim().max(500).optional().nullable(),
-  contactEmail: z.string().trim().email().max(120).optional().nullable(),
-  contactPhone: z.string().trim().min(6).max(20).optional(),
-  phoneCountryCode: z.string().trim().min(1).max(8).optional(),
+  contactEmail: z.string().trim().toLowerCase().email().max(120).optional().nullable(),
+  contactPhone: indianMobileSchema.optional(),
+  phoneCountryCode: z.string().trim().regex(/^\+\d{1,4}$/).optional(),
   businessAddress: z.string().trim().max(500).optional().nullable(),
   gstin: z.string().trim().min(15).max(20).optional(),
   pickupAddress: z
@@ -346,21 +367,23 @@ const shopUpdateSchema = z.object({
       address2: z.string().trim().max(190).optional().nullable(),
       city: z.string().trim().min(2).max(80),
       state: z.string().trim().min(2).max(80),
-      pincode: z.string().trim().regex(/^\d{6}$/, "Pincode must be 6 digits"),
+      pincode: pincodeSchema,
       country: z.string().trim().optional(),
     })
     .optional()
     .nullable(),
+  // Rendered as links on the storefront: https or a bare handle, never javascript:.
   socialLinks: z
     .object({
-      instagram: z.string().optional(),
-      facebook: z.string().optional(),
-      pinterest: z.string().optional(),
+      instagram: socialHandleOrUrlSchema.optional(),
+      facebook: socialHandleOrUrlSchema.optional(),
+      pinterest: socialHandleOrUrlSchema.optional(),
     })
+    .strict()
     .optional()
     .nullable(),
-  logoUrl: z.string().trim().max(500).optional().nullable(),
-  bannerUrl: z.string().trim().max(500).optional().nullable(),
+  logoUrl: z.union([httpsUrlSchema, z.literal("")]).optional().nullable(),
+  bannerUrl: z.union([httpsUrlSchema, z.literal("")]).optional().nullable(),
   seoTitle: z.string().trim().max(70).optional().nullable(),
   seoDescription: z.string().trim().max(160).optional().nullable(),
   isVacationMode: z.boolean().optional(),
@@ -374,10 +397,24 @@ const shopUpdateSchema = z.object({
     .nullable(),
   payoutDetails: z
     .object({
-      upiId: z.string().trim().max(120).optional(),
+      upiId: z
+        .string()
+        .trim()
+        .max(120)
+        .refine((value) => !value || /^[\w.-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$/.test(value), "Enter a valid UPI ID (name@bank)")
+        .optional(),
       accountHolderName: z.string().trim().max(120).optional(),
-      bankAccountLast4: z.string().trim().max(4).optional(),
-      ifsc: z.string().trim().max(20).optional(),
+      bankAccountLast4: z
+        .string()
+        .trim()
+        .refine((value) => !value || /^\d{4}$/.test(value), "Enter the last 4 digits of the account")
+        .optional(),
+      ifsc: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .refine((value) => !value || /^[A-Z]{4}0[A-Z0-9]{6}$/.test(value), "Enter a valid IFSC code")
+        .optional(),
     })
     .optional()
     .nullable(),
@@ -619,7 +656,8 @@ sellerRouter.get(
   asyncHandler(async (req, res) => {
     const sellerId = req.seller!.id;
 
-    const orders = await pool.query<{
+    // Seven independent aggregates: run them together instead of one by one.
+    const ordersQuery = pool.query<{
       count: string;
       paid_sales: string;
     }>(
@@ -634,7 +672,7 @@ sellerRouter.get(
       [sellerId]
     );
 
-    const recent = await pool.query<{
+    const recentQuery = pool.query<{
       id: string;
       order_number: string;
       status: string;
@@ -655,7 +693,7 @@ sellerRouter.get(
       [sellerId]
     );
 
-    const topProducts = await pool.query<{
+    const topProductsQuery = pool.query<{
       product_id: string | null;
       product_title: string;
       units: string;
@@ -674,7 +712,7 @@ sellerRouter.get(
       [sellerId]
     );
 
-    const daily = await pool.query<{ day: string; total: string }>(
+    const dailyQuery = pool.query<{ day: string; total: string }>(
       `select to_char(date_trunc('day', o.created_at), 'YYYY-MM-DD') as day,
               coalesce(sum(oi.line_total), 0)::text as total
        from public.order_items oi
@@ -687,7 +725,7 @@ sellerRouter.get(
       [sellerId]
     );
 
-    const channels = await pool.query<{ channel: string; total: string }>(
+    const channelsQuery = pool.query<{ channel: string; total: string }>(
       `select o.referrer_channel as channel,
               coalesce(sum(oi.line_total), 0)::text as total
        from public.order_items oi
@@ -697,6 +735,33 @@ sellerRouter.get(
        group by o.referrer_channel`,
       [sellerId]
     );
+
+    const visitorsQuery = pool.query<{ visitors: string }>(
+      `select count(distinct session_id)::text as visitors
+       from public.product_page_views
+       where seller_id = $1`,
+      [sellerId]
+    );
+
+    const convertingOrdersQuery = pool.query<{ c: string }>(
+      `select count(distinct o.id)::text as c
+       from public.orders o
+       join public.order_items oi on oi.order_id = o.id
+       where oi.seller_id = $1
+         and o.status in ('paid','processing','accepted','shipped','out_for_delivery','delivered')`,
+      [sellerId]
+    );
+
+    const [orders, recent, topProducts, daily, channels, visitorsRow, convertingOrders] =
+      await Promise.all([
+        ordersQuery,
+        recentQuery,
+        topProductsQuery,
+        dailyQuery,
+        channelsQuery,
+        visitorsQuery,
+        convertingOrdersQuery,
+      ]);
 
     const salesByChannel = {
       website: 0,
@@ -710,22 +775,7 @@ sellerRouter.get(
       }
     }
 
-    const visitorsRow = await pool.query<{ visitors: string }>(
-      `select count(distinct session_id)::text as visitors
-       from public.product_page_views
-       where seller_id = $1`,
-      [sellerId]
-    );
     const visitors = Number(visitorsRow.rows[0]?.visitors ?? 0);
-
-    const convertingOrders = await pool.query<{ c: string }>(
-      `select count(distinct o.id)::text as c
-       from public.orders o
-       join public.order_items oi on oi.order_id = o.id
-       where oi.seller_id = $1
-         and o.status in ('paid','processing','accepted','shipped','out_for_delivery','delivered')`,
-      [sellerId]
-    );
     const paidOrderCount = Number(convertingOrders.rows[0]?.c ?? 0);
     const conversionRate =
       visitors > 0 ? Math.round((paidOrderCount / visitors) * 10000) / 100 : 0;
@@ -849,12 +899,12 @@ const productCreateSchema = z.object({
   categoryId: z.string().uuid(),
   subcategoryId: z.string().uuid().optional().nullable(),
   productType: z.enum(["physical", "digital"]).default("physical"),
-  price: z.number().positive(),
-  compareAtPrice: z.number().positive().optional().nullable(),
-  costPrice: z.number().nonnegative().optional().nullable(),
+  price: z.number().positive().max(MAX_PRICE, "Price is too high"),
+  compareAtPrice: z.number().positive().max(MAX_PRICE, "Price is too high").optional().nullable(),
+  costPrice: z.number().nonnegative().max(MAX_PRICE, "Price is too high").optional().nullable(),
   sku: z.string().trim().max(64).optional().nullable(),
-  stockQuantity: z.number().int().nonnegative().default(0),
-  lowStockAlert: z.number().int().nonnegative().default(5),
+  stockQuantity: z.number().int().nonnegative().max(1_000_000).default(0),
+  lowStockAlert: z.number().int().nonnegative().max(1_000_000).default(5),
   continueSellingWhenOutOfStock: z.boolean().default(false),
   weight: optionalWeightKg,
   weightUnit: z.string().trim().max(8).default("kg"),
@@ -878,7 +928,8 @@ const productCreateSchema = z.object({
     )
     .max(10, "add up to 10 tags")
     .default([]),
-  imageUrls: z.array(z.string().min(1).max(500)).max(8).default([]),
+  // Shown in <img src> and shared links, so only https URLs.
+  imageUrls: z.array(httpsUrlSchema).max(8).default([]),
   collectionIds: z.array(z.string().uuid()).max(20).default([]),
   isCustomizable: z.boolean().optional(),
   customizationLabel: z.string().trim().max(120).optional().nullable(),
@@ -908,17 +959,15 @@ sellerRouter.get(
   requireSeller,
   asyncHandler(async (req, res) => {
     const sellerId = req.seller!.id;
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize ?? 20)));
-    const offset = (page - 1) * pageSize;
+    const { page, pageSize, offset } = pagination(req.query, { pageSize: 20, maxPageSize: 50 });
 
-    const count = await pool.query<{ c: string }>(
+    const countQuery = pool.query<{ c: string }>(
       `select count(*)::text as c from public.products
        where seller_id = $1 and deleted_at is null`,
       [sellerId]
     );
 
-    const rows = await pool.query<{
+    const rowsQuery = pool.query<{
       id: string;
       title: string;
       slug: string;
@@ -950,6 +999,8 @@ sellerRouter.get(
        limit $2 offset $3`,
       [sellerId, pageSize, offset]
     );
+
+    const [count, rows] = await Promise.all([countQuery, rowsQuery]);
 
     res.json({
       page,
@@ -1018,7 +1069,7 @@ sellerRouter.get(
     );
     const row = product.rows[0];
 
-    const variant = await pool.query<{
+    const variantQuery = pool.query<{
       sku: string;
       stock: string;
       low_stock: string;
@@ -1032,7 +1083,7 @@ sellerRouter.get(
       [productId]
     );
 
-    const images = await pool.query<{ url: string; is_thumbnail: boolean; display_order: number }>(
+    const imagesQuery = pool.query<{ url: string; is_thumbnail: boolean; display_order: number }>(
       `select url, is_thumbnail, display_order
        from public.product_images
        where product_id = $1
@@ -1040,12 +1091,12 @@ sellerRouter.get(
       [productId]
     );
 
-    const collections = await pool.query<{ collection_id: string }>(
+    const collectionsQuery = pool.query<{ collection_id: string }>(
       `select collection_id from public.product_collections where product_id = $1`,
       [productId]
     );
 
-    const digitalFiles = await pool.query<{
+    const digitalFilesQuery = pool.query<{
       id: string;
       file_name: string;
       bytes: string;
@@ -1057,6 +1108,13 @@ sellerRouter.get(
        order by display_order asc, created_at asc`,
       [productId]
     );
+
+    const [variant, images, collections, digitalFiles] = await Promise.all([
+      variantQuery,
+      imagesQuery,
+      collectionsQuery,
+      digitalFilesQuery,
+    ]);
 
     res.json({
       product: {
@@ -2048,12 +2106,10 @@ sellerRouter.get(
   "/orders",
   requireSeller,
   asyncHandler(async (req, res) => {
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize ?? 20)));
-    const offset = (page - 1) * pageSize;
+    const { page, pageSize, offset } = pagination(req.query, { pageSize: 20, maxPageSize: 50 });
     const sellerId = req.seller!.id;
 
-    const count = await pool.query<{ c: string }>(
+    const countQuery = pool.query<{ c: string }>(
       `select count(distinct o.id)::text as c
        from public.orders o
        join public.order_items oi on oi.order_id = o.id
@@ -2061,7 +2117,7 @@ sellerRouter.get(
       [sellerId]
     );
 
-    const rows = await pool.query<{
+    const rowsQuery = pool.query<{
       id: string;
       order_number: string;
       status: string;
@@ -2091,6 +2147,8 @@ sellerRouter.get(
        limit $2 offset $3`,
       [sellerId, pageSize, offset]
     );
+
+    const [count, rows] = await Promise.all([countQuery, rowsQuery]);
 
     res.json({
       page,

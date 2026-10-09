@@ -13,12 +13,14 @@ export type AccessTokenPayload = {
 
 export function signAccessToken(payload: Omit<AccessTokenPayload, "typ">) {
   return jwt.sign({ ...payload, typ: "access" } satisfies AccessTokenPayload, env.JWT_SECRET, {
+    algorithm: "HS256",
     expiresIn: ACCESS_TOKEN_TTL_SECONDS,
   });
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
-  const decoded = jwt.verify(token, env.JWT_SECRET);
+  // Pin the algorithm so a token can never pick its own (e.g. "none").
+  const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] });
   if (typeof decoded !== "object" || decoded === null) {
     throw new Error("Invalid access token");
   }

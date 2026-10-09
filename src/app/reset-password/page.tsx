@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { apiRequest } from "@/utils/api-client";
+import { newPasswordProblem, PASSWORD_HINT } from "@/utils/validation";
 import styles from "../forgot-password/forgot-password.module.css";
 
 function ResetPasswordForm() {
@@ -19,6 +20,11 @@ function ResetPasswordForm() {
     e.preventDefault();
     if (!token) {
       setError("Missing reset token. Open the link from your email again.");
+      return;
+    }
+    const problem = newPasswordProblem(password);
+    if (problem) {
+      setError(problem);
       return;
     }
     if (password !== confirmPassword) {
@@ -59,10 +65,11 @@ function ResetPasswordForm() {
               type="password"
               required
               minLength={8}
+              maxLength={72}
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
+              placeholder={PASSWORD_HINT}
             />
           </label>
           <label className={styles.field}>

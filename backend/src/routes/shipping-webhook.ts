@@ -6,6 +6,7 @@ import { asyncHandler } from "../middleware/async-handler.js";
 import { applyShipmentStatusUpdate } from "../services/shipping.service.js";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/errors.js";
+import { logger } from "../utils/logger.js";
 
 const shippingWebhookRouter = Router();
 
@@ -86,8 +87,8 @@ shippingWebhookRouter.post(
     const parsed = z
       .object({
         orderId: z.string().uuid().optional(),
-        trackingNumber: z.string().min(1).optional(),
-        status: z.string().min(1),
+        trackingNumber: z.string().min(1).max(64).optional(),
+        status: z.string().min(1).max(120),
       })
       .safeParse(body);
 
@@ -118,9 +119,17 @@ export async function handleCarrierTrackingWebhook(req: Request, res: Response) 
     const queryOk =
       token != null && safeEqual(token, env.SHIPPING_WEBHOOK_SECRET);
     if (!headerOk && !queryOk) {
-      // Soft-accept: panel tests / some SR deliveries omit auth. Real updates still need a known AWB.
-      console.warn("[shipping-webhook] carrier webhook without matching secret — continuing");
+      // Acknowledge (Shiprocket's "Test Webhook" sends no auth and must see 200)
+      // but change nothing. AWB numbers are shown to buyers, so a known AWB is
+      // not proof the call came from the courier: without this, anyone could
+      // mark any order delivered.
+      logger.warn({ ip: req.ip }, "carrier webhook without valid secret ignored");
+      res.status(200).json({ ok: true, ignored: true, reason: "unauthenticated" });
+      return;
     }
+  } else if (env.NODE_ENV === "production") {
+    res.status(503).json({ message: "Shipping webhook not configured" });
+    return;
   }
 
   let body: Record<string, unknown> = {};
@@ -156,12 +165,18 @@ export async function handleCarrierTrackingWebhook(req: Request, res: Response) 
     return;
   }
 
+  if (awb.length > 64 || status.length > 120) {
+    res.status(400).json({ message: "Invalid tracking payload" });
+    return;
+  }
+
   const scansRaw = body.scans ?? body.tracking_history ?? body.shipment_track_activities;
+  // Bounded: this JSON is stored on the shipment and rendered to the buyer.
   const events = Array.isArray(scansRaw)
-    ? scansRaw.map((s: Record<string, unknown>) => ({
-        date: String(s.date ?? s.timestamp ?? new Date().toISOString()),
-        activity: String(s.activity ?? s.status ?? s.sr_status ?? "Update"),
-        location: String(s.location ?? s.sr_location ?? ""),
+    ? scansRaw.slice(0, 200).map((s: Record<string, unknown>) => ({
+        date: String(s?.date ?? s?.timestamp ?? new Date().toISOString()).slice(0, 40),
+        activity: String(s?.activity ?? s?.status ?? s?.sr_status ?? "Update").slice(0, 300),
+        location: String(s?.location ?? s?.sr_location ?? "").slice(0, 200),
       }))
     : undefined;
 

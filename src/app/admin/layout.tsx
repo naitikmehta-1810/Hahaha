@@ -10,6 +10,7 @@ import {
   LogIn,
   PanelsTopLeft,
   RotateCcw,
+  Search,
   ShoppingBag,
   Store,
   Tags,
@@ -40,6 +41,7 @@ const NAV: ConsoleNavGroup[] = [
     items: [
       { href: "/admin/categories", label: "Categories", Icon: Tags },
       { href: "/admin/coupons", label: "Coupons", Icon: Ticket },
+      { href: "/admin/search-insights", label: "Search insights", Icon: Search },
     ],
   },
   {

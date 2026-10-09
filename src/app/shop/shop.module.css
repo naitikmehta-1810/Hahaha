@@ -263,6 +263,112 @@
   display: none;
 }
 
+.searchNote {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.searchNote strong {
+  color: var(--color-text-main);
+}
+
+.searchNoteLink {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 20px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-dark);
+  border-radius: var(--radius-full);
+  background: var(--color-card);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-main);
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.chip:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.chipStatic,
+.chipStatic:hover {
+  border-style: dashed;
+  color: var(--color-text-muted);
+  border-color: var(--color-border-dark);
+  cursor: default;
+}
+
+.chipClear {
+  height: 32px;
+  padding: 0 6px;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--color-primary);
+}
+
+.subItem {
+  padding-left: 32px;
+  font-size: 0.8125rem;
+}
+
+.tagCloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.tagChip:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text-main);
+}
+
+.tagChipOn,
+.tagChipOn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+.tagChipOn .count {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.gridLoading {
+  opacity: 0.55;
+  transition: opacity var(--transition-fast);
+  pointer-events: none;
+}
+
 /* Products Grid */
 .mainContent {
   flex: 1;
