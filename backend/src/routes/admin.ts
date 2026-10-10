@@ -9,11 +9,13 @@ import { refundPayment } from "../services/payment.service.js";
 import { returnRefundAmounts } from "../services/order.service.js";
 import { transition } from "../services/order-state-machine.js";
 import { env } from "../config/env.js";
+import { getSetting } from "../services/settings.service.js";
 import { invalidateCatalogCaches } from "../services/catalog-cache.js";
 import { hashPassword } from "../utils/password.js";
 import { revokeAllSessions } from "../services/auth.service.js";
 import adminReportsRouter from "./admin-reports.js";
 import adminPayoutsRouter from "./admin-payouts.js";
+import adminSettingsRouter from "./admin-settings.js";
 import {
   emailSchema,
   indianMobileSchema,
@@ -63,6 +65,7 @@ adminRouter.use(requireAuth, requireAdmin);
 adminRouter.use(adminReportsRouter);
 // Seller payout queue and ledger adjustments.
 adminRouter.use(adminPayoutsRouter);
+adminRouter.use(adminSettingsRouter);
 
 adminRouter.get(
   "/users",
@@ -316,7 +319,7 @@ adminRouter.get(
         /** Null means the platform default (PLATFORM_COMMISSION_PERCENT). */
         commissionPercent: row.commission_percent != null ? Number(row.commission_percent) : null,
       })),
-      defaultCommissionPercent: env.PLATFORM_COMMISSION_PERCENT,
+      defaultCommissionPercent: getSetting("platformCommissionPercent"),
     });
   })
 );

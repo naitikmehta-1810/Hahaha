@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { pool, withTransaction } from "../config/db.js";
 import { env } from "../config/env.js";
+import { getSetting } from "./settings.service.js";
 import { AppError } from "../utils/errors.js";
 import { decryptPayoutDetails } from "../utils/payout-crypto.js";
 
@@ -30,7 +31,7 @@ export async function commissionPercentFor(sellerId: string, db: Pick<PoolClient
     [sellerId]
   );
   const own = row.rows[0]?.commission_percent;
-  return own == null ? env.PLATFORM_COMMISSION_PERCENT : Number(own);
+  return own == null ? getSetting("platformCommissionPercent") : Number(own);
 }
 
 type DeliveredItem = {
@@ -75,7 +76,7 @@ export async function creditSellersForDelivery(client: PoolClient, orderId: stri
     }
     const gross = round2(Number(item.line_total));
     if (gross <= 0) continue;
-    const percent = percentBySeller.get(item.seller_id) ?? env.PLATFORM_COMMISSION_PERCENT;
+    const percent = percentBySeller.get(item.seller_id) ?? getSetting("platformCommissionPercent");
     const commission = round2((gross * percent) / 100);
     const availableAt = new Date(
       deliveredAt.getTime() + (item.is_returnable ? env.RETURN_WINDOW_DAYS : 0) * 24 * 60 * 60 * 1000
@@ -224,7 +225,7 @@ export async function getEarningsSummary(sellerId: string): Promise<EarningsSumm
     lifetimeSales: round2(Number(t?.lifetime_sales ?? 0)),
     lifetimeCommission: round2(Number(t?.lifetime_commission ?? 0)),
     commissionPercent: await commissionPercentFor(sellerId),
-    minPayout: env.PAYOUT_MIN_AMOUNT,
+    minPayout: getSetting("payoutMinAmount"),
     openPayout: p?.open_id
       ? { id: p.open_id, amount: round2(Number(p.open_amount)), requestedAt: new Date(p.open_at as Date).toISOString() }
       : null,
@@ -337,11 +338,11 @@ export async function requestPayout(sellerId: string, requestedAmount?: number |
     );
     const available = round2(Number(balance.rows[0]?.available ?? 0));
     const amount = round2(requestedAmount ?? available);
-    if (amount < env.PAYOUT_MIN_AMOUNT) {
+    if (amount < getSetting("payoutMinAmount")) {
       throw new AppError(
         400,
         "PAYOUT_BELOW_MINIMUM",
-        `The minimum payout is ₹${env.PAYOUT_MIN_AMOUNT.toLocaleString("en-IN")}.`
+        `The minimum payout is ₹${getSetting("payoutMinAmount").toLocaleString("en-IN")}.`
       );
     }
     if (amount > available + 0.001) {

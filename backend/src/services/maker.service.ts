@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
+import { getSetting } from "./settings.service.js";
 import { AppError } from "../utils/errors.js";
 import { canonicalState } from "./pincode.service.js";
 import {
@@ -245,12 +246,12 @@ export async function saveMaker(sellerId: string, input: SaveMakerInput) {
       await deleteVideoAsset(publicId);
       throw new AppError(400, "INTRO_NOT_VIDEO", "That file has no video. Upload a video, or choose a voice note.");
     }
-    if (seconds != null && seconds > env.MAKER_INTRO_MAX_SECONDS) {
+    if (seconds != null && seconds > getSetting("makerIntroMaxSeconds")) {
       await deleteVideoAsset(publicId);
       throw new AppError(
         400,
         "INTRO_TOO_LONG",
-        `Keep your intro under ${env.MAKER_INTRO_MAX_SECONDS} seconds (this one is ${Math.round(seconds)}).`
+        `Keep your intro under ${getSetting("makerIntroMaxSeconds")} seconds (this one is ${Math.round(seconds)}).`
       );
     }
     introUpdate = { kind, publicId, duration: seconds == null ? null : Math.round(seconds) };

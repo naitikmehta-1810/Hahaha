@@ -1,5 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import { env } from "../config/env.js";
+import { getSetting } from "./settings.service.js";
 import { AppError } from "../utils/errors.js";
 
 let configured = false;
@@ -190,7 +191,7 @@ export function signDirectUpload(kind: DirectUploadKind, sellerId: string) {
       ? env.PRODUCT_VIDEO_MAX_MB
       : kind === "digital"
         ? env.DIGITAL_FILE_MAX_MB
-        : env.MAKER_INTRO_MAX_MB;
+        : getSetting("makerIntroMaxMb");
   return {
     uploadUrl: `https://api.cloudinary.com/v1_1/${env.CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
     fields: { ...params, api_key: env.CLOUDINARY_API_KEY, signature },

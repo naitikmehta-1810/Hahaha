@@ -32,6 +32,7 @@ import { errorHandler, notFound } from "./middleware/error-handler.js";
 import { asyncHandler } from "./middleware/async-handler.js";
 import { pool } from "./config/db.js";
 import { logger } from "./utils/logger.js";
+import { startSettingsRefresh } from "./services/settings.service.js";
 import * as Sentry from "@sentry/node";
 import analyticsRouter from "./routes/analytics.js";
 import searchRouter from "./routes/search.js";
@@ -224,6 +225,7 @@ async function start() {
     process.exit(1);
   }
 
+  startSettingsRefresh();
   const server = app.listen(env.PORT, () => {
     logger.info({ port: env.PORT }, `Stuffsy backend listening on http://localhost:${env.PORT}`);
     // Stagger so the jobs don't open Redis (TLS) connections all at once on a cold boot.
