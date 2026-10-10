@@ -34,7 +34,7 @@ const envSchema = z.object({
    * The platform's cut of each item's price (before GST) when an order is delivered.
    * A seller can have their own rate (sellers.commission_percent), set by an admin.
    */
-  PLATFORM_COMMISSION_PERCENT: z.coerce.number().min(0).max(100).default(10),
+  PLATFORM_COMMISSION_PERCENT: z.coerce.number().min(0).max(100).default(0),
   /** Smallest amount a seller may withdraw in one payout request. */
   PAYOUT_MIN_AMOUNT: z.coerce.number().nonnegative().default(500),
   /** Ceiling for a maker's intro video or voice note (the shop's "Meet the maker" clip). */
