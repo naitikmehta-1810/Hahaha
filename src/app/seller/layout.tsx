@@ -8,6 +8,9 @@ import {
   ExternalLink,
   Import,
   LayoutDashboard,
+  MessagesSquare,
+  Tag,
+  Wallet,
   Package,
   Plus,
   Store,
@@ -19,19 +22,29 @@ import StatusPill from "@/components/ui/StatusPill/StatusPill";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
 import { fetchMySeller, type SellerProfile } from "@/utils/seller";
+import { fetchCommunitySummary } from "@/utils/community";
 import { isPickupAddressComplete } from "@/utils/pickup";
 import { FALLBACK_SHOP_LOGO, optimizedImage } from "@/utils/media";
 import { SELLER_TAGLINE } from "@/components/brand/tagline";
 import { SHOP_SETUP_STEPS, shopSetupHref } from "@/components/seller/shopSetupSteps";
 import styles from "./seller.module.css";
 
-const NAV: ConsoleNavGroup[] = [
+function buildNav(communityWaiting: number): ConsoleNavGroup[] {
+  return [
   {
     items: [{ href: "/seller", label: "Dashboard", exact: true, Icon: LayoutDashboard }],
   },
   {
     label: "Sales",
-    items: [{ href: "/seller/orders", label: "Orders", Icon: ClipboardList }],
+    items: [
+      { href: "/seller/orders", label: "Orders", Icon: ClipboardList },
+      { href: "/seller/community", label: "Community", Icon: MessagesSquare, badge: communityWaiting },
+      { href: "/seller/earnings", label: "Earnings", Icon: Wallet },
+    ],
+  },
+  {
+    label: "Marketing",
+    items: [{ href: "/seller/promotions", label: "Promotions", Icon: Tag }],
   },
   {
     label: "Catalog",
@@ -63,12 +76,14 @@ const NAV: ConsoleNavGroup[] = [
       },
     ],
   },
-];
+  ];
+}
 
 export default function SellerLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { isAuthenticated, status, user } = useAuth();
   const [seller, setSeller] = useState<SellerProfile | null>(null);
+  const [communityWaiting, setCommunityWaiting] = useState(0);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -77,6 +92,14 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
       return;
     }
     void fetchMySeller().then(setSeller);
+    // Unread messages, unanswered questions and unreplied reviews, for the nav badge.
+    void fetchCommunitySummary().then((result) => {
+      if (result.data) {
+        setCommunityWaiting(
+          result.data.unreadMessages + result.data.unansweredQuestions + result.data.unrepliedReviews
+        );
+      }
+    });
   }, [status, isAuthenticated, pathname]);
 
   if (status === "loading" || !isAuthenticated || !user) {
@@ -117,7 +140,7 @@ export default function SellerLayout({ children }: { children: ReactNode }) {
     <ConsoleShell
       area="Seller Hub"
       homeHref="/seller"
-      nav={NAV}
+      nav={buildNav(communityWaiting)}
       user={{
         name: seller?.shopName || user.fullName || "Your shop",
         subtitle: user.fullName || "Seller",

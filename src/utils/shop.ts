@@ -1,6 +1,26 @@
 import { apiRequest } from "./api-client";
 import type { CategoryNode, ProductCard, ProductListResult, ProductSort } from "./catalog";
 
+export type MakerIntro = {
+  kind: "video" | "audio";
+  url: string;
+  posterUrl: string | null;
+  durationSeconds: number | null;
+};
+
+export type StudioPhoto = { id: string; url: string; caption: string | null };
+
+/** The person behind a shop ("Meet the maker"). */
+export type MakerProfile = {
+  name: string;
+  hometownCity: string | null;
+  hometownState: string | null;
+  practicingSinceYear: number | null;
+  yearsOfPractice: number | null;
+  intro: MakerIntro | null;
+  studioPhotos: StudioPhoto[];
+};
+
 export type ShopProfile = {
   id: string;
   shopName: string;
@@ -22,6 +42,8 @@ export type ShopProfile = {
   } | null;
   isOnVacation: boolean;
   memberSince: number;
+  /** Null until the seller fills in their maker profile. */
+  maker: MakerProfile | null;
   stats: {
     listings: number;
     rating: number;

@@ -61,6 +61,21 @@ export default function MyReviews({ emptyAction }: { emptyAction?: ReactNode }) 
             </div>
             {review.title ? <p className={styles.title}>{review.title}</p> : null}
             {review.body ? <p className={styles.text}>{review.body}</p> : null}
+            {review.images.length > 0 ? (
+              <ul className={styles.photos} aria-label="Your photos">
+                {review.images.map((url) => (
+                  <li key={url}>
+                    <img src={optimizedImage(url, 160)} alt="" loading="lazy" />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {review.reply ? (
+              <div className={styles.reply}>
+                <strong>{review.reply.shopName ?? "The maker"} replied</strong>
+                <p>{review.reply.body}</p>
+              </div>
+            ) : null}
           </div>
         </li>
       ))}

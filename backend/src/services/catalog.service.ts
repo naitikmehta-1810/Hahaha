@@ -1,6 +1,7 @@
 import { pool } from "../config/db.js";
 import { env } from "../config/env.js";
 import { productVideoPosterUrl, productVideoUrl } from "./media.service.js";
+import { buildMakerSummary, type MakerSummary } from "./maker.service.js";
 import { appliedGstPercent, defaultGstPercent } from "./gst.js";
 import {
   cached,
@@ -815,6 +816,8 @@ export type ProductDetail = ProductCard & {
     id: string;
     shopName: string;
     shopSlug: string;
+    /** "Made by Meera in Jaipur": always present, falls back to the shop name and city. */
+    maker: MakerSummary;
     logoUrl: string | null;
     badge: string | null;
     rating: number;
@@ -873,6 +876,15 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
       shop_review_count: string | null;
       selling_scope: string | null;
       selling_state: string | null;
+      selling_city: string | null;
+      maker_name: string | null;
+      hometown_city: string | null;
+      hometown_state: string | null;
+      practicing_since_year: number | null;
+      maker_intro_kind: string | null;
+      maker_intro_public_id: string | null;
+      maker_intro_duration_seconds: number | null;
+      studio_photo_count: string;
       gst_rate: string | null;
       is_customizable: boolean;
       customization_label: string | null;
@@ -887,7 +899,10 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
        p.processing_days, p.processing_days_max, p.tags, p.category_id, p.subcategory_id,
        p.is_customizable, p.customization_label, p.video_public_id, p.is_returnable,
        s.shop_name, s.shop_slug, s.logo_url, s.badge,
-       s.selling_scope, s.selling_state,
+       s.selling_scope, s.selling_state, s.selling_city,
+       s.maker_name, s.hometown_city, s.hometown_state, s.practicing_since_year,
+       s.maker_intro_kind, s.maker_intro_public_id, s.maker_intro_duration_seconds,
+       (select count(*) from public.seller_studio_photos sp2 where sp2.seller_id = s.id)::text as studio_photo_count,
        coalesce(subc.gst_rate, cat.gst_rate) as gst_rate,
        (
          select pi.url from public.product_images pi
@@ -998,6 +1013,7 @@ async function loadProductBySlugUncached(slug: string): Promise<ProductDetail | 
       id: row.seller_id,
       shopName: row.shop_name,
       shopSlug: row.shop_slug,
+      maker: buildMakerSummary(row, Number(row.studio_photo_count ?? 0)),
       logoUrl: row.logo_url,
       badge: row.badge,
       rating: money(row.shop_rating),

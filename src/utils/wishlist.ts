@@ -12,7 +12,61 @@ export type WishlistItem = {
   shopName: string;
   shopSlug: string;
   createdAt: string;
+  /** The named list this item is filed under, if any. */
+  collectionId?: string | null;
 };
+
+export type WishlistCollection = {
+  id: string;
+  name: string;
+  count: number;
+  /** Set while a share link for this list is switched on. */
+  shareToken: string | null;
+};
+
+export type WishlistFull = {
+  items: WishlistItem[];
+  total: number;
+  collections: WishlistCollection[];
+  /** Share token for the whole wishlist, if switched on. */
+  shareToken: string | null;
+};
+
+export async function fetchWishlistFull() {
+  return apiRequest<WishlistFull>("GET", "/api/wishlists");
+}
+
+export function createWishlistCollection(name: string) {
+  return apiRequest<{ collection: WishlistCollection }>("POST", "/api/wishlists/collections", { body: { name } });
+}
+
+export function renameWishlistCollection(id: string, name: string) {
+  return apiRequest<{ ok: true }>("PATCH", `/api/wishlists/collections/${id}`, { body: { name } });
+}
+
+export function deleteWishlistCollection(id: string) {
+  return apiRequest<{ ok: true }>("DELETE", `/api/wishlists/collections/${id}`);
+}
+
+export function moveWishlistItem(productId: string, collectionId: string | null) {
+  return apiRequest<{ ok: true }>("PATCH", `/api/wishlists/items/${productId}`, { body: { collectionId } });
+}
+
+/** Switch a share link on for the whole wishlist (null) or one list. Returns its token. */
+export function enableWishlistShare(collectionId: string | null) {
+  return apiRequest<{ token: string }>("PUT", "/api/wishlists/share", { body: { collectionId } });
+}
+
+export function disableWishlistShare(collectionId: string | null) {
+  const qs = collectionId ? `?collectionId=${collectionId}` : "";
+  return apiRequest<{ ok: true }>("DELETE", `/api/wishlists/share${qs}`);
+}
+
+export type SharedWishlist = { owner: string; title: string; items: WishlistItem[] };
+
+export function fetchSharedWishlist(token: string) {
+  return apiRequest<SharedWishlist>("GET", `/api/wishlists/shared/${encodeURIComponent(token)}`, { skipRefresh: true });
+}
 
 export async function fetchWishlist() {
   const result = await apiRequest<{ items: WishlistItem[]; total: number }>(

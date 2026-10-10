@@ -155,6 +155,19 @@ export default function SellerOrderDetailPage() {
         </Notice>
       ) : null}
 
+      {order.gift ? (
+        <Notice tone="warning" title="Gift order. Please pack accordingly">
+          {order.gift.wrap ? "Gift wrap this order (free). " : ""}
+          {order.gift.hidePrices ? "Leave prices and invoices out of the parcel. " : ""}
+          {order.gift.message ? (
+            <>
+              Include a handwritten note: “{order.gift.message}”
+              {order.gift.senderName ? <> — signed {order.gift.senderName}</> : null}
+            </>
+          ) : null}
+        </Notice>
+      ) : null}
+
       <div className={ui.split}>
         <div className={ui.stack}>
           <section className={`${ui.card} ${ui.cardFlush}`} aria-labelledby="items-title">

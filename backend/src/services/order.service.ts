@@ -41,6 +41,21 @@ export type StockFailureLine = {
   reason: "INSUFFICIENT_STOCK" | "UNAVAILABLE" | "SELLER_UNAVAILABLE";
 };
 
+/** What a buyer asks for when the order is a gift. Gift wrapping is free. */
+export type GiftOptions = {
+  message?: string | null;
+  senderName?: string | null;
+  wrap?: boolean;
+  hidePrices?: boolean;
+};
+
+export type OrderGift = {
+  message: string | null;
+  senderName: string | null;
+  wrap: boolean;
+  hidePrices: boolean;
+};
+
 export type DeliveryOption = "standard" | "express";
 export type PaymentMethod = "card" | "upi" | "netbanking" | "wallet" | "cod";
 
@@ -369,6 +384,7 @@ export type PlaceOrderInput = {
    * quote the order is refused, so a buyer is never charged a different amount.
    */
   expectedShippingAmount?: number | null;
+  gift?: GiftOptions | null;
 };
 
 /**
@@ -414,7 +430,15 @@ export async function placeOrder(input: PlaceOrderInput) {
     paymentMethod = null,
     referrerChannel = "website",
     expectedShippingAmount = null,
+    gift = null,
   } = input;
+
+  // A gift is any order where the buyer asked for something gift-specific.
+  const giftMessage = gift?.message?.trim() || null;
+  const giftSenderName = gift?.senderName?.trim() || null;
+  const giftWrap = Boolean(gift?.wrap);
+  const giftHidePrices = Boolean(gift?.hidePrices);
+  const isGift = Boolean(gift) && (Boolean(giftMessage) || giftWrap || giftHidePrices);
 
   await assertCanPlaceOrders(userId);
   const preQuote = await quoteBeforeCheckout(userId, addressId, paymentMethod === "cod");
@@ -561,6 +585,7 @@ export async function placeOrder(input: PlaceOrderInput) {
         categoryId: line.category_id,
         available: true,
         gstPercent: line.gst_rate,
+        sellerId: line.seller_id,
       }));
 
       const couponResult = await validateCoupon(codeToValidate, userId, couponItems, subtotal, {
@@ -700,12 +725,13 @@ export async function placeOrder(input: PlaceOrderInput) {
          id, user_id, status, shipping_address, coupon_id, coupon_code,
          subtotal, discount_amount, shipping_amount, tax_amount, tax_rate, total_amount,
          delivery_option, payment_method, referrer_channel, estimated_delivery_at, placed_at,
-         shipping_quote, shipping_cost, created_at, updated_at
+         shipping_quote, shipping_cost, is_gift, gift_message, gift_wrap, gift_hide_prices,
+         gift_sender_name, created_at, updated_at
        ) values (
          gen_random_uuid(), $1, 'pending_payment', $2::jsonb, $3, $4,
          $5, $6, $7, $8, $9, $10,
          $11, $12, $13, $14, now(),
-         $15::jsonb, $16, now(), now()
+         $15::jsonb, $16, $17, $18, $19, $20, $21, now(), now()
        )
        returning id, order_number`,
       [
@@ -725,6 +751,11 @@ export async function placeOrder(input: PlaceOrderInput) {
         estimatedDeliveryAt,
         deliveryQuote ? JSON.stringify(storedQuote(quote, orderDeliveryOption)) : null,
         deliveryQuote?.cost ?? null,
+        isGift,
+        isGift ? giftMessage : null,
+        isGift && giftWrap,
+        isGift && giftHidePrices,
+        isGift ? giftSenderName : null,
       ]
     );
 
@@ -927,6 +958,8 @@ export type OrderDetail = {
   };
   /** Null until invoice generation lands in Phase 6 — the button hides on null. */
   invoiceUrl: string | null;
+  /** Set when the buyer marked the order as a gift. */
+  gift: OrderGift | null;
 };
 
 export function paymentReadyShape(order: OrderDetail) {
@@ -1144,12 +1177,18 @@ export async function getOrderForUser(
     payment_reference: string | null;
     paid_at: Date | null;
     invoice_url: string | null;
+    is_gift: boolean;
+    gift_message: string | null;
+    gift_wrap: boolean;
+    gift_hide_prices: boolean;
+    gift_sender_name: string | null;
   }>(
     `select id, order_number, status, shipping_address, coupon_code, subtotal, discount_amount,
             shipping_amount, tax_amount, tax_rate, total_amount, delivery_option,
             created_at, updated_at, placed_at, delivered_at, estimated_delivery_at,
             tracking_number, courier_name, courier_url,
-            payment_method, payment_reference, paid_at, invoice_url
+            payment_method, payment_reference, paid_at, invoice_url,
+            is_gift, gift_message, gift_wrap, gift_hide_prices, gift_sender_name
      from public.orders
      where id = $1 and user_id = $2`,
     [orderId, userId]
@@ -1364,6 +1403,14 @@ export async function getOrderForUser(
       paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : null,
     },
     invoiceUrl: row.invoice_url,
+    gift: row.is_gift
+      ? {
+          message: row.gift_message,
+          senderName: row.gift_sender_name,
+          wrap: row.gift_wrap,
+          hidePrices: row.gift_hide_prices,
+        }
+      : null,
   };
 }
 

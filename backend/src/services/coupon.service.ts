@@ -10,7 +10,8 @@ export type CouponInvalidReason =
   | "MIN_ORDER_NOT_MET"
   | "USER_LIMIT_REACHED"
   | "TOTAL_LIMIT_REACHED"
-  | "CATEGORY_MISMATCH";
+  | "CATEGORY_MISMATCH"
+  | "SELLER_MISMATCH";
 
 export type CouponValidationResult =
   | { valid: true; discountAmount: number; couponId: string; code: string }
@@ -24,6 +25,8 @@ export type CouponCartItem = {
   available: boolean;
   /** Line GST rate; the minimum order is checked against the GST-inclusive value. */
   gstPercent?: number | string | null;
+  /** The shop selling this line; a shop's own coupon only counts its own lines. */
+  sellerId?: string | null;
 };
 
 export type CouponRow = {
@@ -38,6 +41,8 @@ export type CouponRow = {
   starts_at: Date;
   expires_at: Date;
   category_id: string | null;
+  /** Set for a coupon a seller created for their own shop. */
+  seller_id: string | null;
   is_active: boolean;
   deleted_at: Date | null;
 };
@@ -58,7 +63,7 @@ async function loadCoupon(
   const result = await client.query<CouponRow>(
     `select id, code, type, value, min_order_value, max_discount_amount,
             usage_limit_total, usage_limit_per_user, starts_at, expires_at,
-            category_id, is_active, deleted_at
+            category_id, seller_id, is_active, deleted_at
      from public.coupons
      where lower(code) = lower($1)
      ${forUpdate ? "for update" : ""}`,
@@ -111,10 +116,17 @@ export async function validateCoupon(
     return { valid: false, reason: "EXPIRED" };
   }
 
+  // A shop's own coupon looks only at that shop's lines: the minimum order and the
+  // discount are both measured on them, never on other shops' items in the cart.
+  const couponScope = (item: CouponCartItem) => !coupon.seller_id || item.sellerId === coupon.seller_id;
+  if (coupon.seller_id && !cartItems.some((item) => item.available && couponScope(item))) {
+    return { valid: false, reason: "SELLER_MISMATCH" };
+  }
+
   // Buyers see GST-inclusive prices, so "minimum order ₹X" is measured the same way.
   const minOrderBasis = goodsValueInclGst(
     cartItems
-      .filter((item) => item.available)
+      .filter((item) => item.available && couponScope(item))
       .map((item) => ({ gross: item.unitPrice * item.quantity, gstPercent: item.gstPercent }))
   );
   if (coupon.min_order_value != null && minOrderBasis < money(coupon.min_order_value)) {
@@ -153,9 +165,11 @@ export async function validateCoupon(
 
   const eligibleSubtotal = coupon.category_id
     ? availableItems
-        .filter((item) => item.categoryId === coupon.category_id)
+        .filter((item) => item.categoryId === coupon.category_id && couponScope(item))
         .reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)
-    : cartSubtotal;
+    : coupon.seller_id
+      ? availableItems.filter(couponScope).reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)
+      : cartSubtotal;
 
   const discountAmount = computeDiscount(coupon, eligibleSubtotal);
   return {
@@ -175,6 +189,7 @@ export async function loadCartItemsForCoupon(
     quantity: number;
     price: string;
     category_id: string;
+    seller_id: string;
     gst_percent: string;
     variant_active: boolean;
     product_status: string;
@@ -186,6 +201,7 @@ export async function loadCartItemsForCoupon(
        ci.quantity,
        pv.price,
        p.category_id,
+       p.seller_id,
        ${PRODUCT_GST_PERCENT_SQL} as gst_percent,
        pv.is_active as variant_active,
        p.status as product_status,
@@ -211,6 +227,7 @@ export async function loadCartItemsForCoupon(
       categoryId: row.category_id,
       available,
       gstPercent: row.gst_percent,
+      sellerId: row.seller_id,
     };
   });
 

@@ -21,7 +21,6 @@ import Button from "@/components/ui/Button/Button";
 import PaymentIcon from "@/components/ui/PaymentMarks/PaymentIcon";
 import Breadcrumbs from "@/components/ui/Breadcrumbs/Breadcrumbs";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { redirectToLogin } from "@/utils/api-client";
 import {
   type AddressRecord,
   type CartItem,
@@ -44,6 +43,8 @@ import {
   stubCapturePayment,
 } from "@/utils/payments";
 import { optimizedImage } from "@/utils/media";
+import GuestGate from "@/components/checkout/GuestGate";
+import GiftOptions, { EMPTY_GIFT, giftPayload, type GiftFormState } from "@/components/checkout/GiftOptions";
 import {
   emailProblem,
   normalizeIndianMobile,
@@ -170,6 +171,7 @@ function CheckoutInner() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
     normalizePayment(searchParams.get("payment"))
   );
+  const [gift, setGift] = useState<GiftFormState>(EMPTY_GIFT);
   const [placing, setPlacing] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{
@@ -211,7 +213,7 @@ function CheckoutInner() {
   useEffect(() => {
     if (authStatus === "loading") return;
     if (!isAuthenticated) {
-      redirectToLogin("/checkout");
+      // Signed-out buyers choose between signing in and guest checkout (see GuestGate).
       return;
     }
     void loadCart();
@@ -531,6 +533,8 @@ function CheckoutInner() {
         paymentMethod: effectivePayment === "cod" ? "cod" : null,
         // The server refuses the order if the live charge moved since this was shown.
         expectedShippingAmount: hasPhysical ? shippingAmount : 0,
+        // A digital-only order has nothing to wrap or send to anyone.
+        gift: hasPhysical ? giftPayload(gift) : null,
       });
       const orderNumber =
         result.order.orderNumber || result.payment.receipt || result.order.id.slice(0, 8);
@@ -593,6 +597,10 @@ function CheckoutInner() {
       setPlacing(false);
     }
   };
+
+  if (authStatus === "ready" && !isAuthenticated) {
+    return <GuestGate />;
+  }
 
   if (confirmation) {
     const isPaid = confirmation.phase === "paid";
@@ -982,6 +990,7 @@ function CheckoutInner() {
                   ))}
                 </div>
               )}
+              {hasPhysical ? <GiftOptions value={gift} onChange={setGift} /> : null}
               <div className={styles.stepActions}>
                 <Button variant="outline" onClick={goBack}>
                   Back

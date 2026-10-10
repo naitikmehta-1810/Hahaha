@@ -27,6 +27,11 @@ import { decryptPayoutDetails, encryptPayoutDetails } from "../utils/payout-cryp
 import { parseDimensionCm, parseWeightKg } from "../utils/product-dims.js";
 import { invalidateCatalogCaches } from "../services/catalog-cache.js";
 import { env } from "../config/env.js";
+import { MAX_STUDIO_PHOTOS, getMakerForEditor, saveMaker } from "../services/maker.service.js";
+import sellerCommunityRouter from "./seller-community.js";
+import sellerEarningsRouter from "./seller-earnings.js";
+import sellerPromotionsRouter from "./seller-promotions.js";
+import { assertNoActiveSale } from "../services/sale.service.js";
 import { syncSellerPickupToShiprocket } from "../services/shipping.service.js";
 import { INDIA_STATE_NAMES, verifyGstin } from "../services/gstin.service.js";
 import { samePlace } from "../services/viewer-region.service.js";
@@ -73,6 +78,12 @@ sellerRouter.post(
 );
 
 sellerRouter.use(requireAuth);
+// Review replies, product questions and the community summary.
+sellerRouter.use(sellerCommunityRouter);
+// Earnings ledger and payout requests.
+sellerRouter.use(sellerEarningsRouter);
+// Scheduled sales, the shop's own coupons and bulk product edits.
+sellerRouter.use(sellerPromotionsRouter);
 
 function slugify(name: string) {
   const base = name
@@ -1791,12 +1802,67 @@ sellerRouter.post(
   "/uploads/sign",
   requireSellerAnyStatus,
   asyncHandler(async (req, res) => {
-    const parsed = z.object({ kind: z.enum(["video", "digital"]) }).safeParse(req.body);
+    const parsed = z
+      .object({ kind: z.enum(["video", "digital", "intro_video", "intro_audio"]) })
+      .safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ message: "kind must be video or digital" });
+      res.status(400).json({ message: "Unknown upload kind" });
       return;
     }
     res.json(signDirectUpload(parsed.data.kind, req.seller!.id));
+  })
+);
+
+/* ── Meet the maker ─────────────────────────────────────────────────────── */
+
+const makerSchema = z
+  .object({
+    name: z.string().trim().max(60).nullable().optional(),
+    hometownCity: z.string().trim().max(60).nullable().optional(),
+    hometownState: z.string().trim().max(80).nullable().optional(),
+    practicingSinceYear: z.number().int().min(1950).max(2100).nullable().optional(),
+    intro: z
+      .object({
+        kind: z.enum(["video", "audio"]),
+        publicId: z.string().min(1).max(300),
+        version: z.union([z.number(), z.string().regex(/^d+$/)]),
+        signature: z.string().min(1).max(200),
+      })
+      .nullable()
+      .optional(),
+    studioPhotos: z
+      .array(
+        z.object({
+          url: z.string().url().max(600),
+          caption: z.string().trim().max(120).nullable().optional(),
+        })
+      )
+      .max(MAX_STUDIO_PHOTOS)
+      .optional(),
+  })
+  .strict();
+
+sellerRouter.get(
+  "/maker",
+  requireSellerAnyStatus,
+  asyncHandler(async (req, res) => {
+    res.json({ maker: await getMakerForEditor(req.seller!.id) });
+  })
+);
+
+sellerRouter.put(
+  "/maker",
+  requireSellerAnyStatus,
+  asyncHandler(async (req, res) => {
+    const parsed = makerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid maker profile" });
+      return;
+    }
+    const maker = await saveMaker(req.seller!.id, parsed.data);
+    // Product pages embed the maker line, so retire their cached copies.
+    void invalidateCatalogCaches();
+    res.json({ maker });
   })
 );
 
@@ -1815,6 +1881,11 @@ sellerRouter.patch(
     }
 
     await assertSellerOwnsProduct(sellerId, productId);
+
+    // While a scheduled sale is live, the sale owns the price (it restores it at the end).
+    if (parsed.data.price !== undefined || parsed.data.compareAtPrice !== undefined) {
+      await assertNoActiveSale(pool, [productId]);
+    }
 
     const currentRow = await pool.query<{ product_type: string; status: string }>(
       `select product_type, status from public.products where id = $1`,
@@ -2185,8 +2256,14 @@ sellerRouter.get(
       status: string;
       created_at: Date;
       shipping_address: unknown;
+      is_gift: boolean;
+      gift_message: string | null;
+      gift_wrap: boolean;
+      gift_hide_prices: boolean;
+      gift_sender_name: string | null;
     }>(
-      `select id, order_number, status, created_at, shipping_address
+      `select id, order_number, status, created_at, shipping_address,
+              is_gift, gift_message, gift_wrap, gift_hide_prices, gift_sender_name
        from public.orders
        where id = $1`,
       [orderId]
@@ -2237,6 +2314,15 @@ sellerRouter.get(
         status: order.rows[0].status,
         createdAt: new Date(order.rows[0].created_at).toISOString(),
         shippingAddress: order.rows[0].shipping_address,
+        // Gift orders: the note to include, whether to wrap, whether to leave prices out.
+        gift: order.rows[0].is_gift
+          ? {
+              message: order.rows[0].gift_message,
+              senderName: order.rows[0].gift_sender_name,
+              wrap: order.rows[0].gift_wrap,
+              hidePrices: order.rows[0].gift_hide_prices,
+            }
+          : null,
         items: items.rows.map((row) => ({
           id: row.id,
           productId: row.product_id,

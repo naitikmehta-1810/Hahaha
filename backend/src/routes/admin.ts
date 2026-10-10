@@ -12,6 +12,8 @@ import { env } from "../config/env.js";
 import { invalidateCatalogCaches } from "../services/catalog-cache.js";
 import { hashPassword } from "../utils/password.js";
 import { revokeAllSessions } from "../services/auth.service.js";
+import adminReportsRouter from "./admin-reports.js";
+import adminPayoutsRouter from "./admin-payouts.js";
 import {
   emailSchema,
   indianMobileSchema,
@@ -57,6 +59,10 @@ async function wouldCreateCategoryCycle(categoryId: string, parentId: string) {
 
 const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
+// Moderation queue for reported listings, reviews, shops, questions and messages.
+adminRouter.use(adminReportsRouter);
+// Seller payout queue and ledger adjustments.
+adminRouter.use(adminPayoutsRouter);
 
 adminRouter.get(
   "/users",
@@ -288,7 +294,7 @@ adminRouter.get(
   asyncHandler(async (_req, res) => {
     const result = await pool.query(
       `select id, shop_name, shop_slug, status, contact_phone, created_at,
-              selling_scope, selling_state, gstin, gst_verified_at, pan_india_bypass
+              selling_scope, selling_state, gstin, gst_verified_at, pan_india_bypass, commission_percent
        from public.sellers
        where deleted_at is null
        order by created_at desc
@@ -307,7 +313,10 @@ adminRouter.get(
         gstin: row.gstin,
         gstVerified: Boolean(row.gst_verified_at),
         panIndiaBypass: Boolean(row.pan_india_bypass),
+        /** Null means the platform default (PLATFORM_COMMISSION_PERCENT). */
+        commissionPercent: row.commission_percent != null ? Number(row.commission_percent) : null,
       })),
+      defaultCommissionPercent: env.PLATFORM_COMMISSION_PERCENT,
     });
   })
 );
@@ -587,7 +596,7 @@ adminRouter.get(
     const result = await pool.query(
       `select id, code, type, value, is_active, starts_at, expires_at
        from public.coupons
-       where deleted_at is null
+       where deleted_at is null and seller_id is null
        order by created_at desc
        limit 100`
     );

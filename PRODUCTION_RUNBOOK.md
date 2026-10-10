@@ -84,8 +84,22 @@ From `backend/` (API on `:4000` for HTTP proofs):
 | `scripts/node-checkout-contention.mts` | `npm run proof:contention` | 30 VU contention stand-in (no k6 binary) |
 | `scripts/k6-checkout-contention.js` | `k6 run …` | Optional real k6 (install k6 separately) |
 | `scripts/ensure-payout-key.mts` | `npm run ensure:payout-key` | Append local `PAYOUT_ENCRYPTION_KEY` if missing |
+| `scripts/backfill-seller-ledger.mts` | `npm run backfill:ledger [-- --apply]` | Credit sellers for delivered orders that have no ledger entries (dry run by default) |
 
 Manual payment edge cases: `backend/MANUAL_TEST_CHECKLIST_PHASE4.md`
+
+## Seller earnings and payouts
+
+- Sellers earn when an order is **delivered** (state-machine hook in `order-state-machine.ts`): item price (before GST) minus commission, available after the return window (immediately for non-returnable items). Returns reverse the credit. All of it lives in the append-only `seller_ledger_entries` table.
+- Commission: `PLATFORM_COMMISSION_PERCENT` (default **10**, confirm this is the rate you want), or a per-seller override (`PATCH /api/admin/sellers/:id/commission`, body `{ "commissionPercent": 7.5 }`, `null` = default). Minimum withdrawal: `PAYOUT_MIN_AMOUNT` (default ₹500).
+- Payouts are **manual transfers**: a seller requests one (the amount is reserved at once); an admin sends the money from the bank/UPI app shown on **Admin → Payouts**, then records the UTR/reference ("Mark paid"). "Return" gives the money back to the seller's balance with a reason.
+- A discount from a seller's own coupon is charged to that seller; platform coupons are charged to the platform. GST and delivery charges are not seller earnings.
+- Orders delivered **before** the ledger existed are not credited automatically. Review, then run `npm run backfill:ledger` (dry run) and `npm run backfill:ledger -- --apply`. It is idempotent. If sellers were already paid for those orders outside the platform, offset with a negative adjustment (`POST /api/admin/sellers/:id/adjust`).
+- If the ledger hook ever fails, the order status still advances and an error is logged ("seller ledger update failed"); the backfill script repairs any such order.
+
+## Scheduled sales
+
+A sale is a row in `product_sales`; the `product-sales` job (every minute, same Redis-or-in-process pattern as the other jobs) lowers `base_price` and the variant prices at the start and restores the saved originals at the end. While a sale is live the product's price can't be edited (409 `SALE_ACTIVE`).
 
 ## Invoices
 
@@ -107,7 +121,7 @@ Do these yourself before calling production “live”:
 
 ## Known product decisions
 
-- **Guest checkout:** intentionally not supported — customers must log in to place an order.
+- **Guest checkout:** every order belongs to an account. "Continue as guest" at checkout asks only for name, email and phone and creates a **password-less** buyer account (`POST /api/auth/guest-checkout`), signs it in and merges the guest cart. The email must not already have an account (it is told to sign in instead, so this route can never enter someone else's account). In production `REQUIRE_VERIFIED_EMAIL_FOR_ORDERS` still applies: the guest must click the verification link we email before the order can be placed. A guest can set a password any time with "Forgot password".
 - **Shipments:** scoped per `(order_id, seller_id)` — each seller on a multi-seller order has an independent shipment/tracking row. Order-level status advances when all sibling shipments have reached that stage.
 - **Coupon abuse:** coupon usage limits are enforced per `user_id` only. Multi-account abuse (same person creating many accounts) is a known limitation and is not blocked by device/payment fingerprinting.
 - **Lockfiles:** root, `backend/`, and each notification service each have their own lockfile (separate packages). Next `outputFileTracingRoot` points at the repo root to stabilize tracing.

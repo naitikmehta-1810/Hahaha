@@ -1,8 +1,9 @@
-import { CreditCard, FileText, Image as ImageIcon, Palmtree, Search, Store, Truck } from "lucide-react";
+import { CreditCard, FileText, Image as ImageIcon, MapPinned, Palmtree, Search, Store, Truck } from "lucide-react";
 
 export type ShopSetupStep =
   | "information"
   | "branding"
+  | "maker"
   | "policies"
   | "shipping"
   | "payment"
@@ -13,6 +14,7 @@ export type ShopSetupStep =
 export const SHOP_SETUP_STEPS: Array<{ key: ShopSetupStep; label: string; Icon: typeof Store }> = [
   { key: "information", label: "Shop information", Icon: Store },
   { key: "branding", label: "Branding", Icon: ImageIcon },
+  { key: "maker", label: "Meet the maker", Icon: MapPinned },
   { key: "policies", label: "Shop policies", Icon: FileText },
   { key: "shipping", label: "Shipping & pickup", Icon: Truck },
   { key: "payment", label: "Payment & billing", Icon: CreditCard },

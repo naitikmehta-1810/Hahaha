@@ -19,6 +19,7 @@ import {
   MapPin,
   RotateCcw,
   Ban,
+  MessageCircle,
 } from "lucide-react";
 import styles from "./product-details.module.css";
 import Button, { ButtonLink } from "@/components/ui/Button/Button";
@@ -45,6 +46,10 @@ import { apiRequest, redirectToLogin } from "@/utils/api-client";
 import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
 import DeliveryCheckDialog from "@/components/product/DeliveryCheckDialog";
 import MediaGallery from "@/components/product/MediaGallery";
+import MadeBy from "@/components/maker/MadeBy";
+import ProductQuestions from "@/components/community/ProductQuestions";
+import ReportButton from "@/components/community/ReportButton";
+import MessageShopDialog from "@/components/community/MessageShopDialog";
 import {
   checkDeliverability,
   deliveryWindowLabel,
@@ -81,6 +86,7 @@ export default function ProductDetailsPage() {
   const [notifyBusy, setNotifyBusy] = useState(false);
   const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
   const [related, setRelated] = useState<CatalogProduct[]>([]);
+  const [messageOpen, setMessageOpen] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -145,6 +151,15 @@ export default function ProductDetailsPage() {
       setLiked(liked);
       setActionError(result.error);
     }
+  };
+
+  const openMessage = () => {
+    if (!product || authStatus === "loading") return;
+    if (!isAuthenticated) {
+      redirectToLogin(`/products/${product.slug}`);
+      return;
+    }
+    setMessageOpen(true);
   };
 
   const selectedVariant = useMemo(() => {
@@ -331,8 +346,13 @@ export default function ProductDetailsPage() {
               {product.seller.shopName}
             </Link>
             <h1 className={styles.productTitle}>{product.title}</h1>
-            {product.makerName && product.makerName !== product.seller.shopName ? (
+            {product.makerName &&
+            product.makerName !== product.seller.shopName &&
+            !product.seller.maker?.isProfile ? (
               <span className={styles.makerLink}>Handmade by {product.makerName}</span>
+            ) : null}
+            {product.seller.maker ? (
+              <MadeBy maker={product.seller.maker} shopSlug={product.seller.shopSlug} />
             ) : null}
           </div>
 
@@ -651,6 +671,7 @@ export default function ProductDetailsPage() {
             <Heart size={16} fill={liked ? "currentColor" : "none"} />
             <span>{liked ? "Saved to wishlist" : "Add to wishlist"}</span>
           </button>
+          <ReportButton targetType="product" targetId={product.id} label="Report this listing" />
         </div>
       </div>
 
@@ -699,10 +720,25 @@ export default function ProductDetailsPage() {
             </p>
           </div>
         </div>
-        <ButtonLink href={shopHref(product.shopSlug)} variant="outline">
-          Visit shop
-        </ButtonLink>
+        <div className={styles.sellerActions}>
+          <Button variant="outline" leftIcon={<MessageCircle size={16} />} onClick={openMessage}>
+            Message maker
+          </Button>
+          <ButtonLink href={shopHref(product.shopSlug)} variant="outline">
+            Visit shop
+          </ButtonLink>
+        </div>
       </section>
+
+      {messageOpen ? (
+        <MessageShopDialog
+          shopSlug={product.shopSlug}
+          shopName={product.seller.shopName}
+          productId={product.id}
+          productTitle={product.title}
+          onClose={() => setMessageOpen(false)}
+        />
+      ) : null}
 
       <ProductReviews
         productId={product.id}
@@ -712,6 +748,12 @@ export default function ProductDetailsPage() {
             if (result.product) setProduct(result.product);
           });
         }}
+      />
+
+      <ProductQuestions
+        productId={product.id}
+        productSlug={product.slug}
+        shopName={product.seller.shopName}
       />
 
       {related.length > 0 ? (

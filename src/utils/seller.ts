@@ -123,6 +123,13 @@ export type SellerOrderDetail = {
   status: string;
   createdAt: string;
   shippingAddress?: unknown;
+  /** Set when the buyer ordered this as a gift. */
+  gift?: {
+    message: string | null;
+    senderName: string | null;
+    wrap: boolean;
+    hidePrices: boolean;
+  } | null;
   items: Array<{
     id: string;
     productId: string;

@@ -14,6 +14,7 @@ import { pickupNicknameFromShop } from "@/utils/pickup";
 import { FALLBACK_SHOP_LOGO, optimizedImage } from "@/utils/media";
 import { fetchMySeller, updateMyShop, type SellerProfile } from "@/utils/seller";
 import { shopHref } from "@/utils/catalog";
+import MakerEditor from "@/components/maker/MakerEditor";
 import ui from "@/components/console/console.module.css";
 import styles from "../seller.module.css";
 import {
@@ -383,9 +384,12 @@ function ShopSetupContent() {
         title={SHOP_SETUP_STEPS[stepIndex].label}
         description="Pick a step from the Shop setup menu. Changes apply when you save."
         actions={
-          <Button variant="primary" disabled={saving || uploading !== null} onClick={() => void save()}>
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
+          // The maker step saves on its own, with its own button.
+          tab === "maker" ? undefined : (
+            <Button variant="primary" disabled={saving || uploading !== null} onClick={() => void save()}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          )
         }
       />
 
@@ -586,6 +590,8 @@ function ShopSetupContent() {
               </div>
             </section>
           ) : null}
+
+          {tab === "maker" ? <MakerEditor /> : null}
 
           {tab === "seo" ? (
             <section className={ui.card}>

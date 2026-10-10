@@ -5,12 +5,14 @@ import { useEffect, type ReactNode } from "react";
 import {
   Flag,
   Home,
+  Landmark,
   ImageIcon,
   LayoutDashboard,
   LogIn,
   PanelsTopLeft,
   RotateCcw,
   Search,
+  ShieldAlert,
   ShoppingBag,
   Store,
   Tags,
@@ -32,6 +34,8 @@ const NAV: ConsoleNavGroup[] = [
     items: [
       { href: "/admin/orders", label: "Orders", Icon: ShoppingBag },
       { href: "/admin/returns", label: "Returns", Icon: RotateCcw },
+      { href: "/admin/reports", label: "Reports", Icon: ShieldAlert },
+      { href: "/admin/payouts", label: "Payouts", Icon: Landmark },
       { href: "/admin/sellers", label: "Sellers", Icon: Store },
       { href: "/admin/users", label: "Users", Icon: Users },
     ],

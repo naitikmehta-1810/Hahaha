@@ -107,6 +107,32 @@ export async function createUser(input: {
   return toAuthUser(result.rows[0]);
 }
 
+/**
+ * Express checkout: an account made from just a name, email and phone, with no
+ * password. It is a normal customer account (so orders, payments, invoices,
+ * emails and downloads all work exactly as for any buyer); the person can set a
+ * password later with "Forgot password". Returns null when the email or phone
+ * already belongs to an account, which is never signed in to from here.
+ */
+export async function createPasswordlessUser(input: {
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+}) {
+  const phone = normalizeIndianMobile(input.phoneNumber);
+  if (!phone) {
+    throw new AppError(400, "INVALID_PHONE", "Enter a valid 10-digit Indian mobile number");
+  }
+  const result = await pool.query<UserRecord>(
+    `insert into public.users (full_name, email, phone_number, password_hash, terms_accepted_at)
+     values ($1, lower($2), $3, null, now())
+     on conflict do nothing
+     returning ${USER_COLUMNS}`,
+    [input.fullName, input.email, phone]
+  );
+  return result.rows[0] ? toAuthUser(result.rows[0]) : null;
+}
+
 export async function findUserByEmailForLogin(email: string) {
   const result = await pool.query<UserWithFlags & { password_hash: string | null }>(
     `select ${USER_COLUMNS_U}, u.password_hash, ${SELLER_FLAGS_SQL}

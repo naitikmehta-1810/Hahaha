@@ -1,6 +1,6 @@
 import { apiRequest } from "@/utils/api-client";
 
-export type DirectUploadKind = "video" | "digital";
+export type DirectUploadKind = "video" | "digital" | "intro_video" | "intro_audio";
 
 type SignedUpload = {
   uploadUrl: string;

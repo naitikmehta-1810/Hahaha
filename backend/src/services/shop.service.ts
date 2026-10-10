@@ -1,6 +1,7 @@
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
 import { listProducts, type ProductListFilters } from "./catalog.service.js";
+import { buildMakerProfile, loadStudioPhotos, type MakerProfile } from "./maker.service.js";
 
 /**
  * Public seller-storefront reads. Distinct from the authenticated seller-management
@@ -25,6 +26,8 @@ export type ShopProfile = {
   shopPolicies: Record<string, string> | null;
   isOnVacation: boolean;
   memberSince: number;
+  /** The person behind the shop; null until the seller fills it in. */
+  maker: MakerProfile | null;
   stats: {
     listings: number;
     rating: number;
@@ -83,6 +86,13 @@ type ShopRow = {
   shop_policies: Record<string, string> | null;
   is_vacation_mode: boolean;
   response_rate: number | null;
+  maker_name: string | null;
+  hometown_city: string | null;
+  hometown_state: string | null;
+  practicing_since_year: number | null;
+  maker_intro_kind: string | null;
+  maker_intro_public_id: string | null;
+  maker_intro_duration_seconds: number | null;
   status: string;
   created_at: Date;
   listings: string;
@@ -111,6 +121,8 @@ export async function getShopBySlug(
        s.id, s.shop_name, s.shop_slug, s.shop_tagline, s.description,
        s.logo_url, s.banner_url, s.badge, s.business_address, s.social_links,
        s.seo_title, s.seo_description, s.shop_policies, s.is_vacation_mode, s.response_rate,
+       s.maker_name, s.hometown_city, s.hometown_state, s.practicing_since_year,
+       s.maker_intro_kind, s.maker_intro_public_id, s.maker_intro_duration_seconds,
        s.status, s.created_at,
        (
          select count(*) from public.products p
@@ -149,6 +161,8 @@ export async function getShopBySlug(
     throw new AppError(404, "SHOP_UNAVAILABLE", "This shop is not available.");
   }
 
+  const photos = await loadStudioPhotos(row.id);
+
   let isFollowing = false;
   if (viewerUserId) {
     const follow = await pool.query(
@@ -175,6 +189,7 @@ export async function getShopBySlug(
     shopPolicies: row.shop_policies,
     isOnVacation: row.is_vacation_mode,
     memberSince: new Date(row.created_at).getFullYear(),
+    maker: buildMakerProfile(row, photos),
     stats: {
       listings: Number(row.listings),
       // Documented choice: review-count-weighted mean of the seller's products'

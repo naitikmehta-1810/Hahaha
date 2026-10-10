@@ -1,16 +1,20 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { BadgeCheck, MessageSquareText, Star } from "lucide-react";
+import { BadgeCheck, Camera, MessageSquareText, Star, Store, X } from "lucide-react";
 import Button from "@/components/ui/Button/Button";
 import Notice from "@/components/ui/Notice/Notice";
+import PhotoLightbox from "@/components/ui/PhotoLightbox/PhotoLightbox";
+import ReportButton from "@/components/community/ReportButton";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
 import { submitReview } from "@/utils/cart";
 import { formatDate } from "@/utils/format";
 import {
+  REVIEW_PHOTO_LIMIT,
   fetchProductReviews,
   fetchReviewEligibility,
+  uploadReviewPhoto,
   type ProductReview,
   type ProductReviewPage,
   type ReviewEligibility,
@@ -71,8 +75,27 @@ function ReviewForm({
   const [rating, setRating] = useState(0);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const addPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setError(null);
+    const room = REVIEW_PHOTO_LIMIT - photos.length - uploading;
+    const picked = Array.from(files).slice(0, Math.max(0, room));
+    if (files.length > room) setError(`You can add up to ${REVIEW_PHOTO_LIMIT} photos.`);
+    setUploading((n) => n + picked.length);
+    await Promise.all(
+      picked.map(async (file) => {
+        const result = await uploadReviewPhoto(file);
+        setUploading((n) => n - 1);
+        if (result.url) setPhotos((current) => [...current, result.url!]);
+        else setError(result.error ?? "Photo upload failed.");
+      })
+    );
+  };
 
   return (
     <form
@@ -81,6 +104,10 @@ function ReviewForm({
         event.preventDefault();
         if (!rating) {
           setError("Choose a star rating.");
+          return;
+        }
+        if (uploading > 0) {
+          setError("Wait for your photos to finish uploading.");
           return;
         }
         void (async () => {
@@ -92,6 +119,7 @@ function ReviewForm({
             rating,
             title: title.trim() || undefined,
             body: body.trim() || undefined,
+            imageUrls: photos.length ? photos : undefined,
           });
           setBusy(false);
           if (result.error) {
@@ -123,9 +151,49 @@ function ReviewForm({
           onChange={(e) => setBody(e.target.value)}
         />
       </label>
+      <div className={styles.field}>
+        <span>Add photos (optional)</span>
+        <ul className={styles.photoPicker}>
+          {photos.map((url) => (
+            <li key={url} className={styles.photoThumb}>
+              <img src={optimizedImage(url, 160)} alt="" />
+              <button
+                type="button"
+                className={styles.photoRemove}
+                aria-label="Remove photo"
+                onClick={() => setPhotos((current) => current.filter((u) => u !== url))}
+              >
+                <X size={12} />
+              </button>
+            </li>
+          ))}
+          {Array.from({ length: uploading }).map((_, i) => (
+            <li key={`up-${i}`} className={`${styles.photoThumb} ${styles.photoLoading}`} aria-label="Uploading photo" />
+          ))}
+          {photos.length + uploading < REVIEW_PHOTO_LIMIT ? (
+            <li>
+              <label className={styles.photoAdd}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    void addPhotos(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <Camera size={18} aria-hidden="true" />
+                <span>Add</span>
+              </label>
+            </li>
+          ) : null}
+        </ul>
+        <small className={styles.photoHint}>Up to {REVIEW_PHOTO_LIMIT} photos of the piece you received.</small>
+      </div>
       {error ? <Notice tone="danger">{error}</Notice> : null}
       <div className={styles.formActions}>
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || uploading > 0}>
           {busy ? "Posting…" : "Post review"}
         </Button>
       </div>
@@ -133,7 +201,13 @@ function ReviewForm({
   );
 }
 
-function ReviewCard({ review }: { review: ProductReview }) {
+function ReviewCard({
+  review,
+  onOpenPhoto,
+}: {
+  review: ProductReview;
+  onOpenPhoto: (urls: string[], index: number) => void;
+}) {
   const initial = review.author.charAt(0).toUpperCase();
   return (
     <article className={styles.review}>
@@ -161,6 +235,35 @@ function ReviewCard({ review }: { review: ProductReview }) {
       </header>
       {review.title ? <h4 className={styles.reviewTitle}>{review.title}</h4> : null}
       {review.body ? <p className={styles.reviewBody}>{review.body}</p> : null}
+      {review.images.length > 0 ? (
+        <ul className={styles.reviewPhotos} aria-label="Photos from this buyer">
+          {review.images.map((url, index) => (
+            <li key={url}>
+              <button
+                type="button"
+                className={styles.reviewPhoto}
+                onClick={() => onOpenPhoto(review.images, index)}
+                aria-label={`Open photo ${index + 1} of ${review.images.length}`}
+              >
+                <img src={optimizedImage(url, 240)} alt="" loading="lazy" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {review.reply ? (
+        <div className={styles.reply}>
+          <p className={styles.replyHead}>
+            <Store size={13} aria-hidden="true" />
+            <strong>{review.reply.shopName ?? "The maker"}</strong> replied
+            {review.reply.repliedAt ? <span> · {formatDate(review.reply.repliedAt)}</span> : null}
+          </p>
+          <p className={styles.replyBody}>{review.reply.body}</p>
+        </div>
+      ) : null}
+      <footer className={styles.reviewFoot}>
+        <ReportButton targetType="review" targetId={review.id} />
+      </footer>
     </article>
   );
 }
@@ -183,6 +286,7 @@ export default function ProductReviews({ productId, productSlug, onReviewPosted 
   const [eligibility, setEligibility] = useState<ReviewEligibility | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [posted, setPosted] = useState(false);
+  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number } | null>(null);
 
   const load = useCallback(
     async (nextPage: number, nextSort: ReviewSort) => {
@@ -319,8 +423,33 @@ export default function ProductReviews({ productId, productSlug, onReviewPosted 
             </div>
           ) : (
             <>
+              {data?.photos && data.photos.length > 0 ? (
+                <div className={styles.photoStrip}>
+                  <h3 className={styles.photoStripTitle}>Photos from buyers</h3>
+                  <ul className={styles.photoStripList}>
+                    {data.photos.map((photo, index) => (
+                      <li key={photo.url}>
+                        <button
+                          type="button"
+                          className={styles.reviewPhoto}
+                          onClick={() =>
+                            setLightbox({ urls: data.photos!.map((p) => p.url), index })
+                          }
+                          aria-label={`Open buyer photo ${index + 1}`}
+                        >
+                          <img src={optimizedImage(photo.url, 200)} alt="" loading="lazy" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {reviews.map((review) => (
-                <ReviewCard key={review.id} review={review} />
+                <ReviewCard
+                  key={review.id}
+                  review={review}
+                  onOpenPhoto={(urls, index) => setLightbox({ urls, index })}
+                />
               ))}
               {hasMore ? (
                 <Button
@@ -339,6 +468,15 @@ export default function ProductReviews({ productId, productSlug, onReviewPosted 
           )}
         </div>
       </div>
+      {lightbox ? (
+        <PhotoLightbox
+          photos={lightbox.urls.map((url) => ({ url }))}
+          index={lightbox.index}
+          label="Review photo"
+          onIndexChange={(index) => setLightbox((current) => (current ? { ...current, index } : current))}
+          onClose={() => setLightbox(null)}
+        />
+      ) : null}
     </section>
   );
 }

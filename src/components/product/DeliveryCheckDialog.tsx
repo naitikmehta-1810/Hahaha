@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { CheckCircle2, MapPin, X, XCircle } from "lucide-react";
 import Button from "@/components/ui/Button/Button";
+import SavedPincodePicker from "@/components/product/SavedPincodePicker";
 import {
   checkDeliverability,
   deliveryWindowLabel,
@@ -126,6 +127,16 @@ export default function DeliveryCheckDialog({
             </>
           )}
         </p>
+
+        <SavedPincodePicker
+          current={pincode}
+          checkedPincode={shown?.deliverable === false ? null : (shown?.pincode ?? null)}
+          onPick={(picked) => {
+            setPincode(picked);
+            setError(null);
+            inputRef.current?.focus();
+          }}
+        />
 
         <form className={styles.form} onSubmit={(e) => void check(e)} noValidate>
           <label htmlFor="delivery-pincode" className={styles.label}>

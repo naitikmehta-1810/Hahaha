@@ -66,6 +66,16 @@ export type ProductDetail = ProductCard & {
     id: string;
     shopName: string;
     shopSlug: string;
+    /** "Made by Meera in Jaipur"; falls back to the shop name and city. */
+    maker?: {
+      isProfile: boolean;
+      name: string;
+      hometownCity: string | null;
+      hometownState: string | null;
+      yearsOfPractice: number | null;
+      hasIntro: boolean;
+      studioPhotoCount: number;
+    };
     logoUrl: string | null;
     badge: string | null;
     rating: number;

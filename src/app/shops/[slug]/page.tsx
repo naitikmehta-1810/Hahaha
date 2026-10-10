@@ -18,7 +18,6 @@ import {
   Store,
   X,
 } from "lucide-react";
-import { supportMailto } from "@/utils/support";
 import styles from "./shop.module.css";
 import Heading from "@/components/ui/Heading/Heading";
 import Text from "@/components/ui/Text/Text";
@@ -49,6 +48,9 @@ import {
   optimizedImage,
 } from "@/utils/media";
 import { fetchSiteMedia } from "@/utils/siteMedia";
+import MakerSection from "@/components/maker/MakerSection";
+import MessageShopDialog from "@/components/community/MessageShopDialog";
+import ReportButton from "@/components/community/ReportButton";
 
 const FALLBACK_THUMB = FALLBACK_PRODUCT_IMAGE;
 const FALLBACK_AVATAR = FALLBACK_SHOP_LOGO;
@@ -62,7 +64,7 @@ const SORT_OPTIONS: Array<{ value: ProductSort; label: string }> = [
   { value: "newest", label: "Newest" },
 ];
 
-type TabKey = "shop" | "about" | "reviews" | "policies";
+type TabKey = "shop" | "maker" | "about" | "reviews" | "policies";
 
 export default function ShopStorefrontPage() {
   return (
@@ -85,7 +87,7 @@ function ShopStorefrontInner() {
   const [shop, setShop] = useState<ShopProfile | null>(null);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>("shop");
+  const [tab, setTab] = useState<TabKey>(searchParams.get("tab") === "maker" ? "maker" : "shop");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(categoryFromUrl);
   const [sort, setSort] = useState<ProductSort>("popular");
   const [page, setPage] = useState(pageFromUrl);
@@ -95,6 +97,7 @@ function ShopStorefrontInner() {
   const [productsLoading, setProductsLoading] = useState(true);
   const [followBusy, setFollowBusy] = useState(false);
   const [messageNote, setMessageNote] = useState<string | null>(null);
+  const [messageOpen, setMessageOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [defaultBanner, setDefaultBanner] = useState<string | null>(null);
 
@@ -118,6 +121,8 @@ function ShopStorefrontInner() {
         return;
       }
       setShop(result.shop);
+      // A link to the maker tab of a shop with no maker profile falls back to the shop.
+      if (!result.shop.maker) setTab((current) => (current === "maker" ? "shop" : current));
       setCategories(result.categories);
       setLoadError(null);
     });
@@ -184,11 +189,13 @@ function ShopStorefrontInner() {
     }
   };
 
-  // In-app messaging isn’t built yet, so route questions through Stuffsy support.
   const handleMessage = () => {
-    if (!shop) return;
-    window.location.href = supportMailto(`Question about ${shop.shopName}`);
-    setMessageNote(`Your email app should open. Mention “${shop.shopName}” and we’ll connect you with the maker.`);
+    if (!shop || authStatus === "loading") return;
+    if (!isAuthenticated) {
+      redirectToLogin(`/shops/${slug}`);
+      return;
+    }
+    setMessageOpen(true);
   };
 
   if (loadError && !shop) {
@@ -322,6 +329,7 @@ function ShopStorefrontInner() {
               {(
                 [
                   ["shop", "Shop"],
+                  ...(shop.maker ? ([["maker", "Meet the maker"]] as Array<[TabKey, string]>) : []),
                   ["about", "About"],
                   ["reviews", `Reviews (${shop.stats.reviewCount})`],
                   ["policies", "Policies"],
@@ -374,6 +382,7 @@ function ShopStorefrontInner() {
             <Button variant="outline" fullWidth onClick={handleMessage}>
               <MessageCircle size={16} /> Contact Shop
             </Button>
+            <ReportButton targetType="shop" targetId={shop.id} label="Report this shop" />
           </div>
         </aside>
 
@@ -579,6 +588,10 @@ function ShopStorefrontInner() {
             </>
           ) : null}
 
+          {tab === "maker" && shop.maker ? (
+            <MakerSection maker={shop.maker} shopName={shop.shopName} />
+          ) : null}
+
           {tab === "about" ? (
             <div className={styles.panel}>
               <h3>About {shop.shopName}</h3>
@@ -636,6 +649,14 @@ function ShopStorefrontInner() {
           ) : null}
         </main>
       </div>
+
+      {messageOpen ? (
+        <MessageShopDialog
+          shopSlug={shop.shopSlug}
+          shopName={shop.shopName}
+          onClose={() => setMessageOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

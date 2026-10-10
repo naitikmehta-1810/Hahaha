@@ -12,6 +12,7 @@ import StatusPill from "@/components/ui/StatusPill/StatusPill";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiRequest, redirectToLogin } from "@/utils/api-client";
 import { fetchMySeller } from "@/utils/seller";
+import BulkProductBar from "@/components/seller/BulkProductBar";
 import { formatDate, rupees } from "@/utils/format";
 import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
 import ui from "@/components/console/console.module.css";
@@ -44,6 +45,8 @@ export default function SellerProductsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["value"]>("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMessage, setBulkMessage] = useState<{ tone: "success" | "warning" | "danger"; text: string } | null>(null);
 
   const loadProducts = async () => {
     const result = await apiRequest<{ products: SellerProduct[] }>(
@@ -117,6 +120,18 @@ export default function SellerProductsPage() {
     });
   }, [products, query, filter]);
 
+  const selectedIds = visible.filter((product) => selected.has(product.id)).map((product) => product.id);
+  const allVisibleSelected = visible.length > 0 && selectedIds.length === visible.length;
+  const toggleOne = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = () =>
+    setSelected(allVisibleSelected ? new Set() : new Set(visible.map((product) => product.id)));
+
   const counts = {
     all: products.length,
     active: products.filter((p) => p.status === "active").length,
@@ -141,6 +156,7 @@ export default function SellerProductsPage() {
       />
 
       {error ? <Notice tone="danger">{error}</Notice> : null}
+      {bulkMessage ? <Notice tone={bulkMessage.tone}>{bulkMessage.text}</Notice> : null}
 
       {loading ? (
         <p className={ui.muted}>Loading products…</p>
@@ -182,10 +198,29 @@ export default function SellerProductsPage() {
               />
             </label>
           </div>
+          {selectedIds.length > 0 ? (
+            <BulkProductBar
+              ids={selectedIds}
+              onClear={() => setSelected(new Set())}
+              onDone={(message) => {
+                setBulkMessage(message);
+                setSelected(new Set());
+                void loadProducts();
+              }}
+            />
+          ) : null}
           <div className={ui.tableWrap}>
             <table className={ui.table}>
               <thead>
                 <tr>
+                  <th style={{ width: 36 }}>
+                    <input
+                      type="checkbox"
+                      aria-label="Select all products shown"
+                      checked={allVisibleSelected}
+                      onChange={toggleAll}
+                    />
+                  </th>
                   <th>Product</th>
                   <th>Status</th>
                   <th className={ui.num}>Stock</th>
@@ -199,6 +234,14 @@ export default function SellerProductsPage() {
                   const busy = busyId === product.id;
                   return (
                     <tr key={product.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${product.title}`}
+                          checked={selected.has(product.id)}
+                          onChange={() => toggleOne(product.id)}
+                        />
+                      </td>
                       <td>
                         <div className={ui.cellMedia}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -280,7 +323,7 @@ export default function SellerProductsPage() {
                 })}
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className={ui.emptyCell}>
+                    <td colSpan={7} className={ui.emptyCell}>
                       No products match {query.trim() ? `“${query.trim()}”` : "this filter"}.
                     </td>
                   </tr>

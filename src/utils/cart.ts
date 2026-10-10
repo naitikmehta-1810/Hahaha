@@ -223,6 +223,7 @@ export const COUPON_REASON_MESSAGES: Record<string, string> = {
   USER_LIMIT_REACHED: "You have already used this coupon the maximum number of times.",
   TOTAL_LIMIT_REACHED: "This coupon has reached its total usage limit.",
   CATEGORY_MISMATCH: "This coupon does not apply to items in your cart.",
+  SELLER_MISMATCH: "This coupon is for a different shop than the one(s) in your cart.",
 };
 
 export async function applyCoupon(code: string) {
@@ -299,6 +300,13 @@ export async function placeOrder(
     referrerChannel?: "website" | "marketplace" | "social" | "other";
     /** The delivery charge the buyer saw; the server refuses the order if it changed. */
     expectedShippingAmount?: number | null;
+    /** Gift options; omit or null for an ordinary order. */
+    gift?: {
+      message: string | null;
+      senderName: string | null;
+      wrap: boolean;
+      hidePrices: boolean;
+    } | null;
   }
 ) {
   let referrerChannel = options?.referrerChannel;
@@ -323,6 +331,7 @@ export async function placeOrder(
       paymentMethod: options?.paymentMethod ?? undefined,
       referrerChannel: referrerChannel ?? "website",
       expectedShippingAmount: options?.expectedShippingAmount ?? undefined,
+      gift: options?.gift ?? undefined,
     },
   });
 
@@ -509,6 +518,13 @@ export type OrderDetail = {
     paidAt: string | null;
   };
   invoiceUrl: string | null;
+  /** Set when the order was placed as a gift. */
+  gift?: {
+    message: string | null;
+    senderName: string | null;
+    wrap: boolean;
+    hidePrices: boolean;
+  } | null;
 };
 
 export async function fetchOrderDetail(orderId: string): Promise<OrderDetail | null> {
@@ -581,6 +597,7 @@ export async function submitReview(input: {
   rating: number;
   title?: string;
   body?: string;
+  imageUrls?: string[];
 }) {
   return apiRequest<{ review: { id: string } }>("POST", "/api/reviews", { body: input });
 }

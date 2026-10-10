@@ -1,3 +1,35 @@
+.photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.photos img {
+  display: block;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}
+
+.reply {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--color-primary);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--color-primary-light);
+  font-size: 0.85rem;
+}
+
+.reply p {
+  margin: 2px 0 0;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
 .muted {
   font-size: 0.9rem;
   color: var(--color-text-muted);

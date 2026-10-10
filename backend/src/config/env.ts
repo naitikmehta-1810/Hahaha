@@ -30,6 +30,17 @@ const envSchema = z.object({
    */
   PRODUCT_VIDEO_MAX_MB: z.coerce.number().positive().default(100),
   DIGITAL_FILE_MAX_MB: z.coerce.number().positive().default(100),
+  /**
+   * The platform's cut of each item's price (before GST) when an order is delivered.
+   * A seller can have their own rate (sellers.commission_percent), set by an admin.
+   */
+  PLATFORM_COMMISSION_PERCENT: z.coerce.number().min(0).max(100).default(10),
+  /** Smallest amount a seller may withdraw in one payout request. */
+  PAYOUT_MIN_AMOUNT: z.coerce.number().nonnegative().default(500),
+  /** Ceiling for a maker's intro video or voice note (the shop's "Meet the maker" clip). */
+  MAKER_INTRO_MAX_MB: z.coerce.number().positive().default(50),
+  /** Longest intro clip a maker may attach, in seconds. */
+  MAKER_INTRO_MAX_SECONDS: z.coerce.number().int().positive().default(120),
   /** How long the download links in the digital-delivery email keep working. */
   DIGITAL_EMAIL_LINK_DAYS: z.coerce.number().int().positive().default(7),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),

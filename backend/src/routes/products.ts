@@ -18,6 +18,7 @@ import { shippingQuoteLimiter } from "../middleware/auth-rate-limit.js";
 import { recordSearch } from "../services/product-stats.service.js";
 import { normalizeQuery } from "../services/search-query.js";
 import { analyticsVisitorId } from "./analytics.js";
+import { MAX_COMPARE, compareProducts } from "../services/compare.service.js";
 
 const productsRouter = Router();
 
@@ -154,6 +155,21 @@ productsRouter.get(
  * same category as the given products, excluding them.
  * Declared before /:slug so "related" isn't swallowed as a slug.
  */
+/** Side-by-side details for up to four products: /api/products/compare?ids=a,b,c */
+productsRouter.get(
+  "/compare",
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({ ids: uuidCsv }).safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Pick up to " + MAX_COMPARE + " products to compare" });
+      return;
+    }
+    const products = await compareProducts(parsed.data.ids);
+    res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+    res.json({ products });
+  })
+);
+
 productsRouter.get(
   "/related",
   optionalAuth,

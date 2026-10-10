@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { formatInr, priceWithGst } from "@/utils/gst";
-import { Heart, Star } from "lucide-react";
+import { Check, Columns2, Heart, Star } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { redirectToLogin } from "@/utils/api-client";
@@ -12,6 +12,7 @@ import {
   toggleWishlist,
 } from "@/utils/wishlist";
 import { imageSrcSet, optimizedImage } from "@/utils/media";
+import { MAX_COMPARE, toggleCompare, useCompareIds } from "@/utils/compare";
 import styles from "./ProductCard.module.css";
 
 /** Wishlist heart bound to the shared wishlist cache. */
@@ -66,6 +67,32 @@ function WishlistHeart({ productId }: { productId: string }) {
   );
 }
 
+/** Adds the product to the comparison tray (up to four, kept in this browser). */
+function CompareToggle({ productId }: { productId: string }) {
+  const ids = useCompareIds();
+  const [full, setFull] = useState(false);
+  const picked = ids.includes(productId);
+
+  return (
+    <button
+      type="button"
+      className={`${styles.compareBtn} ${picked ? styles.comparePicked : ""}`}
+      aria-pressed={picked}
+      aria-label={picked ? "Remove from comparison" : "Add to comparison"}
+      title={full ? `You can compare up to ${MAX_COMPARE} products` : picked ? "In comparison" : "Compare"}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const ok = toggleCompare(productId);
+        setFull(!ok);
+        if (!ok) window.setTimeout(() => setFull(false), 2500);
+      }}
+    >
+      {picked ? <Check size={15} /> : <Columns2 size={15} />}
+    </button>
+  );
+}
+
 interface ProductCardRootProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   href: string;
@@ -88,6 +115,7 @@ const ProductCardRoot = ({
       </Link>
       {/* Sibling of the link so the button is not nested inside an anchor. */}
       {productId ? <WishlistHeart productId={productId} /> : null}
+      {productId ? <CompareToggle productId={productId} /> : null}
     </div>
   );
 };

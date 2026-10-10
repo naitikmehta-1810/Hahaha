@@ -22,6 +22,8 @@ type AdminSeller = {
   gstin: string | null;
   gstVerified: boolean;
   panIndiaBypass: boolean;
+  /** Null = the platform default. */
+  commissionPercent: number | null;
 };
 
 const FILTERS = [
@@ -51,14 +53,21 @@ export default function AdminSellersPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [defaultCommission, setDefaultCommission] = useState(10);
 
   const load = useCallback(async () => {
-    const result = await apiRequest<{ sellers: AdminSeller[] }>("GET", "/api/admin/sellers");
+    const result = await apiRequest<{ sellers: AdminSeller[]; defaultCommissionPercent?: number }>(
+      "GET",
+      "/api/admin/sellers"
+    );
     if (result.error || !result.data) {
       setError(result.error ?? "Could not load sellers.");
     } else {
       setError(null);
       setSellers(result.data.sellers);
+      if (typeof result.data.defaultCommissionPercent === "number") {
+        setDefaultCommission(result.data.defaultCommissionPercent);
+      }
     }
     setLoading(false);
   }, []);
@@ -74,6 +83,31 @@ export default function AdminSellersPage() {
       `/api/admin/sellers/${encodeURIComponent(id)}/status`,
       { body: { status } }
     );
+    setBusyId(null);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    await load();
+  }
+
+  async function editCommission(seller: AdminSeller) {
+    const current = seller.commissionPercent ?? defaultCommission;
+    const input = window.prompt(
+      `Commission for ${seller.shopName} (%). Leave empty to use the platform default of ${defaultCommission}%.`,
+      seller.commissionPercent == null ? "" : String(current)
+    );
+    if (input === null) return;
+    const trimmed = input.trim();
+    const value = trimmed === "" ? null : Number(trimmed);
+    if (value !== null && (!Number.isFinite(value) || value < 0 || value > 100)) {
+      setError("Commission must be a number from 0 to 100.");
+      return;
+    }
+    setBusyId(seller.id);
+    const result = await apiRequest("PATCH", `/api/admin/sellers/${encodeURIComponent(seller.id)}/commission`, {
+      body: { commissionPercent: value },
+    });
     setBusyId(null);
     if (result.error) {
       setError(result.error);
@@ -136,6 +170,7 @@ export default function AdminSellersPage() {
                 <th>Shop</th>
                 <th>Status</th>
                 <th>Selling reach</th>
+                <th>Commission</th>
                 <th>Phone</th>
                 <th>Joined</th>
                 <th className={ui.num}>Actions</th>
@@ -159,10 +194,17 @@ export default function AdminSellersPage() {
                     <td>
                       <StatusPill tone={shopReach.tone}>{shopReach.label}</StatusPill>
                     </td>
+                    <td className={ui.nowrap}>
+                      {s.commissionPercent ?? defaultCommission}%
+                      {s.commissionPercent == null ? <span className={ui.cellSub}>default</span> : null}
+                    </td>
                     <td className={ui.nowrap}>{s.contactPhone ?? "—"}</td>
                     <td className={ui.nowrap}>{formatDate(s.createdAt)}</td>
                     <td>
                       <div className={ui.rowActions}>
+                        <Button size="sm" variant="outline" disabled={busy} onClick={() => void editCommission(s)}>
+                          Commission
+                        </Button>
                         {s.status !== "active" ? (
                           <Button
                             size="sm"
@@ -216,14 +258,14 @@ export default function AdminSellersPage() {
               })}
               {!loading && visible.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className={ui.emptyCell}>
+                  <td colSpan={7} className={ui.emptyCell}>
                     {filter === "all" ? "No sellers yet." : `No ${filter} shops.`}
                   </td>
                 </tr>
               ) : null}
               {loading ? (
                 <tr>
-                  <td colSpan={6} className={ui.emptyCell}>
+                  <td colSpan={7} className={ui.emptyCell}>
                     Loading shops…
                   </td>
                 </tr>

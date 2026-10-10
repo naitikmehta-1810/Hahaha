@@ -22,7 +22,26 @@ export type UploadFolder =
   | "invoices"
   | "categories"
   | "ui"
-  | "avatars";
+  | "avatars"
+  | "reviews";
+
+/**
+ * True for an image hosted in this account's Cloudinary. With `folder`, the image
+ * must also sit under stuffsy/<folder>/ (so a review photo can't be an arbitrary
+ * image from elsewhere in the account). The URL's host is checked, not just
+ * its text, so look-alike hosts and path tricks fail.
+ */
+export function isOwnCloudinaryImage(url: string, folder?: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.hostname !== "res.cloudinary.com") return false;
+    const prefix = `/${env.CLOUDINARY_CLOUD_NAME}/image/upload/`;
+    if (!parsed.pathname.startsWith(prefix)) return false;
+    return folder ? parsed.pathname.includes(`/${folder}/`) : true;
+  } catch {
+    return false;
+  }
+}
 
 export type UploadResult = {
   url: string;
@@ -128,15 +147,21 @@ export async function uploadImage(input: {
 
 /* ── Direct browser uploads (video, digital files) ───────────────────────── */
 
-export type DirectUploadKind = "video" | "digital";
+export type DirectUploadKind = "video" | "digital" | "intro_video" | "intro_audio";
 
 /** Eager transform for product videos: H.264 MP4 plays everywhere (iPhone .mov/HEVC does not). */
 const VIDEO_EAGER = "q_auto/mp4";
 
 function directUploadFolder(kind: DirectUploadKind, sellerId: string) {
-  return kind === "video"
-    ? `stuffsy/products/videos/${sellerId}`
-    : `stuffsy/digital/${sellerId}`;
+  switch (kind) {
+    case "video":
+      return `stuffsy/products/videos/${sellerId}`;
+    case "digital":
+      return `stuffsy/digital/${sellerId}`;
+    case "intro_video":
+    case "intro_audio":
+      return `stuffsy/makers/intros/${sellerId}`;
+  }
 }
 
 /**
@@ -152,17 +177,24 @@ export function signDirectUpload(kind: DirectUploadKind, sellerId: string) {
   const folder = directUploadFolder(kind, sellerId);
   const timestamp = Math.round(Date.now() / 1000);
   const params: Record<string, string | number | boolean> =
-    kind === "video"
+    kind === "video" || kind === "intro_video"
       ? { folder, timestamp, eager: VIDEO_EAGER, eager_async: true }
-      : { folder, timestamp, type: "authenticated", use_filename: true, unique_filename: true };
+      : kind === "intro_audio"
+        ? { folder, timestamp }
+        : { folder, timestamp, type: "authenticated", use_filename: true, unique_filename: true };
   const signature = cloudinary.utils.api_sign_request(params, env.CLOUDINARY_API_SECRET);
-  const resourceType = kind === "video" ? "video" : "raw";
+  // Cloudinary stores audio under its "video" resource type.
+  const resourceType = kind === "digital" ? "raw" : "video";
+  const maxMb =
+    kind === "video"
+      ? env.PRODUCT_VIDEO_MAX_MB
+      : kind === "digital"
+        ? env.DIGITAL_FILE_MAX_MB
+        : env.MAKER_INTRO_MAX_MB;
   return {
     uploadUrl: `https://api.cloudinary.com/v1_1/${env.CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
     fields: { ...params, api_key: env.CLOUDINARY_API_KEY, signature },
-    maxBytes: Math.round(
-      (kind === "video" ? env.PRODUCT_VIDEO_MAX_MB : env.DIGITAL_FILE_MAX_MB) * 1024 * 1024
-    ),
+    maxBytes: Math.round(maxMb * 1024 * 1024),
   };
 }
 
@@ -208,6 +240,50 @@ export function productVideoPosterUrl(publicId: string) {
     transformation: [{ start_offset: 0, quality: "auto", width: 1200, crop: "limit" }],
     format: "jpg",
   });
+}
+
+/** Playback URL for a maker's intro: MP4 for video, MP3 for a voice note. */
+export function makerIntroUrl(publicId: string, kind: "video" | "audio") {
+  ensureCloudinary();
+  return cloudinary.url(publicId, {
+    resource_type: "video",
+    secure: true,
+    ...(kind === "video" ? { transformation: [{ quality: "auto" }], format: "mp4" } : { format: "mp3" }),
+  });
+}
+
+/** Poster frame for an intro video; voice notes have none. */
+export function makerIntroPosterUrl(publicId: string, kind: "video" | "audio") {
+  return kind === "video" ? productVideoPosterUrl(publicId) : null;
+}
+
+export type UploadedClipInfo = { seconds: number | null; isAudio: boolean | null };
+
+/**
+ * Length and kind of an uploaded clip, read from Cloudinary rather than from
+ * the browser, so the limits can't be dodged by editing the request. Values are
+ * null when Cloudinary can't say yet; callers decide whether to allow that.
+ */
+export async function inspectUploadedClip(publicId: string): Promise<UploadedClipInfo> {
+  ensureCloudinary();
+  try {
+    // Duration is only included when media metadata is requested.
+    const info = (await cloudinary.api.resource(publicId, {
+      resource_type: "video",
+      media_metadata: true,
+    })) as { duration?: number; is_audio?: boolean };
+    return {
+      seconds: typeof info.duration === "number" ? info.duration : null,
+      isAudio: typeof info.is_audio === "boolean" ? info.is_audio : null,
+    };
+  } catch (error) {
+    const status = (error as { http_code?: number } | undefined)?.http_code;
+    if (status === 404) {
+      throw new AppError(400, "UPLOAD_NOT_FOUND", "That upload could not be found. Upload the clip again.");
+    }
+    console.warn("[cloudinary] could not read clip duration", publicId, error);
+    return { seconds: null, isAudio: null };
+  }
 }
 
 /** Short-lived signed link to a private digital file; forces a download. */

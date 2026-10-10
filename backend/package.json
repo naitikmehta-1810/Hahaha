@@ -13,6 +13,7 @@
     "seed:category-images": "tsx src/db/seeds/category-images.seed.ts",
     "seed:demo": "tsx src/db/seeds/demo-catalog.seed.ts",
     "lint": "eslint . --max-warnings 100",
+    "backfill:ledger": "tsx scripts/backfill-seller-ledger.mts",
     "proof:race": "tsx scripts/concurrency-race-proof.mts",
     "proof:seller-scope": "tsx scripts/seller-scope-regression.mts",
     "proof:maintenance": "tsx scripts/maintenance-proof.mts",

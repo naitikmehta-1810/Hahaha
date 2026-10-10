@@ -31,6 +31,8 @@ export type ConsoleNavItem = {
   isActive?: (pathname: string) => boolean;
   /** Renders the item as a dropdown of sub-pages. */
   children?: ConsoleNavChild[];
+  /** A count shown beside the label (unread messages, items waiting). Hidden at 0. */
+  badge?: number;
 };
 
 export type ConsoleNavGroup = { label?: string; items: ConsoleNavItem[] };
@@ -107,6 +109,11 @@ function NavTree({
                 >
                   <item.Icon size={18} aria-hidden="true" />
                   <span>{item.label}</span>
+                  {item.badge ? (
+                    <span className={styles.navBadge} aria-label={`${item.badge} waiting`}>
+                      {item.badge > 99 ? "99+" : item.badge}
+                    </span>
+                  ) : null}
                 </Link>
               );
             }

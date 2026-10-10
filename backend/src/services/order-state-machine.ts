@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
+import { logger } from "../utils/logger.js";
 
 export const ORDER_STATUSES = [
   "pending_payment",
@@ -180,6 +181,22 @@ export async function transition(
         }),
       ]
     );
+
+    // Seller earnings follow the order: credited on delivery, reversed on return.
+    // A savepoint keeps a ledger problem from blocking the delivery itself; the
+    // ledger back-fill script is idempotent and repairs any order missed here.
+    if (toStatus === "delivered" || toStatus === "returned") {
+      await client.query("savepoint seller_ledger");
+      try {
+        const ledger = await import("./ledger.service.js");
+        if (toStatus === "delivered") await ledger.creditSellersForDelivery(client, orderId);
+        else await ledger.reverseSellersForReturn(client, orderId);
+        await client.query("release savepoint seller_ledger");
+      } catch (error) {
+        await client.query("rollback to savepoint seller_ledger");
+        logger.error({ err: error, orderId, toStatus }, "seller ledger update failed; order status kept");
+      }
+    }
 
     if (ownsClient) {
       await client.query("commit");

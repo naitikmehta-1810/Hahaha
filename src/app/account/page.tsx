@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense, useEffect, useState } from "react";
-import { formatInr, priceWithGst } from "@/utils/gst";
+import { formatInr } from "@/utils/gst";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -16,6 +16,7 @@ import {
   Mail,
   MapPin,
   Menu,
+  MessagesSquare,
   Phone,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -42,8 +43,7 @@ import {
   type OrderListItem,
   type AddressRecord,
 } from "@/utils/cart";
-import { fetchWishlist, toggleWishlist, type WishlistItem } from "@/utils/wishlist";
-import { productHref } from "@/utils/catalog";
+import { fetchWishlist } from "@/utils/wishlist";
 import { FALLBACK_PRODUCT_IMAGE, optimizedImage } from "@/utils/media";
 import styles from "./account.module.css";
 import Button, { ButtonLink } from "@/components/ui/Button/Button";
@@ -54,6 +54,9 @@ import StatusPill from "@/components/ui/StatusPill/StatusPill";
 import Sidebar from "@/components/layout/Sidebar/Sidebar";
 import MyReviews from "@/components/reviews/MyReviews";
 import AccountDownloads from "@/components/orders/AccountDownloads";
+import Inbox from "@/components/community/Inbox";
+import WishlistPanel from "@/components/wishlist/WishlistPanel";
+import SavedPincodesPanel from "@/components/account/SavedPincodesPanel";
 import {
   newPasswordProblem,
   normalizeIndianMobile,
@@ -66,6 +69,7 @@ import {
 type TabKey =
   | "dashboard"
   | "orders"
+  | "messages"
   | "downloads"
   | "wishlist"
   | "reviews"
@@ -78,6 +82,7 @@ type TabKey =
 const TABS: Array<{ key: TabKey; label: string; Icon: typeof User }> = [
   { key: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { key: "orders", label: "Orders", Icon: ShoppingBag },
+  { key: "messages", label: "Messages", Icon: MessagesSquare },
   { key: "downloads", label: "Downloads", Icon: Download },
   { key: "wishlist", label: "Wishlist", Icon: Heart },
   { key: "reviews", label: "Reviews", Icon: Star },
@@ -91,6 +96,7 @@ const TABS: Array<{ key: TabKey; label: string; Icon: typeof User }> = [
 const TAB_TITLES: Record<TabKey, { title: string; description: string }> = {
   dashboard: { title: "My account", description: "" },
   orders: { title: "Your orders", description: "Track, review and manage everything you’ve ordered." },
+  messages: { title: "Messages", description: "Your conversations with makers." },
   downloads: { title: "Downloads", description: "Digital products you’ve bought, ready any time." },
   wishlist: { title: "Wishlist", description: "Pieces you’ve saved for later." },
   reviews: { title: "Reviews", description: "Ratings you’ve shared with makers." },
@@ -390,7 +396,6 @@ function AccountPageInner() {
   const [ordersTotal, setOrdersTotal] = useState(0);
   const [addresses, setAddresses] = useState<AddressRecord[]>([]);
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
-  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [profileName, setProfileName] = useState("");
   const [profilePhone, setProfilePhone] = useState("");
   const [profileDob, setProfileDob] = useState("");
@@ -490,7 +495,6 @@ function AccountPageInner() {
 
       const wish = await fetchWishlist();
       if (!cancelled) {
-        setWishlistItems(wish.items);
         setWishlistCount(wish.total || wish.items.length);
       }
     })();
@@ -846,6 +850,10 @@ function AccountPageInner() {
             </section>
           ) : null}
 
+          {activeTab === "messages" ? (
+            <Inbox as="buyer" initialConversationId={searchParams.get("c")} />
+          ) : null}
+
           {activeTab === "downloads" ? (
             <section className={styles.panel}>
               <AccountDownloads />
@@ -854,53 +862,7 @@ function AccountPageInner() {
 
           {activeTab === "wishlist" ? (
             <section className={styles.panel}>
-              {wishlistItems.length === 0 ? (
-                <EmptyState
-                  bare
-                  icon={<Heart size={22} />}
-                  title="Your wishlist is empty"
-                  description="Tap the heart on any product to save it here."
-                  action={<ButtonLink href="/shop" size="sm">Discover products</ButtonLink>}
-                />
-              ) : (
-                <div className={styles.ordersList}>
-                  {wishlistItems.map((item) => (
-                    <div key={item.id} className={styles.orderRow}>
-                      <Link href={productHref({ slug: item.slug })} className={styles.wishLink}>
-                        <span className={styles.orderImgWrapper}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={optimizedImage(item.thumbnailUrl || FALLBACK_PRODUCT_IMAGE, 160)}
-                            alt=""
-                            className={styles.orderImg}
-                          />
-                        </span>
-                        <span className={styles.orderInfo}>
-                          <span className={styles.orderTitle}>{item.title}</span>
-                          <span className={styles.orderId}>{item.shopName}</span>
-                        </span>
-                      </Link>
-                      <div className={styles.orderMeta}>
-                        <span className={styles.orderPrice}>{formatInr(priceWithGst(item.price, item.gstPercent))}</span>
-                        <button
-                          type="button"
-                          className={styles.textDanger}
-                          onClick={() => {
-                            void toggleWishlist(item.productId, true).then(async () => {
-                              const wish = await fetchWishlist();
-                              setWishlistItems(wish.items);
-                              setWishlistCount(wish.total || wish.items.length);
-                            });
-                          }}
-                        >
-                          <Trash2 size={13} />
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <WishlistPanel onCountChange={setWishlistCount} />
             </section>
           ) : null}
 
@@ -1055,6 +1017,7 @@ function AccountPageInner() {
                   </div>
                 </form>
               </section>
+              <SavedPincodesPanel />
             </>
           ) : null}
 

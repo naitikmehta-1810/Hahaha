@@ -26,6 +26,7 @@ import { startMaintenanceCleanupJob } from "./jobs/maintenance-cleanup.js";
 import { startCartPriceDropJob } from "./jobs/cart-price-drop.js";
 import { startRecentlyViewedDigestJob } from "./jobs/recently-viewed-digest.js";
 import { startProductStatsJob } from "./jobs/product-stats.js";
+import { startSaleSchedulerJob } from "./jobs/sale-scheduler.js";
 import { startInvoiceWorker } from "./jobs/generate-invoice.js";
 import { errorHandler, notFound } from "./middleware/error-handler.js";
 import { asyncHandler } from "./middleware/async-handler.js";
@@ -37,6 +38,10 @@ import searchRouter from "./routes/search.js";
 import accountRouter from "./routes/account.js";
 import siteMediaRouter from "./routes/site-media.js";
 import recommendationsRouter from "./routes/recommendations.js";
+import seoRouter from "./routes/seo.js";
+import questionsRouter from "./routes/questions.js";
+import reportsRouter from "./routes/reports.js";
+import messagesRouter from "./routes/messages.js";
 
 if (env.SENTRY_DSN) {
   Sentry.init({
@@ -110,6 +115,7 @@ app.post(
 const LARGE_BODY_ROUTES = [
   /^\/api\/auth\/me\/avatar$/,
   /^\/api\/seller\/uploads$/,
+  /^\/api\/reviews\/uploads$/,
   /^\/api\/seller\/import\/shopify\/preview$/,
   /^\/api\/admin\/categories\/[^/]+\/image$/,
   /^\/api\/admin\/site-media\/[^/]+$/,
@@ -183,6 +189,10 @@ app.use("/api/search", searchRouter);
 app.use("/api/account", accountRouter);
 app.use("/api/site-media", siteMediaRouter);
 app.use("/api/recommendations", recommendationsRouter);
+app.use("/api/seo", seoRouter);
+app.use("/api/questions", questionsRouter);
+app.use("/api/reports", reportsRouter);
+app.use("/api/messages", messagesRouter);
 app.use(notFound);
 app.use(errorHandler);
 
@@ -224,6 +234,7 @@ async function start() {
       startCartPriceDropJob,
       startRecentlyViewedDigestJob,
       startProductStatsJob,
+      startSaleSchedulerJob,
     ].forEach((startJob, index) => {
       setTimeout(() => {
         void startJob().catch((error) => logger.error({ err: error }, "background job failed to start"));

@@ -199,6 +199,16 @@ export const placeOrderSchema = z.object({
   referrerChannel: z.enum(["website", "marketplace", "social", "other"]).default("website"),
   /** Delivery charge shown to the buyer; a mismatch with the live quote refuses the order. */
   expectedShippingAmount: z.number().nonnegative().max(100000).optional().nullable(),
+  /** Gift options: a note for the recipient, gift wrap, no prices in the parcel. */
+  gift: z
+    .object({
+      message: z.string().trim().max(250).optional().nullable(),
+      senderName: z.string().trim().max(60).optional().nullable(),
+      wrap: z.boolean().default(false),
+      hidePrices: z.boolean().default(false),
+    })
+    .optional()
+    .nullable(),
 });
 
 ordersRouter.post(
@@ -220,6 +230,7 @@ ordersRouter.post(
       couponCode: parsed.data.couponCode ?? null,
       referrerChannel: parsed.data.referrerChannel,
       expectedShippingAmount: parsed.data.expectedShippingAmount ?? null,
+      gift: parsed.data.gift ?? null,
     });
     res.status(201).json(result);
   })

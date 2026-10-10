@@ -9,6 +9,8 @@ Checklist for the Next.js app hosted on Vercel. Values are origins/flags only â€
 | `NEXT_PUBLIC_BACKEND_URL` | API origin used by `src/utils/api-client.ts` (no trailing slash) | [ ] Set to public API HTTPS origin |
 | `NEXT_PUBLIC_BACKEND_HEALTH_URL` | Optional health URL override for connectivity checks | [ ] Set if health lives on a different host; else leave unset |
 
+| `NEXT_PUBLIC_SITE_URL` | Public origin used for canonical links, Open Graph tags, `sitemap` and `robots.txt` (no trailing slash). Defaults to `https://www.stuffsy.app` in production | [ ] Set to the exact production URL (e.g. `https://www.stuffsy.app`) |
+
 > Note: some drafts used `NEXT_PUBLIC_API_URL`. This codebase reads **`NEXT_PUBLIC_BACKEND_URL`**.
 
 ## Related (not Vercel secrets â€” configure on API / IdP / Razorpay)

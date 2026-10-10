@@ -4,6 +4,7 @@ import React from "react";
 import { usePathname } from "next/navigation";
 import Header from "@/components/layout/Header/Header";
 import Footer from "@/components/layout/Footer/Footer";
+import CompareTray from "@/components/compare/CompareTray";
 import styles from "./AppShell.module.css";
 
 const AUTH_ROUTES = new Set([
@@ -35,6 +36,7 @@ export default function AppShell({
       {!hideChrome && <Header />}
       <main className={styles.main}>{children}</main>
       {!hideChrome && <Footer />}
+      {!hideChrome && <CompareTray />}
     </div>
   );
 }

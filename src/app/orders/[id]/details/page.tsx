@@ -17,6 +17,7 @@ import {
   RefreshCw,
   ExternalLink,
   Mail,
+  Gift,
 } from "lucide-react";
 import styles from "../order.module.css";
 import Button, { buttonClassName } from "@/components/ui/Button/Button";
@@ -486,6 +487,27 @@ export default function OrderDetailsPage() {
               </a>
             ) : null}
           </div>
+
+          {order.gift ? (
+            <div className={styles.card}>
+              <h3 className={styles.cardTitle}>
+                <Gift size={16} className={styles.cardTitleIcon} /> Gift details
+              </h3>
+              <div className={styles.sidebarBlock}>
+                {order.gift.message ? (
+                  <p>
+                    “{order.gift.message}”
+                    {order.gift.senderName ? <span className={styles.sidebarMuted}> — {order.gift.senderName}</span> : null}
+                  </p>
+                ) : null}
+                <p className={styles.sidebarMuted}>
+                  {[order.gift.wrap ? "Gift wrapped" : null, order.gift.hidePrices ? "Prices left out of the parcel" : null]
+                    .filter(Boolean)
+                    .join(" · ") || "No extras requested"}
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           <div className={styles.card}>
             <h3 className={styles.cardTitle}>

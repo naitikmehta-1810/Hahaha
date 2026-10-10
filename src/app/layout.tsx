@@ -3,10 +3,13 @@ import { Caveat, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/layout/AppShell";
 import { AuthProvider } from "@/components/auth/AuthProvider";
+import { SITE_NAME, SITE_URL } from "@/utils/site";
 
 // Favicon and touch icons come from src/app/favicon.ico, icon.png and
 // apple-icon.png (Next.js file conventions), so they are not listed here.
 export const metadata: Metadata = {
+  // Resolves relative URLs (canonical links, preview images) against the live origin.
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Stuffsy - Discover Unique Handmade Treasures",
     template: "%s · Stuffsy",
@@ -14,6 +17,15 @@ export const metadata: Metadata = {
   description:
     "Buy and sell unique handmade items, crafts, and vintage goods on Stuffsy, the artisan marketplace.",
   applicationName: "Stuffsy",
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    locale: "en_IN",
+    title: "Stuffsy - Discover Unique Handmade Treasures",
+    description:
+      "Buy and sell unique handmade items, crafts, and vintage goods on Stuffsy, the artisan marketplace.",
+  },
+  twitter: { card: "summary_large_image" },
 };
 
 // Self-hosted variable font: no render-blocking request to Google, and weights like 650 work.

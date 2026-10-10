@@ -2,10 +2,23 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { requireAuth } from "../middleware/requireAuth.js";
-import { publicReadLimiter, reviewWriteLimiter } from "../middleware/auth-rate-limit.js";
+import {
+  publicReadLimiter,
+  reviewUploadLimiter,
+  reviewWriteLimiter,
+} from "../middleware/auth-rate-limit.js";
 import { pool } from "../config/db.js";
 import { AppError } from "../utils/errors.js";
 import { invalidateCatalogCaches } from "../services/catalog-cache.js";
+import { uploadImage } from "../services/media.service.js";
+import {
+  REVIEWABLE_ORDER_STATUSES,
+  REVIEW_PHOTO_LIMIT,
+  assertReviewPhotoUrls,
+  displayName,
+  loadReviewImages,
+  recomputeProductRating,
+} from "../services/review.service.js";
 
 const reviewsRouter = Router();
 
@@ -17,16 +30,8 @@ const createReviewSchema = z.object({
   title: z.string().trim().max(120).regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f]*$/, "Remove unsupported characters").optional().nullable(),
   // eslint-disable-next-line no-control-regex
   body: z.string().trim().max(2000).regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f]*$/, "Remove unsupported characters").optional().nullable(),
+  imageUrls: z.array(z.string().url().max(600)).max(REVIEW_PHOTO_LIMIT).optional(),
 });
-
-const REVIEWABLE_ORDER_STATUSES = ["delivered", "returned", "refunded"];
-
-/** "Priya Sharma" -> "Priya S." so public reviews never show a full name. */
-function displayName(fullName: string | null) {
-  const parts = (fullName ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "Stuffsy buyer";
-  return parts.length === 1 ? parts[0] : `${parts[0]} ${parts[parts.length - 1][0]}.`;
-}
 
 const listQuerySchema = z.object({
   productId: z.string().uuid(),
@@ -53,7 +58,7 @@ reviewsRouter.get(
           ? "r.rating asc, r.created_at desc"
           : "r.created_at desc";
 
-    const [rows, summary] = await Promise.all([
+    const [rows, summary, gallery, shop] = await Promise.all([
       pool.query<{
         id: string;
         rating: number;
@@ -63,13 +68,16 @@ reviewsRouter.get(
         created_at: Date;
         full_name: string | null;
         avatar_url: string | null;
+        seller_reply: string | null;
+        seller_replied_at: Date | null;
       }>(
         `select r.id, r.rating, r.title, r.body, r.is_verified_purchase, r.created_at,
+                r.seller_reply, r.seller_replied_at,
                 u.full_name, u.avatar_url
          from public.reviews r
          left join public.users u on u.id = r.user_id
          where r.product_id = $1 and r.deleted_at is null
-         order by ${orderBy}
+         order by ${orderBy}, r.id desc
          limit $2 offset $3`,
         [productId, pageSize, (page - 1) * pageSize]
       ),
@@ -80,7 +88,27 @@ reviewsRouter.get(
          group by rating`,
         [productId]
       ),
+      // The most recent buyer photos, for the strip above the reviews (first page only).
+      page === 1
+        ? pool.query<{ url: string; review_id: string }>(
+            `select ri.url, ri.review_id
+             from public.review_images ri
+             join public.reviews r on r.id = ri.review_id
+             where r.product_id = $1 and r.deleted_at is null
+             order by r.created_at desc, ri.display_order asc
+             limit 8`,
+            [productId]
+          )
+        : Promise.resolve({ rows: [] as Array<{ url: string; review_id: string }> }),
+      pool.query<{ shop_name: string }>(
+        `select s.shop_name
+         from public.products p join public.sellers s on s.id = p.seller_id
+         where p.id = $1`,
+        [productId]
+      ),
     ]);
+
+    const images = await loadReviewImages(rows.rows.map((row) => row.id));
 
     const distribution: Record<1 | 2 | 3 | 4 | 5, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     let total = 0;
@@ -93,12 +121,14 @@ reviewsRouter.get(
       sum += stars * count;
     }
 
+    const shopName = shop.rows[0]?.shop_name ?? null;
     res.json({
       page,
       pageSize,
       total,
       average: total > 0 ? Math.round((sum / total) * 10) / 10 : 0,
       distribution,
+      photos: gallery.rows.map((row) => ({ url: row.url, reviewId: row.review_id })),
       reviews: rows.rows.map((row) => ({
         id: row.id,
         rating: Number(row.rating),
@@ -108,6 +138,14 @@ reviewsRouter.get(
         createdAt: new Date(row.created_at).toISOString(),
         author: displayName(row.full_name),
         authorAvatarUrl: row.avatar_url,
+        images: images.get(row.id) ?? [],
+        reply: row.seller_reply
+          ? {
+              body: row.seller_reply,
+              repliedAt: row.seller_replied_at ? new Date(row.seller_replied_at).toISOString() : null,
+              shopName,
+            }
+          : null,
       })),
     });
   })
@@ -172,9 +210,13 @@ reviewsRouter.get(
       product_title: string;
       product_slug: string;
       thumbnail_url: string | null;
+      seller_reply: string | null;
+      seller_replied_at: Date | null;
+      shop_name: string;
     }>(
-      `select r.id, r.rating, r.title, r.body, r.created_at,
+      `select r.id, r.rating, r.title, r.body, r.created_at, r.seller_reply, r.seller_replied_at,
               p.id as product_id, p.title as product_title, p.slug as product_slug,
+              s.shop_name,
               (
                 select pi.url from public.product_images pi
                 where pi.product_id = p.id
@@ -183,11 +225,13 @@ reviewsRouter.get(
               ) as thumbnail_url
        from public.reviews r
        join public.products p on p.id = r.product_id
+       join public.sellers s on s.id = p.seller_id
        where r.user_id = $1 and r.deleted_at is null
        order by r.created_at desc
        limit 100`,
       [req.user!.id]
     );
+    const images = await loadReviewImages(rows.rows.map((row) => row.id));
     res.json({
       reviews: rows.rows.map((row) => ({
         id: row.id,
@@ -195,6 +239,14 @@ reviewsRouter.get(
         title: row.title,
         body: row.body,
         createdAt: new Date(row.created_at).toISOString(),
+        images: images.get(row.id) ?? [],
+        reply: row.seller_reply
+          ? {
+              body: row.seller_reply,
+              repliedAt: row.seller_replied_at ? new Date(row.seller_replied_at).toISOString() : null,
+              shopName: row.shop_name,
+            }
+          : null,
         product: {
           id: row.product_id,
           title: row.product_title,
@@ -203,6 +255,46 @@ reviewsRouter.get(
         },
       })),
     });
+  })
+);
+
+/**
+ * Uploads one review photo. Only buyers who have received an order can upload,
+ * so this can't be used as a free image host; the file lands in a folder the
+ * review endpoint then insists on.
+ */
+reviewsRouter.post(
+  "/uploads",
+  requireAuth,
+  reviewUploadLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({
+        fileName: z.string().trim().min(1).max(120).default("review.jpg"),
+        dataBase64: z.string().min(1).max(16_000_000),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Attach a photo" });
+      return;
+    }
+    if (!/^data:image\/(jpeg|png|webp|heic|heif);base64,/i.test(parsed.data.dataBase64)) {
+      res.status(400).json({ message: "Photos must be JPEG, PNG or WebP images." });
+      return;
+    }
+    const received = await pool.query(
+      `select 1 from public.orders where user_id = $1 and status = any($2::text[]) limit 1`,
+      [req.user!.id, REVIEWABLE_ORDER_STATUSES]
+    );
+    if (received.rows.length === 0) {
+      throw new AppError(403, "NOT_ELIGIBLE", "You can add photos once you've received an order.");
+    }
+    const uploaded = await uploadImage({
+      dataBase64: parsed.data.dataBase64,
+      fileName: parsed.data.fileName,
+      folder: "reviews",
+    });
+    res.status(201).json({ url: uploaded.url });
   })
 );
 
@@ -224,6 +316,8 @@ reviewsRouter.post(
     }
 
     const { productId, orderItemId, rating, title, body } = parsed.data;
+    const imageUrls = [...new Set(parsed.data.imageUrls ?? [])];
+    assertReviewPhotoUrls(imageUrls);
     const userId = req.user!.id;
 
     const ownership = await pool.query<{ status: string }>(
@@ -260,21 +354,15 @@ reviewsRouter.post(
         [productId, userId, orderItemId, rating, title || null, body || null]
       );
 
-      await client.query(
-        `update public.products p
-         set review_count = (
-               select count(*)::int from public.reviews r
-               where r.product_id = p.id and r.deleted_at is null
-             ),
-             avg_rating = (
-               select coalesce(round(avg(r.rating)::numeric, 2), 0)
-               from public.reviews r
-               where r.product_id = p.id and r.deleted_at is null
-             ),
-             updated_at = now()
-         where p.id = $1`,
-        [productId]
-      );
+      for (const [index, url] of imageUrls.entries()) {
+        await client.query(
+          `insert into public.review_images (id, review_id, url, display_order, created_at)
+           values (gen_random_uuid(), $1, $2, $3, now())`,
+          [inserted.rows[0].id, url, index]
+        );
+      }
+
+      await recomputeProductRating(client, productId);
 
       await client.query("commit");
       // Product cards and detail pages cache avg_rating / review_count.

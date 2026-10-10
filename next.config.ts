@@ -18,6 +18,24 @@ const nextConfig: NextConfig = {
    * Browser calls same-origin `/api/*` on stuffsy.app; Vercel proxies to Render.
    * That keeps auth cookies first-party (third-party cookies to onrender.com are blocked).
    */
+  /** Personal and internal pages stay out of search results even if a link to them leaks. */
+  async headers() {
+    const noindex = [{ key: "X-Robots-Tag", value: "noindex, nofollow" }];
+    return [
+      "/account/:path*",
+      "/admin/:path*",
+      "/seller/:path*",
+      "/cart",
+      "/checkout",
+      "/orders/:path*",
+      "/download/:path*",
+      "/login",
+      "/signup",
+      "/verify-email",
+      "/reset-password",
+      "/forgot-password",
+    ].map((source) => ({ source, headers: noindex }));
+  },
   async rewrites() {
     return [
       {

@@ -1,0 +1,78 @@
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 16, 31, 0.88);
+}
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(1100px, 100%);
+  max-height: 100%;
+  margin: 0;
+}
+
+.figure img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 120px);
+  margin: 0 auto;
+  border-radius: var(--radius-md);
+  object-fit: contain;
+}
+
+.figure figcaption {
+  color: #fff;
+  font-size: 0.9375rem;
+  text-align: center;
+}
+
+.close,
+.nav {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+}
+
+.close:hover,
+.nav:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.close:focus-visible,
+.nav:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.close {
+  top: 16px;
+  right: 16px;
+}
+
+.nav {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.prev {
+  left: 16px;
+}
+
+.next {
+  right: 16px;
+}

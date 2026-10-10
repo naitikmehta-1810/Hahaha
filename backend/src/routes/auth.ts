@@ -20,6 +20,7 @@ import {
   authenticateWithPassword,
   confirmEmailVerification,
   createEmailVerificationToken,
+  createPasswordlessUser,
   createUser,
   findOrCreateOAuthUser,
   findUserById,
@@ -262,6 +263,63 @@ authRouter.post(
     await mergeGuestCartSafely(req, res, user.id);
 
     res.status(201).json(authResponseBody("Account created successfully", user, tokens.accessToken));
+  })
+);
+
+const guestCheckoutSchema = z.object({
+  fullName: personNameSchema,
+  email: emailSchema,
+  phoneNumber: indianMobileSchema,
+  termsAccepted: z.literal(true, {
+    errorMap: () => ({ message: "Accept the terms to continue" }),
+  }),
+});
+
+/**
+ * "Continue as guest" at checkout: creates a password-less buyer account and
+ * signs it in, so the rest of checkout is the ordinary, fully-protected flow.
+ * An email or phone that already has an account is refused (it must sign in): this route
+ * can never be used to enter someone else's account.
+ */
+authRouter.post(
+  "/guest-checkout",
+  authEdgeLimiter,
+  signupLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = guestCheckoutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request" });
+      return;
+    }
+    const { fullName, email, phoneNumber } = parsed.data;
+
+    const emailProblem = await undeliverableEmailReason(email);
+    if (emailProblem) {
+      res.status(400).json({ code: "EMAIL_UNDELIVERABLE", message: emailProblem });
+      return;
+    }
+
+    const user = await createPasswordlessUser({ fullName, email, phoneNumber });
+    if (!user) {
+      res.status(409).json({
+        code: "ACCOUNT_EXISTS",
+        message: "There's already a Stuffsy account with this email or phone number. Sign in to check out.",
+      });
+      return;
+    }
+
+    const verificationToken = await createEmailVerificationToken(user.id);
+    try {
+      await sendVerificationEmailForUser(user.email, verificationToken);
+    } catch (error) {
+      logger.error({ err: error }, "verification email failed after guest checkout");
+    }
+
+    const tokens = await issueAuthTokens(user, false, "customer");
+    setAuthCookies(res, tokens, false);
+    await mergeGuestCartSafely(req, res, user.id);
+
+    res.status(201).json(authResponseBody("Continuing as guest", user, tokens.accessToken));
   })
 );
 

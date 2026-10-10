@@ -218,3 +218,63 @@
     height: 30px;
   }
 }
+
+/* Compare toggle: sits under the wishlist heart, quiet until hovered or picked. */
+.compareBtn {
+  position: absolute;
+  top: 50px;
+  right: 10px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: rgba(255, 255, 255, 0.94);
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.card:hover .compareBtn,
+.compareBtn:focus-visible,
+.comparePicked {
+  opacity: 1;
+}
+
+.compareBtn:hover {
+  color: var(--color-primary);
+  transform: scale(1.08);
+}
+
+.compareBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.comparePicked {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+.comparePicked:hover {
+  color: #fff;
+}
+
+/* Touch screens have no hover, so the toggle is always visible there. */
+@media (hover: none) {
+  .compareBtn {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .compareBtn {
+    top: 46px;
+    width: 30px;
+    height: 30px;
+  }
+}

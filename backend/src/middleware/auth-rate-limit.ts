@@ -226,6 +226,33 @@ export const reviewWriteLimiter = limiter({
   message: "Too many review submissions. Try again later.",
 });
 
+/** Review photo uploads: image bytes are costly, so keep them modest per buyer. */
+export const reviewUploadLimiter = limiter({
+  prefix: "review-upload",
+  windowMs: 15 * MINUTE,
+  limit: [24, 120],
+  message: "Too many photo uploads. Try again in a few minutes.",
+  key: (req) => req.user?.id ?? ipKey(req),
+});
+
+/** Asking a question, answering one, reporting something: small writes that can be spammed. */
+export const communityWriteLimiter = limiter({
+  prefix: "community-write",
+  windowMs: 10 * MINUTE,
+  limit: [20, 120],
+  message: "You're doing that too quickly. Wait a few minutes and try again.",
+  key: (req) => req.user?.id ?? ipKey(req),
+});
+
+/** Chat messages: generous for a real conversation, tight enough to stop flooding. */
+export const messageSendLimiter = limiter({
+  prefix: "message-send",
+  windowMs: MINUTE,
+  limit: [15, 120],
+  message: "You're sending messages too quickly. Slow down a little.",
+  key: (req) => req.user?.id ?? ipKey(req),
+});
+
 /** Writes to a signed-in buyer's own data (cart, addresses, wishlist). */
 export const accountWriteLimiter = limiter({
   prefix: "acct-write",
