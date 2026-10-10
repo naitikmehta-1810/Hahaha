@@ -53,7 +53,7 @@ export default function AdminSellersPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [defaultCommission, setDefaultCommission] = useState(10);
+  const [defaultCommission, setDefaultCommission] = useState(0);
 
   const load = useCallback(async () => {
     const result = await apiRequest<{ sellers: AdminSeller[]; defaultCommissionPercent?: number }>(
@@ -113,6 +113,32 @@ export default function AdminSellersPage() {
       setError(result.error);
       return;
     }
+    await load();
+  }
+
+  async function adjustBalance(seller: AdminSeller) {
+    const amountText = window.prompt(
+      `Adjust ${seller.shopName}'s balance (₹). Use a negative number to deduct (e.g. -1500), positive to add.`
+    );
+    if (amountText === null) return;
+    const amount = Number(amountText.trim());
+    if (!Number.isFinite(amount) || amount === 0) {
+      setError("Enter a non-zero amount, e.g. -1500 or 250.");
+      return;
+    }
+    const reason = window.prompt("Reason (the seller sees this in their earnings history):")?.trim();
+    if (!reason || reason.length < 3) return;
+    if (!window.confirm(`${amount > 0 ? "Add" : "Deduct"} ₹${Math.abs(amount)} ${amount > 0 ? "to" : "from"} ${seller.shopName}?`)) return;
+    setBusyId(seller.id);
+    const result = await apiRequest("POST", `/api/admin/sellers/${encodeURIComponent(seller.id)}/adjust`, {
+      body: { amount, reason },
+    });
+    setBusyId(null);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setError(null);
     await load();
   }
 
@@ -204,6 +230,9 @@ export default function AdminSellersPage() {
                       <div className={ui.rowActions}>
                         <Button size="sm" variant="outline" disabled={busy} onClick={() => void editCommission(s)}>
                           Commission
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={busy} onClick={() => void adjustBalance(s)}>
+                          Adjust balance
                         </Button>
                         {s.status !== "active" ? (
                           <Button
